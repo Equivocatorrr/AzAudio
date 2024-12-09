@@ -5,5 +5,5 @@
 */
 
 const unsigned short azaVersionMajor = 0;
-const unsigned short azaVersionMinor = 0;
+const unsigned short azaVersionMinor = 1;
 const unsigned short azaVersionPatch = 0;
