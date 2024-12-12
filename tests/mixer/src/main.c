@@ -212,7 +212,17 @@ int main(int argumentCount, char** argumentValues) {
 		return 1;
 	}
 
-	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) { .trackCount = 2 } , (azaStreamConfig) {0}, false))) {
+	azaChannelLayout trackChannelLayouts[2] = {
+		(azaChannelLayout) {
+			.count = 1,
+			.positions = {
+				AZA_POS_CENTER_FRONT,
+			},
+		},
+		(azaChannelLayout) { 0 },
+	};
+
+	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) { .trackCount = 2, .channelLayouts = trackChannelLayouts } , (azaStreamConfig) {0}, false))) {
 		char buffer[64];
 		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
@@ -230,12 +240,17 @@ int main(int argumentCount, char** argumentValues) {
 	filter = azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_LOW_PASS,
 		.frequency = 200.0f,
-	}, outputChannelCount);
+	}, 1);
 
 	azaTrackAppendDSP(&mixer.tracks[0], (azaDSP*)filter);
 
-	// We can use this to change the gain on an existing connection.
-	azaTrackConnect(&mixer.tracks[0], &mixer.output, -9.0f);
+	{ // We can use this to change the gain on an existing connection and alter the channel layouts
+		azaTrackRoute *route;
+		azaTrackConnect(&mixer.tracks[0], &mixer.master, -6.0f, &route, 0);
+		for (uint32_t i = 0; i < route->channelMatrix.outputs; i++) {
+			route->channelMatrix.matrix[i] = i == 1 ? -1.0f : 1.0f;
+		}
+	}
 
 	// Track 1
 
@@ -269,10 +284,10 @@ int main(int argumentCount, char** argumentValues) {
 		.gainOutput = -0.1f,
 	}, outputChannelCount);
 
-	azaTrackAppendDSP(&mixer.output, (azaDSP*)limiter);
+	azaTrackAppendDSP(&mixer.master, (azaDSP*)limiter);
 
 	// Uncomment this to test if cyclic routing is detected
-	// azaTrackConnect(&mixer.output, &mixer.tracks[0], 0.0f);
+	// azaTrackConnect(&mixer.master, &mixer.tracks[0], 0.0f, NULL, 0);
 
 	azaMixerStreamSetActive(&mixer, true);
 

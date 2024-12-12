@@ -16,6 +16,9 @@ int azaTrackInit(azaTrack *data, uint32_t bufferFrames, azaChannelLayout bufferC
 
 void azaTrackDeinit(azaTrack *data) {
 	azaBufferDeinit(&data->buffer);
+	for (uint32_t i = 0; i < data->receives.count; i++) {
+		azaChannelMatrixDeinit(&data->receives.data[i].channelMatrix);
+	}
 }
 
 void azaTrackAppendDSP(azaTrack *data, azaDSP *dsp) {
@@ -36,24 +39,36 @@ void azaTrackPrependDSP(azaTrack *data, azaDSP *dsp) {
 	dsp->pNext = nextDSP;
 }
 
-azaTrackRoute* azaTrackConnect(azaTrack *from, azaTrack *to, float gain) {
+int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **dstTrackRoute, uint32_t flags) {
 	for (uint32_t i = 0; i < to->receives.count; i++) {
 		if (to->receives.data[i].track == from) {
 			to->receives.data[i].gain = gain;
-			return &to->receives.data[i];
+			if (dstTrackRoute) {
+				*dstTrackRoute = &to->receives.data[i];
+			}
+			return AZA_SUCCESS;
 		}
 	}
 	azaTrackRoute route = {
 		.track = from,
 		.gain = gain,
 	};
-	AZA_DYNAMIC_ARRAY_APPEND(azaTrackRoute, to->receives, route);
-	return &to->receives.data[to->receives.count-1];
+	int err = azaChannelMatrixInit(&route.channelMatrix, from->buffer.channelLayout.count, to->buffer.channelLayout.count);
+	if (err) return err;
+	if (!(flags & AZA_TRACK_CHANNEL_ROUTING_ZERO)) {
+		azaChannelMatrixGenerateRoutingFromLayouts(&route.channelMatrix, from->buffer.channelLayout, to->buffer.channelLayout);
+	}
+	AZA_DYNAMIC_ARRAY_APPEND(azaTrackRoute, to->receives, route, return AZA_ERROR_OUT_OF_MEMORY);
+	if (dstTrackRoute) {
+		*dstTrackRoute = &to->receives.data[to->receives.count-1];
+	}
+	return AZA_SUCCESS;
 }
 
 void azaTrackDisconnect(azaTrack *from, azaTrack *to) {
 	for (uint32_t i = 0; i < to->receives.count; i++) {
 		if (to->receives.data[i].track == from) {
+			azaChannelMatrixDeinit(&to->receives.data[i].channelMatrix);
 			AZA_DYNAMIC_ARRAY_ERASE(to->receives, i, 1);
 			break;
 		}
@@ -68,9 +83,8 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 		azaTrackRoute *route = &data->receives.data[i];
 		int err = azaTrackProcess(frames, samplerate, route->track);
 		if (err) return err;
-		// TODO: Channel matrices
 		// TODO: Latency compensation
-		azaBufferMix(buffer, 1.0f, azaBufferSlice(route->track->buffer, 0, frames), aza_db_to_ampf(route->gain));
+		azaBufferMixMatrix(buffer, 1.0f, azaBufferSlice(route->track->buffer, 0, frames), aza_db_to_ampf(route->gain), &route->channelMatrix);
 	}
 	if (data->dsp) {
 		return azaDSPProcessSingle(data->dsp, buffer);
@@ -85,12 +99,19 @@ int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout bufferC
 		data->tracks = aza_calloc(config.trackCount, sizeof(azaTrack));
 		if (!data->tracks) return AZA_ERROR_OUT_OF_MEMORY;
 	}
-	err = azaTrackInit(&data->output, config.bufferFrames, bufferChannelLayout);
+	err = azaTrackInit(&data->master, config.bufferFrames, bufferChannelLayout);
 	if (err) return err;
 	for (uint32_t i = 0; i < config.trackCount; i++) {
-		err = azaTrackInit(&data->tracks[i], config.bufferFrames, bufferChannelLayout);
+		azaChannelLayout channelLayout;
+		if (config.channelLayouts && config.channelLayouts[i].count) {
+			channelLayout = config.channelLayouts[i];
+		} else {
+			channelLayout = bufferChannelLayout;
+		}
+		err = azaTrackInit(&data->tracks[i], config.bufferFrames, channelLayout);
 		if (err) return err;
-		azaTrackConnect(&data->tracks[i], &data->output, 0.0f);
+		err = azaTrackConnect(&data->tracks[i], &data->master, 0.0f, NULL, 0);
+		if (err) return err;
 	}
 	return AZA_SUCCESS;
 }
@@ -99,7 +120,7 @@ void azaMixerDeinit(azaMixer *data) {
 	for (uint32_t i = 0; i < data->config.trackCount; i++) {
 		azaTrackDeinit(&data->tracks[i]);
 	}
-	azaTrackDeinit(&data->output);
+	azaTrackDeinit(&data->master);
 }
 
 // Modified depth-first search for directed graphs to determine whether a cycle exists.
@@ -120,7 +141,7 @@ static int azaMixerCheckRouting(azaMixer *data) {
 	for (uint32_t i = 0; i < data->config.trackCount; i++) {
 		data->tracks[i].mark = 0;
 	}
-	azaTrack *track = &data->output;
+	azaTrack *track = &data->master;
 	track->mark = 0;
 	return azaMixerCheckRoutingVisit(track);
 }
@@ -128,16 +149,16 @@ static int azaMixerCheckRouting(azaMixer *data) {
 int azaMixerProcess(uint32_t frames, uint32_t samplerate, azaMixer *data) {
 	int err;
 	if ((err = azaMixerCheckRouting(data))) return err;
-	if ((err = azaTrackProcess(frames, samplerate, &data->output))) return err;
+	if ((err = azaTrackProcess(frames, samplerate, &data->master))) return err;
 	return AZA_SUCCESS;
 }
 
 int azaMixerCallback(void *userdata, azaBuffer buffer) {
 	azaMixer *mixer = (azaMixer*)userdata;
-	azaBuffer stash = mixer->output.buffer;
-	mixer->output.buffer = buffer;
+	azaBuffer stash = mixer->master.buffer;
+	mixer->master.buffer = buffer;
 	int err = azaMixerProcess(buffer.frames, buffer.samplerate, mixer);
-	mixer->output.buffer = stash;
+	mixer->master.buffer = stash;
 	return err;
 }
 

@@ -104,10 +104,12 @@ struct {\
 	uint32_t capacity;\
 } name;
 
-#define AZA_DYNAMIC_ARRAY_APPEND(type, name, value) {\
+#define AZA_DYNAMIC_ARRAY_APPEND(type, name, value, onAllocFail) {\
 	if ((name).count == (name).capacity) {\
-		(name).capacity = (uint32_t)aza_grow((name).capacity, (name).count+1, 8);\
-		type *newData = aza_calloc((name).capacity, sizeof(type));\
+		uint32_t newCapacity = (uint32_t)aza_grow((name).capacity, (name).count+1, 8);\
+		type *newData = aza_calloc(newCapacity, sizeof(type));\
+		if (!newData) { onAllocFail; }\
+		(name).capacity = newCapacity;\
 		memcpy(newData, (name).data, (name).count * sizeof(type));\
 		aza_free((name).data);\
 		(name).data = newData;\

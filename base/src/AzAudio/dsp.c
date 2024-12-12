@@ -13,6 +13,9 @@
 #ifdef _MSC_VER
 #define AZAUDIO_NO_THREADS_H
 #define thread_local __declspec( thread )
+#define alloca _alloca
+#else
+#include <alloca.h>
 #endif
 
 #include <stdlib.h>
@@ -237,6 +240,75 @@ void azaBufferCopyChannel(azaBuffer dst, uint8_t channelDst, azaBuffer src, uint
 	} else {
 		for (uint32_t i = 0; i < dst.frames; i++) {
 			dst.samples[i * dst.stride + channelDst] = src.samples[i * src.stride + channelSrc];
+		}
+	}
+}
+
+
+
+int azaChannelMatrixInit(azaChannelMatrix *data, uint8_t inputs, uint8_t outputs) {
+	data->inputs = inputs;
+	data->outputs = outputs;
+	uint16_t total = (uint16_t)inputs * (uint16_t)outputs;
+	if (total > 0) {
+		data->matrix = (float*)aza_calloc(total, sizeof(float));
+		if (!data->matrix) {
+			return AZA_ERROR_OUT_OF_MEMORY;
+		}
+	} else {
+		data->matrix = NULL;
+	}
+	return AZA_SUCCESS;
+}
+
+void azaChannelMatrixDeinit(azaChannelMatrix *data) {
+	if (data->matrix) {
+		aza_free(data->matrix);
+	}
+}
+
+void azaChannelMatrixGenerateRoutingFromLayouts(azaChannelMatrix *data, azaChannelLayout srcLayout, azaChannelLayout dstLayout) {
+	// TODO: What it says on the tin, not this garbage
+	uint32_t diagonalLength = AZA_MIN(srcLayout.count, dstLayout.count);
+	for (uint32_t i = 0; i < diagonalLength; i++) {
+		data->matrix[i * (data->outputs + 1)] = 1.0f;
+	}
+}
+
+
+
+void azaBufferMixMatrix(azaBuffer dst, float volumeDst, azaBuffer src, float volumeSrc, azaChannelMatrix *matrix) {
+	assert(matrix);
+	assert(matrix->inputs == src.channelLayout.count);
+	assert(matrix->outputs == dst.channelLayout.count);
+	assert(dst.frames == src.frames);
+	if AZA_UNLIKELY(volumeDst == 1.0f && volumeSrc == 0.0f) {
+		return;
+	} else if AZA_UNLIKELY(volumeDst == 0.0f && volumeSrc == 0.0f) {
+		for (uint32_t i = 0; i < dst.frames; i++) {
+			for (uint32_t c = 0; c < dst.channelLayout.count; c++) {
+				dst.samples[i * dst.stride + c] = 0.0f;
+			}
+		}
+	} else {
+		float *matPremult = (float*)alloca(dst.channelLayout.count * src.channelLayout.count * sizeof(float));
+		for (uint8_t c = 0; c < src.channelLayout.count; c++) {
+			for (uint8_t r = 0; r < dst.channelLayout.count; r++) {
+				matPremult[c * dst.channelLayout.count + r] = volumeSrc * matrix->matrix[c * matrix->outputs + r];
+			}
+		}
+		// src channel count columns, dst channel count rows
+		for (uint32_t i = 0; i < dst.frames; i++) {
+			for (uint32_t dstC = 0; dstC < dst.channelLayout.count; dstC++) {
+				// TODO: Vectorize this inner loop in the very least, possibly the outer one as well.
+				// Alternatively, vectorize the outermost frame loop instead as that should be pretty trivial to do.
+				float accum = 0.0f;
+				float *row = matPremult + src.channelLayout.count * dstC;
+				for (uint32_t srcC = 0; srcC < src.channelLayout.count; srcC++) {
+					accum += src.samples[i * src.stride + srcC] * row[srcC];
+				}
+				dst.samples[i * dst.stride + dstC] = dst.samples[i * dst.stride + dstC] * volumeDst + accum;
+			}
 		}
 	}
 }

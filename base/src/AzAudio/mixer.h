@@ -17,6 +17,7 @@ extern "C" {
 typedef struct azaTrackRoute {
 	struct azaTrack *track;
 	float gain;
+	azaChannelMatrix channelMatrix;
 } azaTrackRoute;
 
 // a track has the capabilities of a bus and can have sound sources on it
@@ -41,31 +42,39 @@ void azaTrackAppendDSP(azaTrack *data, azaDSP *dsp);
 // Adds a dsp to the beginning of the dsp chain
 void azaTrackPrependDSP(azaTrack *data, azaDSP *dsp);
 
-// Routes the output of from to the input of to and returns the connection
-azaTrackRoute* azaTrackConnect(azaTrack *from, azaTrack *to, float gain);
+enum {
+	// Tells azaTrackConnect not to generate any default values for the channelMatrix (leaving them all at zero)
+	AZA_TRACK_CHANNEL_ROUTING_ZERO = 0x0001,
+};
+
+// Routes the output of from to the input of to (bet you had to reread that a few times)
+// if dstTrackRoute is not NULL, this outputs the connection that was just made (or the existing one). This pointer is only guaranteed to be valid until the next time you call this function, so don't hold on to it)
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **dstTrackRoute, uint32_t flags);
 void azaTrackDisconnect(azaTrack *from, azaTrack *to);
 
 int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data);
 
 typedef struct azaMixerConfig {
-	uint32_t trackCount;
 	uint32_t bufferFrames;
+	uint32_t trackCount;
+	// Can be NULL to default to master channel layout, otherwise must point to an array of trackCount layouts, one for each track.
+	azaChannelLayout *channelLayouts;
 } azaMixerConfig;
 
 typedef struct azaMixer {
 	azaMixerConfig config;
 	azaTrack *tracks;
-	azaTrack output;
-	// We may optionally own a stream to which we output the track contents of output.
+	azaTrack master;
+	// We may optionally own a stream to which we output the track contents of master.
 	azaStream stream;
 } azaMixer;
 
 // Allocates config.trackCount tracks and initializes them
-// If config.isOutputRemote is zero, also initializes the inline output track
-// bufferFrames indicates how many frames our buffers should have. This should probably match the maximum size of the backend buffer.
-// bufferChannelLayout will be used to initialize buffer channel layouts
+// config.bufferFrames indicates how many frames our buffers should have. This should probably match the maximum size of the backend buffer, if applicable.
+// masterChannelLayout will be used to initialize the master track's buffer channel layout, and also all other track channel layouts if config.channelLayouts is NULL or if the channel's respective channelLayout has 0 channels
 // May return AZA_ERROR_OUT_OF_MEMORY if we failed to allocate tracks, or any error azaBufferInit can return
-int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout bufferChannelLayout);
+int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout masterChannelLayout);
 void azaMixerDeinit(azaMixer *data);
 // Processes all the tracks to produce a result into the output track.
 // frames MUST be <= data->config.bufferFrames

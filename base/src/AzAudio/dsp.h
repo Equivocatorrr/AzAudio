@@ -47,7 +47,7 @@ void azaBufferZero(azaBuffer buffer);
 
 // Mixes src into the existing contents of dst
 // NOTE: This will not respect channel positions. The buffers will be mixed as though the channel layouts are the same.
-// NOTE: asserts that dst and src have the same frame count and channel count. If that's a problem, then handle these conditions before calling this.
+// NOTE: asserts that dst and src have the same frame count and channel count. If that's a problem, then handle these conditions before calling this. Alternatively, use azaBufferMixMatrix.
 void azaBufferMix(azaBuffer dst, float volumeDst, azaBuffer src, float volumeSrc);
 
 // Same as azaBufferMix, but the volumes will fade linearly across the buffer
@@ -94,6 +94,25 @@ static inline azaBuffer azaBufferOneChannel(azaBuffer src, uint8_t channel) {
 	};
 }
 
+typedef struct azaChannelMatrix {
+	uint8_t inputs, outputs;
+	float *matrix;
+} azaChannelMatrix;
+
+// allocates the matrix initialized to all zeroes
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaChannelMatrixInit(azaChannelMatrix *data, uint8_t inputs, uint8_t outputs);
+void azaChannelMatrixDeinit(azaChannelMatrix *data);
+
+// Expects data to have been initted with srcLayout.count cols and dstLayout.count rows
+// Also assumes the existing values in the matrix are all zero (won't set to zero if they're not)
+void azaChannelMatrixGenerateRoutingFromLayouts(azaChannelMatrix *data, azaChannelLayout srcLayout, azaChannelLayout dstLayout);
+
+
+// Similar to azaBufferMix, except you pass in a matrix for channel mixing.
+// Matrix columns represent the mapping to dst channels, while the rows represent the mapping from src channels.
+// NOTE: asserts that dst and src have the same frame count
+void azaBufferMixMatrix(azaBuffer dst, float volumeDst, azaBuffer src, float volumeSrc, azaChannelMatrix *matrix);
 
 typedef int (*fp_azaMixCallback)(void *userdata, azaBuffer buffer);
 typedef int (*fp_azaMixCallbackDual)(void *userdata, azaBuffer dst, azaBuffer src);
