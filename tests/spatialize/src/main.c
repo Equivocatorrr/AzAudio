@@ -17,6 +17,8 @@
 azaBuffer bufferCat = {0};
 azaSampler *sampler = NULL;
 azaSpatialize **spatialize = NULL;
+azaReverb *reverb = NULL;
+azaFilter *reverbFilter = NULL;
 azaLookaheadLimiter *limiter = NULL;
 
 #define PRINT_OBJECT_INFO 0
@@ -116,6 +118,11 @@ int mixCallbackOutput(void *userdata, azaBuffer buffer) {
 			goto done;
 		}
 	}
+	if ((err = azaReverbProcess(reverb, buffer))) {
+		char buffer[64];
+		AZA_LOG_ERR("azaReverbProcess returned %s\n", azaErrorString(err, buffer, sizeof(buffer)));
+		goto done;
+	}
 	if ((err = azaLookaheadLimiterProcess(limiter, buffer))) {
 		char buffer[64];
 		AZA_LOG_ERR("azaLookaheadLimiterProcess returned %s\n", azaErrorString(err, buffer, sizeof(buffer)));
@@ -187,6 +194,28 @@ int main(int argumentCount, char** argumentValues) {
 			.earDistance = 0.0f,
 		}, outputChannelCount);
 	}
+
+	reverb = azaMakeReverb((azaReverbConfig) {
+		// effect gain in dB
+		.gain = -6.0f,
+		// dry gain in dB
+		.gainDry = 0.0f,
+		// value affecting reverb feedback, roughly in the range of 1 to 100 for reasonable results
+		.roomsize = 40.0f,
+		// value affecting damping of high frequencies, roughly in the range of 1 to 5
+		.color = 3.0f,
+		// delay for first reflections in ms
+		.delay = 23.0f,
+	}, outputChannelCount);
+
+	reverbFilter = azaMakeFilter((azaFilterConfig) {
+		.kind = AZA_FILTER_HIGH_PASS,
+		// Cutoff frequency in Hz
+		.frequency = 200.0f,
+		// Blends the effect output with the dry signal where 1 is fully dry and 0 is fully wet.
+		.dryMix = 0.0f,
+	}, outputChannelCount);
+	reverb->inputDelay.config.wetEffects = (azaDSP*)reverbFilter;
 
 	limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
 		.gainInput  = -3.0f,

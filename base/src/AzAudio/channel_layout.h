@@ -8,6 +8,7 @@
 #define AZAUDIO_CHANNEL_LAYOUT_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #include "header_utils.h"
 
 #ifdef __cplusplus
@@ -51,6 +52,89 @@ enum azaPosition {
 // NOTE: This is more than we should ever see in reality, and definitely more than can be uniquely represented by the above positions. We're reserving more for later.
 #define AZA_MAX_CHANNEL_POSITIONS 22
 #define AZA_POS_ENUM_COUNT (AZA_POS_RIGHT_BACK_TOP+1)
+
+// Sorted ascending for clockwise
+static uint8_t azaPositionFloorArc[] = {
+	AZA_POS_LEFT_FRONT,
+	AZA_POS_LEFT_CENTER_FRONT,
+	AZA_POS_CENTER_FRONT,
+	AZA_POS_RIGHT_CENTER_FRONT,
+	AZA_POS_RIGHT_FRONT,
+	AZA_POS_RIGHT_SIDE,
+	AZA_POS_RIGHT_BACK,
+	AZA_POS_CENTER_BACK,
+	AZA_POS_LEFT_BACK,
+	AZA_POS_LEFT_SIDE,
+};
+static uint8_t azaPositionCeilArc[] = {
+	AZA_POS_LEFT_FRONT_TOP,
+	AZA_POS_CENTER_FRONT_TOP,
+	AZA_POS_RIGHT_FRONT_TOP,
+	AZA_POS_RIGHT_BACK_TOP,
+	AZA_POS_CENTER_BACK_TOP,
+	AZA_POS_LEFT_BACK_TOP,
+};
+static uint8_t azaPositionToFloor[] = {
+	/* AZA_POS_LEFT_FRONT         -> */ AZA_POS_LEFT_FRONT,
+	/* AZA_POS_RIGHT_FRONT        -> */ AZA_POS_RIGHT_FRONT,
+	/* AZA_POS_CENTER_FRONT       -> */ AZA_POS_CENTER_FRONT,
+	/* AZA_POS_SUBWOOFER          -> */ AZA_POS_SUBWOOFER,
+	/* AZA_POS_LEFT_BACK          -> */ AZA_POS_LEFT_BACK,
+	/* AZA_POS_RIGHT_BACK         -> */ AZA_POS_RIGHT_BACK,
+	/* AZA_POS_LEFT_CENTER_FRONT  -> */ AZA_POS_LEFT_CENTER_FRONT,
+	/* AZA_POS_RIGHT_CENTER_FRONT -> */ AZA_POS_RIGHT_CENTER_FRONT,
+	/* AZA_POS_CENTER_BACK        -> */ AZA_POS_CENTER_BACK,
+	/* AZA_POS_LEFT_SIDE          -> */ AZA_POS_LEFT_SIDE,
+	/* AZA_POS_RIGHT_SIDE         -> */ AZA_POS_RIGHT_SIDE,
+	/* AZA_POS_CENTER_TOP         -> */ AZA_POS_CENTER_FRONT, // Not really a 1:1 in this case, but probably fine?
+	/* AZA_POS_LEFT_FRONT_TOP     -> */ AZA_POS_LEFT_FRONT,
+	/* AZA_POS_CENTER_FRONT_TOP   -> */ AZA_POS_CENTER_FRONT,
+	/* AZA_POS_RIGHT_FRONT_TOP    -> */ AZA_POS_RIGHT_FRONT,
+	/* AZA_POS_LEFT_BACK_TOP      -> */ AZA_POS_LEFT_BACK,
+	/* AZA_POS_CENTER_BACK_TOP    -> */ AZA_POS_CENTER_BACK,
+	/* AZA_POS_RIGHT_BACK_TOP     -> */ AZA_POS_RIGHT_BACK,
+};
+static inline bool azaPositionIsFloor(enum azaPosition pos) {
+	return (int)pos < AZA_POS_CENTER_TOP;
+}
+static inline bool azaPositionIsCeiling(enum azaPosition pos) {
+	return (int)pos >= AZA_POS_CENTER_TOP;
+}
+
+// Absolute value of the index delta in the above arcs
+// result starts at 10 and goes up from there when one is floor and the other is ceiling.
+// If either position is AZA_POS_SUBWOOFER, just returns 20 instead
+static inline uint16_t azaPositionDistance(enum azaPosition a, enum azaPosition b) {
+	if (a == AZA_POS_SUBWOOFER || b == AZA_POS_SUBWOOFER) return 20;
+	enum azaPosition floorA = (enum azaPosition)azaPositionToFloor[a];
+	enum azaPosition floorB = (enum azaPosition)azaPositionToFloor[b];
+	int16_t result = 0;
+	int16_t indexA = -1;
+	int16_t indexB = -1;
+	for (int16_t i = 0; i < (int16_t)sizeof(azaPositionFloorArc); i++) {
+		if (floorA == azaPositionFloorArc[i]) {
+			indexA = i;
+		}
+		if (floorB == azaPositionFloorArc[i]) {
+			indexB = i;
+		}
+	}
+	if (indexA >= indexB) {
+		result = indexA - indexB;
+	} else {
+		result = indexB - indexA;
+	}
+	if (result > 5) {
+		// Handle wrapping
+		result = 10 - result;
+	}
+	if (azaPositionIsFloor(a) == azaPositionIsFloor(b)) {
+		return result;
+	} else {
+		// Add some offset > maximum distance on the same plane, allowing a floor to ceiling relationship to function as a fallback
+		return result + 10;
+	}
+}
 
 enum azaFormFactor {
 	AZA_FORM_FACTOR_SPEAKERS=0,

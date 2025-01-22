@@ -244,13 +244,8 @@ int main(int argumentCount, char** argumentValues) {
 
 	azaTrackAppendDSP(&mixer.tracks[0], (azaDSP*)filter);
 
-	{ // We can use this to change the gain on an existing connection and alter the channel layouts
-		azaTrackRoute *route;
-		azaTrackConnect(&mixer.tracks[0], &mixer.master, -6.0f, &route, 0);
-		for (uint32_t i = 0; i < route->channelMatrix.outputs; i++) {
-			route->channelMatrix.matrix[i] = i == 1 ? -1.0f : 1.0f;
-		}
-	}
+	// We can use this to change the gain on an existing connection
+	azaTrackConnect(&mixer.tracks[0], &mixer.master, -6.0f, NULL, 0);
 
 	// Track 1
 
@@ -276,6 +271,8 @@ int main(int argumentCount, char** argumentValues) {
 	}
 
 	azaTrackAppendDSP(&mixer.tracks[1], (azaDSP*)&dspCat);
+
+	azaTrackConnect(&mixer.tracks[1], &mixer.master, -6.0f, NULL, 0);
 
 	// Master
 

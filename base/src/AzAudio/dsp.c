@@ -267,11 +267,58 @@ void azaChannelMatrixDeinit(azaChannelMatrix *data) {
 	}
 }
 
+struct DistChannelPair {
+	int16_t dist, dstC;
+};
+
+static int compareDistChannelPair(const void *_lhs, const void *_rhs) {
+	struct DistChannelPair lhs = *((struct DistChannelPair*)_lhs);
+	struct DistChannelPair rhs = *((struct DistChannelPair*)_rhs);
+	return lhs.dist - rhs.dist;
+}
+
 void azaChannelMatrixGenerateRoutingFromLayouts(azaChannelMatrix *data, azaChannelLayout srcLayout, azaChannelLayout dstLayout) {
-	// TODO: What it says on the tin, not this garbage
-	uint32_t diagonalLength = AZA_MIN(srcLayout.count, dstLayout.count);
-	for (uint32_t i = 0; i < diagonalLength; i++) {
-		data->matrix[i * (data->outputs + 1)] = 1.0f;
+	assert(data->inputs == srcLayout.count);
+	assert(data->outputs == dstLayout.count);
+	assert(srcLayout.count > 0);
+	assert(dstLayout.count > 0);
+	if (dstLayout.count == 1) {
+		// Just make them all connect to the one singular output channel
+		for (int16_t srcC = 0; srcC < srcLayout.count; srcC++) {
+			data->matrix[data->outputs * srcC] = 1.0f;
+		}
+		return;
+	}
+	bool srcChannelUsed[256];
+	int16_t srcChannelsUsed = 0;
+	for (int16_t srcC = 0; srcC < srcLayout.count; srcC++) {
+		srcChannelUsed[srcC] = false;
+		for (int16_t dstC = 0; dstC < dstLayout.count; dstC++) {
+			if (srcLayout.positions[srcC] == dstLayout.positions[dstC]) {
+				srcChannelUsed[srcC] = true;
+				data->matrix[data->outputs * srcC + dstC] = 1.0f;
+				srcChannelsUsed++;
+				break;
+			}
+		}
+	}
+	if (srcChannelsUsed < srcLayout.count) {
+		// Try and find 2 closest channels for each channel not already mapped
+		for (int16_t srcC = 0; srcC < srcLayout.count; srcC++) {
+			if (srcChannelUsed[srcC]) continue;
+			struct DistChannelPair *list = alloca(dstLayout.count * sizeof(struct DistChannelPair));
+			int16_t bdi = 0;
+			for (int16_t dstC = 0; dstC < dstLayout.count; dstC++) {
+				uint16_t dist = azaPositionDistance(srcLayout.positions[srcC], dstLayout.positions[dstC]);
+				list[bdi++] = (struct DistChannelPair){ dist, dstC };
+			}
+			qsort(list, dstLayout.count, sizeof(*list), compareDistChannelPair);
+			// Pick the first 2 in the list as they should be the 2 closest
+			// Set weights based on respective distances
+			float totalDist = (float)(list[0].dist + list[1].dist);
+			data->matrix[data->outputs * srcC + list[0].dstC] = 1.0f - ((float)list[0].dist / totalDist);
+			data->matrix[data->outputs * srcC + list[1].dstC] = 1.0f - ((float)list[1].dist / totalDist);
+		}
 	}
 }
 
@@ -301,7 +348,7 @@ void azaBufferMixMatrix(azaBuffer dst, float volumeDst, azaBuffer src, float vol
 		for (uint32_t i = 0; i < dst.frames; i++) {
 			for (uint32_t dstC = 0; dstC < dst.channelLayout.count; dstC++) {
 				// TODO: Vectorize this inner loop in the very least, possibly the outer one as well.
-				// Alternatively, vectorize the outermost frame loop instead as that should be pretty trivial to do.
+				// Alternatively, vectorize the outermost frame loop instead as that should be pretty trivial to do, and wouldn't depend on channel counts.
 				float accum = 0.0f;
 				float *row = matPremult + src.channelLayout.count * dstC;
 				for (uint32_t srcC = 0; srcC < src.channelLayout.count; srcC++) {
