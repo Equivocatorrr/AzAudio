@@ -9,7 +9,7 @@
 #include "../../error.h"
 #include "../../helpers.h"
 
-#include "threads.h"
+#include "../threads.h"
 #include "platform_util.h"
 
 #include <Mmdeviceapi.h>
@@ -586,7 +586,7 @@ static void azaStreamProcess(azaStreamData *data) {
 }
 
 
-static unsigned __stdcall soundThreadProc(void *userdata) {
+static AZA_THREAD_PROC_DEF(soundThreadProc, userdata) {
 	HRESULT hResult;
 	hResult = CoInitialize(NULL);
 	CHECK_RESULT("soundThreadProc CoInitialize", goto error);

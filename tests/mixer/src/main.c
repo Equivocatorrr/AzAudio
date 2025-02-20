@@ -178,6 +178,11 @@ done:
 	return err;
 }
 
+// Track 2
+
+azaReverb *reverb = NULL;
+azaFilter *reverbHighpass = NULL;
+
 void usage(const char *executableName) {
 	printf(
 		"Usage:\n"
@@ -212,7 +217,7 @@ int main(int argumentCount, char** argumentValues) {
 		return 1;
 	}
 
-	azaChannelLayout trackChannelLayouts[2] = {
+	azaChannelLayout trackChannelLayouts[3] = {
 		(azaChannelLayout) {
 			.count = 1,
 			.positions = {
@@ -220,9 +225,10 @@ int main(int argumentCount, char** argumentValues) {
 			},
 		},
 		(azaChannelLayout) { 0 },
+		(azaChannelLayout) { 0 },
 	};
 
-	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) { .trackCount = 2, .channelLayouts = trackChannelLayouts } , (azaStreamConfig) {0}, false))) {
+	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) { .trackCount = 3, .channelLayouts = trackChannelLayouts } , (azaStreamConfig) {0}, false))) {
 		char buffer[64];
 		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
@@ -245,7 +251,8 @@ int main(int argumentCount, char** argumentValues) {
 	azaTrackAppendDSP(&mixer.tracks[0], (azaDSP*)filter);
 
 	// We can use this to change the gain on an existing connection
-	azaTrackConnect(&mixer.tracks[0], &mixer.master, -6.0f, NULL, 0);
+	// azaTrackConnect(&mixer.tracks[0], &mixer.master, -6.0f, NULL, 0);
+	mixer.tracks[0].gain = -6.0f;
 
 	// Track 1
 
@@ -272,25 +279,59 @@ int main(int argumentCount, char** argumentValues) {
 
 	azaTrackAppendDSP(&mixer.tracks[1], (azaDSP*)&dspCat);
 
-	azaTrackConnect(&mixer.tracks[1], &mixer.master, -6.0f, NULL, 0);
+	// azaTrackConnect(&mixer.tracks[1], &mixer.master, -6.0f, NULL, 0);
+	mixer.tracks[1].gain = -6.0f;
+
+	// Track 2
+
+	azaTrackConnect(&mixer.tracks[0], &mixer.tracks[2], -6.0f, NULL, 0);
+	azaTrackConnect(&mixer.tracks[1], &mixer.tracks[2], -6.0f, NULL, 0);
+
+	reverbHighpass = azaMakeFilter((azaFilterConfig) {
+		.kind = AZA_FILTER_HIGH_PASS,
+		.frequency = 50.0f,
+		.dryMix = 0.0f,
+	}, outputChannelCount);
+	azaTrackAppendDSP(&mixer.tracks[2], (azaDSP*)reverbHighpass);
+
+	reverb = azaMakeReverb((azaReverbConfig) {
+		.gain = 0.0f,
+		.gainDry = -INFINITY,
+		.roomsize = 5.0f,
+		.color = 5.0f,
+		.delay = 0.0f,
+	}, outputChannelCount);
+	azaTrackAppendDSP(&mixer.tracks[2], (azaDSP*)reverb);
 
 	// Master
 
 	limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
-		.gainInput  = -3.0f,
-		.gainOutput = -0.1f,
+		.gainInput  =  0.0f,
+		.gainOutput =  0.0f,
 	}, outputChannelCount);
 
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)limiter);
+
+	mixer.master.gain = -12.0f;
 
 	// Uncomment this to test if cyclic routing is detected
 	// azaTrackConnect(&mixer.master, &mixer.tracks[0], 0.0f, NULL, 0);
 
 	azaMixerStreamSetActive(&mixer, true);
 
-	// TODO: Make controls for the mixer
-	printf("Press ENTER to stop\n");
-	getc(stdin);
+
+	printf("Press ENTER to stop or type M first to open the mixer GUI\n");
+	azaMixerGUIOpen(&mixer, /* onTop */ false);
+	while (true) {
+		int c = getc(stdin);
+		if (c == 'M' || c == 'm') {
+			azaMixerGUIOpen(&mixer, /* onTop */ true);
+			do { c = getc(stdin); } while (c != EOF && c != '\n');
+		} else {
+			break;
+		}
+	}
+	azaMixerGUIClose();
 	azaMixerStreamClose(&mixer, false);
 
 	free(objects);
@@ -301,6 +342,9 @@ int main(int argumentCount, char** argumentValues) {
 	free(spatializeCat);
 	azaFreeLookaheadLimiter(limiter);
 	azaBufferDeinit(&bufferCat);
+
+	azaFreeReverb(reverb);
+	azaFreeFilter(reverbHighpass);
 
 	azaDeinit();
 	return 0;

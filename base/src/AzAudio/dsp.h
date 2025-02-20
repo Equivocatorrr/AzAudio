@@ -149,6 +149,7 @@ typedef enum azaDSPKind {
 	AZA_DSP_DELAY_DYNAMIC,
 	AZA_DSP_SPATIALIZE,
 } azaDSPKind;
+extern const char *azaDSPKindString[];
 
 // Generic interface to all the DSP structures
 typedef struct azaDSP {

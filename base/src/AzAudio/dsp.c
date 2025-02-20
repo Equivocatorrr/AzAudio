@@ -34,6 +34,23 @@ thread_local azaBuffer sideBufferPool[AZA_MAX_SIDE_BUFFERS] = {{0}};
 thread_local size_t sideBufferCapacity[AZA_MAX_SIDE_BUFFERS] = {0};
 thread_local size_t sideBuffersInUse = 0;
 
+const char *azaDSPKindString[] = {
+	"NONE",
+	"User (in-place)",
+	"User (transitive)",
+	"Cubic Limiter",
+	"RMS",
+	"Lookahead Limiter",
+	"Filter",
+	"Compressor",
+	"Delay",
+	"Reverb",
+	"Sampler",
+	"Gate",
+	"Dynamic Delay",
+	"Spatialize",
+};
+
 azaKernel azaKernelDefaultLanczos;
 
 azaWorld azaWorldDefault;
@@ -1185,8 +1202,10 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 	err = azaCheckBuffer(buffer);
 	if (err) return err;
 	azaBuffer inputBuffer = azaPushSideBufferCopy(buffer);
-	err = azaDelayProcess(&data->inputDelay, inputBuffer);
-	if (err) return err;
+	if (data->config.delay != 0.0f) {
+		err = azaDelayProcess(&data->inputDelay, inputBuffer);
+		if (err) return err;
+	}
 	azaBuffer sideBufferCombined = azaPushSideBufferZero(buffer.frames, buffer.channelLayout.count, buffer.samplerate);
 	azaBuffer sideBufferEarly = azaPushSideBuffer(buffer.frames, buffer.channelLayout.count, buffer.samplerate);
 	azaBuffer sideBufferDiffuse = azaPushSideBuffer(buffer.frames, buffer.channelLayout.count, buffer.samplerate);

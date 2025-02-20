@@ -4,19 +4,23 @@
 	General purpose mixer with track routing and DSP plugins.
 */
 
-#ifndef AZAUDIO_MIXING_H
-#define AZAUDIO_MIXING_H
+#ifndef AZAUDIO_MIXER_H
+#define AZAUDIO_MIXER_H
 
 #include "dsp.h"
 #include "backend/interface.h"
+#include "backend/threads.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#define AZA_TRACK_MAX_METERS 8
+
 typedef struct azaTrackRoute {
 	struct azaTrack *track;
 	float gain;
+	bool mute;
 	azaChannelMatrix channelMatrix;
 } azaTrackRoute;
 
@@ -30,8 +34,18 @@ typedef struct azaTrack {
 		uint32_t count;
 		uint32_t capacity;
 	} receives;
+	float gain;
+	bool mute;
+	// Up to AZA_TRACK_MAX_METERS channels of RMS metering (only updated when mixer GUI is open)
+	float rmsSquaredAvg[AZA_TRACK_MAX_METERS];
+	float peaks[AZA_TRACK_MAX_METERS];
+	float peaksShortTerm[AZA_TRACK_MAX_METERS];
+	// How many samples have been counted so far
+	uint32_t rmsFrames;
 	// Used to determine whether routing is cyclic.
 	uint8_t mark;
+	// Used to determine whether we've already processed this track
+	bool processed;
 } azaTrack;
 // Initializes our buffer
 // May return any error azaBufferInit can return
@@ -52,6 +66,8 @@ enum {
 // May return AZA_ERROR_OUT_OF_MEMORY
 int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **dstTrackRoute, uint32_t flags);
 void azaTrackDisconnect(azaTrack *from, azaTrack *to);
+// Will return NULL if no such route exists.
+azaTrackRoute* azaTrackGetReceive(azaTrack *from, azaTrack *to);
 
 int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data);
 
@@ -68,6 +84,8 @@ typedef struct azaMixer {
 	azaTrack master;
 	// We may optionally own a stream to which we output the track contents of master.
 	azaStream stream;
+	// Maybe look into other options besides a mutex? We really don't want our sound thread to wait for the GUI if we can help it.
+	azaMutex mutex;
 } azaMixer;
 
 // Allocates config.trackCount tracks and initializes them
@@ -82,6 +100,11 @@ int azaMixerProcess(uint32_t frames, uint32_t samplerate, azaMixer *data);
 
 // Builtin callback for processing the mixer on a stream
 int azaMixerCallback(void *userdata, azaBuffer buffer);
+
+// if onTop is true then the window will always be on top even if it loses focus
+void azaMixerGUIOpen(azaMixer *mixer, bool onTop);
+void azaMixerGUIClose();
+bool azaMixerGUIIsOpen();
 
 // Opens an output stream to process this mixer and initializes it such that the tracks have enough frames.
 // config.bufferFrames is set to the max of the value passed in or the number required for the output stream. As such you can leave this at zero.
@@ -99,4 +122,4 @@ static inline void azaMixerStreamSetActive(azaMixer *data, bool active) {
 }
 #endif
 
-#endif // AZAUDIO_MIXING_H
+#endif // AZAUDIO_MIXER_H

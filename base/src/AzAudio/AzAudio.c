@@ -27,6 +27,7 @@ AzaLogLevel azaLogLevel = AZA_LOG_LEVEL_INFO;
 azaAllocatorCallbacks azaAllocator = {
 	calloc,
 	malloc,
+	realloc,
 	free,
 };
 
