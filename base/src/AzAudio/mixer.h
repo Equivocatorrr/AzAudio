@@ -86,6 +86,13 @@ typedef struct azaMixer {
 	azaStream stream;
 	// Maybe look into other options besides a mutex? We really don't want our sound thread to wait for the GUI if we can help it.
 	azaMutex mutex;
+	// Used to measure how long we spend not processing, so we can get a CPU use percentage.
+	int64_t tsOfflineStart;
+	float cpuPercent;
+	// This is set to the above at a fixed interval
+	float cpuPercentSlow;
+	// How many times have we processed?
+	uint64_t times;
 } azaMixer;
 
 // Allocates config.trackCount tracks and initializes them

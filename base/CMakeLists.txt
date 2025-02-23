@@ -61,6 +61,7 @@ add_library(AzAudio STATIC
 	src/AzAudio/backend/interface.h
 	src/AzAudio/backend/interface.c
 	src/AzAudio/backend/threads.h
+	src/AzAudio/backend/timer.h
 	${BACKEND_SOURCES}
 )
 

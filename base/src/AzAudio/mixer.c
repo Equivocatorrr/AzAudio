@@ -8,6 +8,8 @@
 #include "error.h"
 #include "helpers.h"
 
+#include "backend/timer.h"
+
 #include <string.h>
 
 int azaTrackInit(azaTrack *data, uint32_t bufferFrames, azaChannelLayout bufferChannelLayout) {
@@ -84,7 +86,6 @@ azaTrackRoute* azaTrackGetReceive(azaTrack *from, azaTrack *to) {
 
 int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 	if (data->processed) return AZA_SUCCESS;
-	data->processed = true;
 	data->buffer.samplerate = samplerate;
 	azaBuffer buffer = azaBufferSlice(data->buffer, 0, frames);
 	azaBufferZero(buffer);
@@ -129,6 +130,7 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 		}
 		data->rmsFrames += frames;
 	}
+	data->processed = true;
 	return AZA_SUCCESS;
 }
 
@@ -154,6 +156,8 @@ int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout bufferC
 		if (err) return err;
 	}
 	azaMutexInit(&data->mutex);
+	data->tsOfflineStart = azaGetTimestamp();
+	data->cpuPercent = 0.0f;
 	return AZA_SUCCESS;
 }
 
@@ -192,10 +196,21 @@ static int azaMixerCheckRouting(azaMixer *data) {
 
 int azaMixerProcess(uint32_t frames, uint32_t samplerate, azaMixer *data) {
 	azaMutexLock(&data->mutex);
+	int64_t tsStart = azaGetTimestamp();
+	int64_t timeOffline = tsStart - data->tsOfflineStart;
 	int err;
 	if ((err = azaMixerCheckRouting(data))) goto error;
 	if ((err = azaTrackProcess(frames, samplerate, &data->master))) goto error;
 error:
+	int64_t tsEnd = azaGetTimestamp();
+	int64_t timeOnline = tsEnd - tsStart;
+	float cpuPercent = (float)(100.0 * (double)timeOnline / (double)(timeOffline + timeOnline));
+	data->cpuPercent = azaLerpf(data->cpuPercent, cpuPercent, 1.0f / (float)(1 + data->times % 20));
+	data->times++;
+	if ((data->times % 20) == 0) {
+		data->cpuPercentSlow = data->cpuPercent;
+	}
+	data->tsOfflineStart = tsEnd;
 	azaMutexUnlock(&data->mutex);
 	return err;
 }
