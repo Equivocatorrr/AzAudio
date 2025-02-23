@@ -17,7 +17,12 @@
 extern "C" {
 #endif
 
-#define AZAUDIO_LOOKAHEAD_SAMPLES 64
+// TODO: Work on making the lookahead limiter more transparent without necessarily increasing latency. Perhaps find a way to make our linear envelope more like an S-curve? Also probably make the lookahead time configurable.
+// 128 samples at 48.0kHz is 128.0/48.0=2.7ms
+// 128 samples at 44.1kHz is 128.0/44.1=2.9ms
+//  64 samples at 48.0kHz is  64.0/48.0=1.3ms
+//  64 samples at 44.1kHz is  64.0/44.1=1.5ms
+#define AZAUDIO_LOOKAHEAD_SAMPLES 128
 // The duration of transitions between the variable parameter values
 #define AZAUDIO_SAMPLER_TRANSITION_FRAMES 128
 
@@ -634,7 +639,7 @@ extern azaKernel azaKernelDefaultLanczos;
 int azaKernelInit(azaKernel *kernel, int isSymmetrical, float length, float scale);
 void azaKernelDeinit(azaKernel *kernel);
 
-float azaKernelSample(azaKernel *kernel, float x);
+float azaKernelSample(azaKernel *kernel, int i, float pos);
 
 // Makes a lanczos kernel. resolution is the number of samples between zero crossings
 void azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius);

@@ -224,8 +224,32 @@ int main(int argumentCount, char** argumentValues) {
 				AZA_POS_CENTER_FRONT,
 			},
 		},
-		(azaChannelLayout) { 0 },
-		(azaChannelLayout) { 0 },
+		// (azaChannelLayout) {
+		// 	.count = 8,
+		// 	.positions = {
+		// 		AZA_POS_LEFT_FRONT,
+		// 		AZA_POS_RIGHT_FRONT,
+		// 		AZA_POS_CENTER_FRONT,
+		// 		AZA_POS_SUBWOOFER,
+		// 		AZA_POS_LEFT_BACK,
+		// 		AZA_POS_RIGHT_BACK,
+		// 		AZA_POS_LEFT_SIDE,
+		// 		AZA_POS_RIGHT_SIDE,
+		// 	},
+		// },
+		// (azaChannelLayout) {
+		// 	.count = 8,
+		// 	.positions = {
+		// 		AZA_POS_LEFT_FRONT,
+		// 		AZA_POS_RIGHT_FRONT,
+		// 		AZA_POS_CENTER_FRONT,
+		// 		AZA_POS_SUBWOOFER,
+		// 		AZA_POS_LEFT_BACK,
+		// 		AZA_POS_RIGHT_BACK,
+		// 		AZA_POS_LEFT_SIDE,
+		// 		AZA_POS_RIGHT_SIDE,
+		// 	},
+		// },
 	};
 
 	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) { .trackCount = 3, .channelLayouts = trackChannelLayouts } , (azaStreamConfig) {0}, false))) {
@@ -245,14 +269,15 @@ int main(int argumentCount, char** argumentValues) {
 
 	filter = azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_LOW_PASS,
-		.frequency = 200.0f,
-	}, 1);
+		.frequency = 500.0f,
+	}, mixer.tracks[0].buffer.channelLayout.count);
 
 	azaTrackAppendDSP(&mixer.tracks[0], (azaDSP*)filter);
 
 	// We can use this to change the gain on an existing connection
 	// azaTrackConnect(&mixer.tracks[0], &mixer.master, -6.0f, NULL, 0);
 	mixer.tracks[0].gain = -6.0f;
+	mixer.tracks[0].mute = true;
 
 	// Track 1
 
@@ -265,6 +290,7 @@ int main(int argumentCount, char** argumentValues) {
 	});
 
 	objects = calloc(bufferCat.channelLayout.count, sizeof(Object));
+	srand(123456); // We need repeatability for nullability-tests
 	updateObjects(bufferCat.channelLayout.count, 0.0f);
 	spatializeCat = malloc(sizeof(azaSpatialize*) * bufferCat.channelLayout.count);
 	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
@@ -274,13 +300,13 @@ int main(int argumentCount, char** argumentValues) {
 			.mode        = AZA_SPATIALIZE_ADVANCED,
 			.delayMax    = 0.0f,
 			.earDistance = 0.0f,
-		}, outputChannelCount);
+		}, mixer.tracks[1].buffer.channelLayout.count);
 	}
 
 	azaTrackAppendDSP(&mixer.tracks[1], (azaDSP*)&dspCat);
 
 	// azaTrackConnect(&mixer.tracks[1], &mixer.master, -6.0f, NULL, 0);
-	mixer.tracks[1].gain = -6.0f;
+	mixer.tracks[1].gain = -9.0f;
 
 	// Track 2
 
@@ -291,7 +317,7 @@ int main(int argumentCount, char** argumentValues) {
 		.kind = AZA_FILTER_HIGH_PASS,
 		.frequency = 50.0f,
 		.dryMix = 0.0f,
-	}, outputChannelCount);
+	}, mixer.tracks[2].buffer.channelLayout.count);
 	azaTrackAppendDSP(&mixer.tracks[2], (azaDSP*)reverbHighpass);
 
 	reverb = azaMakeReverb((azaReverbConfig) {
@@ -300,14 +326,16 @@ int main(int argumentCount, char** argumentValues) {
 		.roomsize = 5.0f,
 		.color = 5.0f,
 		.delay = 0.0f,
-	}, outputChannelCount);
+	}, mixer.tracks[2].buffer.channelLayout.count);
 	azaTrackAppendDSP(&mixer.tracks[2], (azaDSP*)reverb);
+
+	mixer.tracks[2].mute = true;
 
 	// Master
 
 	limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
 		.gainInput  =  0.0f,
-		.gainOutput =  0.0f,
+		.gainOutput = -0.1f,
 	}, outputChannelCount);
 
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)limiter);

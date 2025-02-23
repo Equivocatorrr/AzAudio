@@ -27,6 +27,8 @@
 #include <stdalign.h>
 
 
+#include "simd.h"
+
 
 // TODO: Maybe make this dynamic, and also deal with the thread_local memory leak snafu (possibly by making it not a stack, and therefore no longer thread_local)
 #define AZA_MAX_SIDE_BUFFERS 64
@@ -340,7 +342,6 @@ void azaChannelMatrixGenerateRoutingFromLayouts(azaChannelMatrix *data, azaChann
 }
 
 
-
 void azaBufferMixMatrix(azaBuffer dst, float volumeDst, azaBuffer src, float volumeSrc, azaChannelMatrix *matrix) {
 	assert(matrix);
 	assert(matrix->inputs == src.channelLayout.count);
@@ -355,24 +356,82 @@ void azaBufferMixMatrix(azaBuffer dst, float volumeDst, azaBuffer src, float vol
 			}
 		}
 	} else {
+		// src channel count columns, dst channel count rows
 		float *matPremult = (float*)alloca(dst.channelLayout.count * src.channelLayout.count * sizeof(float));
 		for (uint8_t c = 0; c < src.channelLayout.count; c++) {
 			for (uint8_t r = 0; r < dst.channelLayout.count; r++) {
 				matPremult[c * dst.channelLayout.count + r] = volumeSrc * matrix->matrix[c * matrix->outputs + r];
 			}
 		}
-		// src channel count columns, dst channel count rows
-		for (uint32_t i = 0; i < dst.frames; i++) {
-			for (uint32_t dstC = 0; dstC < dst.channelLayout.count; dstC++) {
-				// TODO: Vectorize this inner loop in the very least, possibly the outer one as well.
-				// Alternatively, vectorize the outermost frame loop instead as that should be pretty trivial to do, and wouldn't depend on channel counts.
+		uint32_t i = 0;
+		uint32_t totalSamples = dst.frames*dst.channelLayout.count;
+		// TODO: Probably do some runtime checks for SIMD availability and backwards compatibility, to support compiling for AVX2 and having it just work anyway if lesser versions are available. Also implement 128-bit wide SIMD. Also probably support ARM's Neon (when testing on ARM becomes feasible).
+#if __AVX__
+		if ((uint64_t)dst.samples % 32 != 0) {
+			// Process the first few as scalar to get into the right alignment
+			// _mm256_load_ps and _mm256_store_ps expects the data to be aligned on a 32-byte boundary
+			// We could instead use _mm256_loadu_ps and _mm256_storeu_ps but it's easy enough to just get into a sufficiently-aligned boundary like this. The performance differences should be minimal on modern CPUs.
+			for (; i < 8 - ((uint64_t)dst.samples % 32) / sizeof(float); i++) {
+				uint32_t dstFrame = i / dst.channelLayout.count;
+				uint32_t dstC = i % dst.channelLayout.count;
 				float accum = 0.0f;
 				float *row = matPremult + src.channelLayout.count * dstC;
 				for (uint32_t srcC = 0; srcC < src.channelLayout.count; srcC++) {
-					accum += src.samples[i * src.stride + srcC] * row[srcC];
+					accum += src.samples[dstFrame * src.stride + srcC] * row[srcC];
 				}
-				dst.samples[i * dst.stride + dstC] = dst.samples[i * dst.stride + dstC] * volumeDst + accum;
+				dst.samples[dstFrame * dst.stride + dstC] = dst.samples[dstFrame * dst.stride + dstC] * volumeDst + accum;
 			}
+		}
+		__m256 volumeDst_x8 = _mm256_set1_ps(volumeDst);
+		for (; i <= totalSamples-8; i += 8) {
+			uint32_t dstFrame = i / dst.channelLayout.count;
+			uint32_t dstC = i % dst.channelLayout.count;
+			__m256 accum_x8 = _mm256_setzero_ps();
+			// TODO: Special cases for when the channels are better behaved
+			uint32_t srcFrameOffsets[8];
+			uint32_t dstCOffsets[8];
+			for (uint32_t j = 0; j < 8; j++) {
+				uint32_t frame = dstFrame + (j+dstC)/dst.channelLayout.count;
+				srcFrameOffsets[j] = frame * src.stride;
+				dstCOffsets[j] = ((j+dstC)%dst.channelLayout.count) * src.channelLayout.count;
+			}
+			for (uint32_t srcC = 0; srcC < src.channelLayout.count; srcC++) {
+				__m256 srcSamples_x8 = _mm256_setr_ps(
+					src.samples[srcFrameOffsets[0] + srcC],
+					src.samples[srcFrameOffsets[1] + srcC],
+					src.samples[srcFrameOffsets[2] + srcC],
+					src.samples[srcFrameOffsets[3] + srcC],
+					src.samples[srcFrameOffsets[4] + srcC],
+					src.samples[srcFrameOffsets[5] + srcC],
+					src.samples[srcFrameOffsets[6] + srcC],
+					src.samples[srcFrameOffsets[7] + srcC]
+				);
+				__m256 mat_x8 = _mm256_setr_ps(
+					matPremult[dstCOffsets[0] + srcC],
+					matPremult[dstCOffsets[1] + srcC],
+					matPremult[dstCOffsets[2] + srcC],
+					matPremult[dstCOffsets[3] + srcC],
+					matPremult[dstCOffsets[4] + srcC],
+					matPremult[dstCOffsets[5] + srcC],
+					matPremult[dstCOffsets[6] + srcC],
+					matPremult[dstCOffsets[7] + srcC]
+				);
+				accum_x8 = aza_mm256_fmadd_ps(srcSamples_x8, mat_x8, accum_x8);
+			}
+			__m256 dstSamples_x8 = _mm256_load_ps(dst.samples + i);
+			dstSamples_x8 = aza_mm256_fmadd_ps(dstSamples_x8, volumeDst_x8, accum_x8);
+			_mm256_store_ps(dst.samples + i, dstSamples_x8);
+		}
+#endif
+		for (; i < totalSamples; i++) {
+			uint32_t dstFrame = i / dst.channelLayout.count;
+			uint32_t dstC = i % dst.channelLayout.count;
+			float accum = 0.0f;
+			float *row = matPremult + src.channelLayout.count * dstC;
+			for (uint32_t srcC = 0; srcC < src.channelLayout.count; srcC++) {
+				accum += src.samples[dstFrame * src.stride + srcC] * row[srcC];
+			}
+			dst.samples[dstFrame * dst.stride + dstC] = dst.samples[dstFrame * dst.stride + dstC] * volumeDst + accum;
 		}
 	}
 }
@@ -1655,7 +1714,8 @@ void azaKernelDeinit(azaKernel *kernel) {
 	aza_free(kernel->table);
 }
 
-float azaKernelSample(azaKernel *kernel, float x) {
+float azaKernelSample(azaKernel *kernel, int i, float pos) {
+	float x = (float)i - pos;
 	if (kernel->isSymmetrical) {
 		if (x < 0.0f) x = -x;
 	} else {
@@ -1665,8 +1725,73 @@ float azaKernelSample(azaKernel *kernel, float x) {
 	uint32_t index = (uint32_t)x;
 	if (index >= kernel->size-1) return 0.0f;
 	x -= (float)index;
-	return azaLerpf(kernel->table[index], kernel->table[index+1], x);
+	float result = azaLerpf(kernel->table[index], kernel->table[index+1], x);
+	return result;
 }
+
+#if __AVX__
+static __m256 azaKernelSample_x8(azaKernel *kernel, int i, float pos) {
+	int step;
+	float x = (float)i - pos;
+	if (kernel->isSymmetrical) {
+		if (x < 0.0f) {
+			if (x > -8.0f) {
+				// Have to handle the pivot point
+				x = -x * kernel->scale;
+				int32_t index = (int32_t)x;
+				x -= (float)index;
+				float_x8 a = {0};
+				float_x8 b = {0};
+				float_x8 t = {0};
+				step = -(int)kernel->scale;
+				for (uint32_t j = 0; j < 8; j++) {
+					if ((uint32_t)index < kernel->size-1) {
+						a.f[j] = kernel->table[index];
+						b.f[j] = kernel->table[index+1];
+						t.f[j] = x;
+					}
+					index += step;
+					if (index < 0) {
+						step = -step;
+						// Gotta do it like this to get the last ULP of error out.
+						x = (float)(i+j+1) - pos;
+						x *= kernel->scale;
+						index = (int32_t)x;
+						x -= (float)index;
+					}
+				}
+				return azaLerp_x8(a.v, b.v, t.v);
+			} else {
+				// Send it in reverse
+				x = -x;
+				step = -(int)kernel->scale;
+			}
+		} else {
+			step = (int)kernel->scale;
+		}
+	} else {
+		if (x <= -8.0f) return _mm256_setzero_ps();
+		step = (int)kernel->scale;
+	}
+	// Send it forward
+	x *= kernel->scale;
+	uint32_t index = (uint32_t)x;
+	if (index >= kernel->size-1 && step > 0) return _mm256_setzero_ps();
+	x -= (float)index;
+	float_x8 a = {0};
+	float_x8 b = {0};
+	for (uint32_t j = 0; j < 8; j++) {
+		if (index < kernel->size-1) {
+			a.f[j] = kernel->table[index];
+			b.f[j] = kernel->table[index+1];
+		}
+		index += step;
+	}
+	float_x8 result;
+	result.v = azaLerp_x8(a.v, b.v, _mm256_set1_ps(x));
+	return result.v;
+}
+#endif // __AVX__
 
 void azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius) {
 	azaKernelInit(kernel, 1, 1+radius, resolution);
@@ -1686,10 +1811,48 @@ float azaSampleWithKernel(float *src, int stride, int minFrame, int maxFrame, az
 		start = (int)pos;
 		end = (int)pos + (int)kernel->length;
 	}
-	for (int i = start; i < end; i++) {
+	int i = start;
+	// TODO: I've noticed from some null testing between Lanczos kernel sizes (radius 64 and 32, both resolution 128) that the peak output difference was on the order of -33db. I believe this is probably too high, possibly indicating a bug in this kernel sampling code (off-by-one error?). We need to develop some rigorous testing and diagnostics tools to streamline and quantify these barely-audible issues. Probably do some math to figure out what the expected difference between kernels should be too, since I'm basically just guessing it's high.
+	// This AVX implementation produces the exact same results as the scalar version down to the last ULP.
+#if 1 && __AVX__
+	if (stride == 1 && i >= minFrame && i+8 < maxFrame) {
+		// We actually lose performance here if both sets of samples are randomly fetched, because azaKernelSample_x8 has additional logic.
+		for (; i <= end-8; i += 8) {
+			__m256 srcSamples;
+			srcSamples = _mm256_loadu_ps(src + i);
+			__m256 kernelSamples = azaKernelSample_x8(kernel, i, pos);
+#if 0 // For debugging purposes only
+			float_x8 kernelSamples2;
+			for (int j = 0; j < 8; j++) {
+				kernelSamples2.f[j] = azaKernelSample(kernel, i+j, pos);
+			}
+			float_x8 diff;
+			diff.v = _mm256_sub_ps(kernelSamples, kernelSamples2.v);
+			if (
+				diff.f[0] != 0.0f ||
+				diff.f[1] != 0.0f ||
+				diff.f[2] != 0.0f ||
+				diff.f[3] != 0.0f ||
+				diff.f[4] != 0.0f ||
+				diff.f[5] != 0.0f ||
+				diff.f[6] != 0.0f ||
+				diff.f[7] != 0.0f
+			) {
+				__m256 kernelSamples3 = azaKernelSample_x8(kernel, i, pos);
+				for (int j = 0; j < 8; j++) {
+					float kernelSamples4 = azaKernelSample(kernel, i+j, pos);
+				}
+			}
+#endif
+			float hsum = aza_mm256_hsum_ps(_mm256_mul_ps(srcSamples, kernelSamples));
+			result += hsum;
+		}
+	}
+#endif
+	for (; i < end; i++) {
 		int index = AZA_CLAMP(i, minFrame, maxFrame-1);
 		float s = src[index * stride];
-		result += s * azaKernelSample(kernel, (float)i - pos);
+		result += s * azaKernelSample(kernel, i, pos);
 	}
 	return result;
 }
