@@ -8,8 +8,10 @@
 
 #include <stdint.h>
 #include <math.h>
+#include <assert.h>
 
 #include "header_utils.h"
+#include "simd.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,51 +23,113 @@ static const float AZA_PI = 3.14159265359f;
 #define AZA_DEG_TO_RAD(x) ((x) * AZA_PI / 180.0f)
 #define AZA_RAD_TO_DEG(x) ((x) * 180.0f / AZA_PI)
 
-static inline float azaAbs(float a) {
+static AZA_FORCE_INLINE(float)
+azaAbsf(float a) {
 	return a < 0.0f ? -a : a;
 }
 
-static inline float azaSqr(float a) {
+static AZA_FORCE_INLINE(float)
+azaSqrf(float a) {
 	return a * a;
 }
 
-static inline float azaClampf(float a, float min, float max) {
-	return a < min ? min : (a > max ? max : a);
+static AZA_FORCE_INLINE(float)
+azaMinf(float a, float b) {
+	_mm_store_ss(&a, _mm_min_ss(_mm_set_ss(a), _mm_set_ss(b)));
+	return a;
 }
 
-static inline float azaLerp(float a, float b, float t) {
-	return a + (b - a) * t;
+static AZA_FORCE_INLINE(float)
+azaMaxf(float a, float b) {
+	_mm_store_ss(&a, _mm_max_ss(_mm_set_ss(a), _mm_set_ss(b)));
+	return a;
 }
 
-static inline float azaWrap01f(float a) {
+static AZA_FORCE_INLINE(float)
+azaClampf(float a, float min, float max) {
+	assert(min <= max);
+	return azaMinf(azaMaxf(a, min), max);
+}
+
+static inline float
+azaLinstepf(float a, float min, float max) {
+	return azaClampf((a - min) / (max - min), 0.0f, 1.0f);
+}
+
+static AZA_FORCE_INLINE(float)
+azaLerpf(float a, float b, float t) {
+	return aza_fmadd_f32(b - a, t, a);
+}
+
+static AZA_FORCE_INLINE(float)
+azaWrap01f(float a) {
 	int intPart = (int)a - signbit(a);
 	return a - (float)intPart;
+}
+
+float azaSincf(float x);
+
+// sinc with a hann window with a total size of 1+2*radius
+float azaLanczosf(float x, float radius);
+
+// Like a % max except the answer is always in the range [0; max) even if the input is negative
+static inline int
+azaWrapi(int a, int max) {
+	// assert(max > 0);
+	if (a < 0) {
+		return (a + 1) % max + max-1;
+	} else if (a > 0) {
+		return a % max;
+	} else {
+		return 0;
+	}
+}
+
+float azaCubicf(float a, float b, float c, float d, float x);
+
+float aza_db_to_ampf(float db);
+
+float aza_amp_to_dbf(float amp);
+
+static inline float
+aza_ms_to_samples(float ms, float samplerate) {
+	return ms * samplerate * 0.001f;
+}
+
+static inline float
+aza_samples_to_ms(float samples, float samplerate) {
+	return samples / samplerate * 1000.0f;
 }
 
 #define AZA_OSC_SINE_SAMPLES 128
 extern float azaOscSineValues[AZA_OSC_SINE_SAMPLES+1];
 // A LUT-based approximate sine oscillator where t is periodic between 0 and 1
-static inline float azaOscSine(float t) {
+static inline float
+azaOscSine(float t) {
 	t = azaWrap01f(t);
 	t *= AZA_OSC_SINE_SAMPLES;
 	uint32_t index = (uint32_t)t;
 	float offset = t - (float)index;
-	return azaLerp(azaOscSineValues[index], azaOscSineValues[index+1], offset);
+	return azaLerpf(azaOscSineValues[index], azaOscSineValues[index+1], offset);
 }
-static inline float azaOscCosine(float t) {
+static AZA_FORCE_INLINE(float)
+azaOscCosine(float t) {
 	return azaOscSine(t + 0.25f);
 }
 
-static inline float azaOscSquare(float t) {
+static inline float
+azaOscSquare(float t) {
 	t = azaWrap01f(t);
 	return (float)((int)(t * 2.0f)) * 2.0f - 1.0f;
 }
 
-static inline float azaOscTriangle(float t) {
-	return 4.0f * (azaAbs(azaWrap01f(t + 0.25f) - 0.5f) - 0.25f);
+static inline float
+azaOscTriangle(float t) {
+	return 4.0f * (azaAbsf(azaWrap01f(t + 0.25f) - 0.5f) - 0.25f);
 }
 
-static inline float azaOscSaw(float t) {
+static inline float
+azaOscSaw(float t) {
 	return azaWrap01f(t + 0.5f) * 2.0f - 1.0f;
 }
 

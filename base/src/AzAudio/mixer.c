@@ -58,7 +58,7 @@ int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **ds
 	if (!(flags & AZA_TRACK_CHANNEL_ROUTING_ZERO)) {
 		azaChannelMatrixGenerateRoutingFromLayouts(&route.channelMatrix, from->buffer.channelLayout, to->buffer.channelLayout);
 	}
-	AZA_DYNAMIC_ARRAY_APPEND(azaTrackRoute, to->receives, route, return AZA_ERROR_OUT_OF_MEMORY);
+	AZA_DA_APPEND(azaTrackRoute, to->receives, route, return AZA_ERROR_OUT_OF_MEMORY);
 	if (dstTrackRoute) {
 		*dstTrackRoute = &to->receives.data[to->receives.count-1];
 	}
@@ -69,7 +69,7 @@ void azaTrackDisconnect(azaTrack *from, azaTrack *to) {
 	for (uint32_t i = 0; i < to->receives.count; i++) {
 		if (to->receives.data[i].track == from) {
 			azaChannelMatrixDeinit(&to->receives.data[i].channelMatrix);
-			AZA_DYNAMIC_ARRAY_ERASE(to->receives, i, 1);
+			AZA_DA_ERASE(to->receives, i, 1);
 			break;
 		}
 	}
@@ -118,14 +118,14 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 			float peak = 0.0f;
 			for (uint32_t i = 0; i < frames; i++) {
 				float sample = data->buffer.samples[i * data->buffer.stride + c];
-				rmsSquaredAvg += azaSqr(sample);
-				sample = azaAbs(sample);
-				peak = AZA_MAX(peak, sample);
+				rmsSquaredAvg += azaSqrf(sample);
+				sample = azaAbsf(sample);
+				peak = azaMaxf(peak, sample);
 			}
 			rmsSquaredAvg /= (float)frames;
-			data->rmsSquaredAvg[c] = azaLerp(data->rmsSquaredAvg[c], rmsSquaredAvg, (float)frames / ((float)data->rmsFrames + (float)frames));
-			data->peaks[c] = AZA_MAX(data->peaks[c], peak);
-			data->peaksShortTerm[c] = AZA_MAX(data->peaksShortTerm[c], peak);
+			data->rmsSquaredAvg[c] = azaLerpf(data->rmsSquaredAvg[c], rmsSquaredAvg, (float)frames / ((float)data->rmsFrames + (float)frames));
+			data->peaks[c] = azaMaxf(data->peaks[c], peak);
+			data->peaksShortTerm[c] = azaMaxf(data->peaksShortTerm[c], peak);
 		}
 		data->rmsFrames += frames;
 	}

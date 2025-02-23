@@ -433,7 +433,7 @@ void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, void *userdata, fp
 
 int azaDSPUserProcessSingle(azaDSPUser *data, azaBuffer buffer) {
 	int err = data->processSingle(data->userdata, buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -442,7 +442,7 @@ int azaDSPUserProcessSingle(azaDSPUser *data, azaBuffer buffer) {
 
 int azaDSPUserProcessDual(azaDSPUser *data, azaBuffer dst, azaBuffer src) {
 	int err = data->processDual(data->userdata, dst, src);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	if (data->header.pNext) {
 		return azaDSPProcessDual(data->header.pNext, dst, src);
 	}
@@ -455,7 +455,7 @@ void azaOpAdd(float *lhs, float rhs) {
 	*lhs += rhs;
 }
 void azaOpMax(float *lhs, float rhs) {
-	*lhs = AZA_MAX(*lhs, rhs);
+	*lhs = azaMaxf(*lhs, rhs);
 }
 
 
@@ -580,13 +580,13 @@ int azaRMSProcessDual(azaRMS *data, azaBuffer dst, azaBuffer src) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(dst);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaCheckBuffer(src);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaHandleRMSBuffer(data, 1);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaEnsureChannels(&data->channelData, 1);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	azaRMSChannelData *channelData = azaGetChannelData(&data->channelData, 0);
 	float *channelBuffer = data->buffer;
 	fp_azaOp op = data->config.combineOp ? data->config.combineOp : azaOpMax;
@@ -594,7 +594,7 @@ int azaRMSProcessDual(azaRMS *data, azaBuffer dst, azaBuffer src) {
 		channelData->squaredSum -= channelBuffer[data->index];
 		channelBuffer[data->index] = 0.0f;
 		for (size_t c = 0; c < src.channelLayout.count; c++) {
-			op(&channelBuffer[data->index], azaSqr(src.samples[i * src.stride + c]));
+			op(&channelBuffer[data->index], azaSqrf(src.samples[i * src.stride + c]));
 		}
 		channelData->squaredSum += channelBuffer[data->index];
 		// Deal with potential rounding errors making sqrtf emit NaNs
@@ -613,11 +613,11 @@ int azaRMSProcessSingle(azaRMS *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaHandleRMSBuffer(data, buffer.channelLayout.count);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaEnsureChannels(&data->channelData, buffer.channelLayout.count);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 		azaRMSChannelData *channelData = azaGetChannelData(&data->channelData, c);
 		float *channelBuffer = &data->buffer[data->config.windowSamples * c];
@@ -625,7 +625,7 @@ int azaRMSProcessSingle(azaRMS *data, azaBuffer buffer) {
 		for (uint32_t i = 0; i < buffer.frames; i++) {
 			uint32_t s = i * buffer.stride + c;
 			channelData->squaredSum -= channelBuffer[data->index];
-			channelBuffer[data->index] = azaSqr(buffer.samples[s]);
+			channelBuffer[data->index] = azaSqrf(buffer.samples[s]);
 			channelData->squaredSum += channelBuffer[data->index];
 			// Deal with potential rounding errors making sqrtf emit NaNs
 			if (channelData->squaredSum < 0.0f) channelData->squaredSum = 0.0f;
@@ -671,7 +671,7 @@ void azaFreeCubicLimiter(azaCubicLimiter *data) {
 
 int azaCubicLimiterProcess(azaCubicLimiter *data, azaBuffer buffer) {
 	int err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	if (buffer.stride == buffer.channelLayout.count) {
 		for (size_t i = 0; i < buffer.frames*buffer.channelLayout.count; i++) {
 			buffer.samples[i] = azaCubicLimiterSample(buffer.samples[i]);
@@ -722,9 +722,9 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaEnsureChannels(&data->channelData, buffer.channelLayout.count);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	azaBuffer gainBuffer;
 	gainBuffer = azaPushSideBuffer(buffer.frames, 1, buffer.samplerate);
 	memset(gainBuffer.samples, 0, sizeof(float) * gainBuffer.frames);
@@ -733,11 +733,11 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 	// Do all the gain calculations and put them into gainBuffer
 	for (uint32_t i = 0; i < buffer.frames; i++) {
 		for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
-			float sample = azaAbs(buffer.samples[i * buffer.stride + c]);
-			gainBuffer.samples[i] = AZA_MAX(sample, gainBuffer.samples[i]);
+			float sample = azaAbsf(buffer.samples[i * buffer.stride + c]);
+			gainBuffer.samples[i] = azaMaxf(sample, gainBuffer.samples[i]);
 		}
 		float gain = data->config.gainInput;
-		float peak = AZA_MAX(aza_amp_to_dbf(gainBuffer.samples[i]) + gain, 0.0f);
+		float peak = azaMaxf(aza_amp_to_dbf(gainBuffer.samples[i]) + gain, 0.0f);
 		float slope = (peak - data->sum) / AZAUDIO_LOOKAHEAD_SAMPLES;
 		if (slope > 0.0f && slope > data->slope) {
 			data->slope = slope;
@@ -823,9 +823,9 @@ int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaEnsureChannels(&data->channelData, buffer.channelLayout.count);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	float amount = azaClampf(1.0f - data->config.dryMix, 0.0f, 1.0f);
 	float amountDry = azaClampf(data->config.dryMix, 0.0f, 1.0f);
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
@@ -906,10 +906,10 @@ int azaCompressorProcess(azaCompressor *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	azaBuffer rmsBuffer = azaPushSideBuffer(buffer.frames, 1, buffer.samplerate);
 	err = azaRMSProcessDual(&data->rms, rmsBuffer, buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	float t = (float)buffer.samplerate / 1000.0f;
 	float attackFactor = expf(-1.0f / (data->config.attack * t));
 	float decayFactor = expf(-1.0f / (data->config.decay * t));
@@ -991,7 +991,7 @@ void azaFreeDelay(azaDelay *data) {
 static int azaDelayHandleBufferResizes(azaDelay *data, uint32_t samplerate, uint8_t channelCount) {
 	int err = AZA_SUCCESS;
 	err = azaEnsureChannels(&data->channelData, channelCount);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	uint32_t delaySamplesMax = 0;
 	uint32_t perChannelBufferCap = data->bufferCap / channelCount;
 	uint8_t realloc = 0;
@@ -1036,9 +1036,9 @@ int azaDelayProcess(azaDelay *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaDelayHandleBufferResizes(data, buffer.samplerate, buffer.channelLayout.count);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	azaBuffer sideBuffer = azaPushSideBuffer(buffer.frames, buffer.channelLayout.count, buffer.samplerate);
 	memset(sideBuffer.samples, 0, sizeof(float) * sideBuffer.frames * sideBuffer.channelLayout.count);
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
@@ -1055,7 +1055,7 @@ int azaDelayProcess(azaDelay *data, azaBuffer buffer) {
 	}
 	if (data->config.wetEffects) {
 		err = azaDSPProcessSingle(data->config.wetEffects, sideBuffer);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 	}
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 		azaDelayChannelData *channelData = azaGetChannelData(&data->channelData, c);
@@ -1200,11 +1200,11 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	azaBuffer inputBuffer = azaPushSideBufferCopy(buffer);
 	if (data->config.delay != 0.0f) {
 		err = azaDelayProcess(&data->inputDelay, inputBuffer);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 	}
 	azaBuffer sideBufferCombined = azaPushSideBufferZero(buffer.frames, buffer.channelLayout.count, buffer.samplerate);
 	azaBuffer sideBufferEarly = azaPushSideBuffer(buffer.frames, buffer.channelLayout.count, buffer.samplerate);
@@ -1221,9 +1221,9 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 		filter->config.frequency = color;
 		memcpy(sideBufferEarly.samples, inputBuffer.samples, sizeof(float) * buffer.frames * buffer.channelLayout.count);
 		err = azaFilterProcess(filter, sideBufferEarly);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 		err = azaDelayProcess(delay, sideBufferEarly);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 		azaBufferMix(sideBufferCombined, 1.0f, sideBufferEarly, 1.0f / (float)AZAUDIO_REVERB_DELAY_COUNT);
 	}
 	for (int tap = AZAUDIO_REVERB_DELAY_COUNT*2/3; tap < AZAUDIO_REVERB_DELAY_COUNT; tap++) {
@@ -1234,9 +1234,9 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 		memcpy(sideBufferDiffuse.samples, sideBufferCombined.samples, sizeof(float) * buffer.frames * buffer.channelLayout.count);
 		azaBufferCopyChannel(sideBufferDiffuse, 0, sideBufferCombined, 0);
 		err = azaFilterProcess(filter, sideBufferDiffuse);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 		err = azaDelayProcess(delay, sideBufferDiffuse);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 		azaBufferMix(sideBufferCombined, 1.0f, sideBufferDiffuse, 1.0f / (float)AZAUDIO_REVERB_DELAY_COUNT);
 	}
 	azaBufferMix(buffer, amountDry, sideBufferCombined, amount);
@@ -1281,7 +1281,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL || data->config.buffer == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	if (buffer.channelLayout.count != data->config.buffer->channelLayout.count) return AZA_ERROR_MISMATCHED_CHANNEL_COUNT;
 	float transition = expf(-1.0f / (AZAUDIO_SAMPLER_TRANSITION_FRAMES));
 	float samplerateFactor = (float)data->config.buffer->samplerate / (float)buffer.samplerate;
@@ -1311,7 +1311,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 				for (int i = 0; i < 4; i++) {
 					abcd[i] = data->config.buffer->samples[(ii++ % data->config.buffer->frames) * data->config.buffer->stride + c];
 				}
-				sample = cubic(abcd[0], abcd[1], abcd[2], abcd[3], data->pos.fraction);
+				sample = azaCubicf(abcd[0], abcd[1], abcd[2], abcd[3], data->pos.fraction);
 			} else {
 				// Oversampling
 				float total = 0.0f;
@@ -1386,7 +1386,7 @@ int azaGateProcess(azaGate *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	azaBuffer rmsBuffer = azaPushSideBuffer(buffer.frames, 1, buffer.samplerate);
 	azaBuffer activationBuffer = buffer;
 	uint8_t sideBuffersInUse = 1;
@@ -1402,7 +1402,7 @@ int azaGateProcess(azaGate *data, azaBuffer buffer) {
 	}
 
 	err = azaRMSProcessDual(&data->rms, rmsBuffer, activationBuffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	float t = (float)buffer.samplerate / 1000.0f;
 	float attackFactor = expf(-1.0f / (data->config.attack * t));
 	float decayFactor = expf(-1.0f / (data->config.decay * t));
@@ -1453,7 +1453,7 @@ static int azaDelayDynamicHandleBufferResizes(azaDelayDynamic *data, azaBuffer s
 	// TODO: Probably track channel layouts and handle them changing. Right now the buffers will break if the number of channels changes.
 	int err = AZA_SUCCESS;
 	err = azaEnsureChannels(&data->channelData, src.channelLayout.count);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	uint32_t kernelSamples;
 	azaKernel *kernel = azaDelayDynamicGetKernel(data);
 	kernelSamples = (uint32_t)ceilf(kernel->isSymmetrical ? (kernel->length - 1.0f) * 2.0f : (kernel->length-1.0f));
@@ -1520,7 +1520,7 @@ int azaDelayDynamicInit(azaDelayDynamic *data, uint32_t allocSize, azaDelayDynam
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaDelayDynamicChannelData), alignof(azaDelayDynamicChannelData));
 	int err = azaEnsureChannels(&data->channelData, channelCount);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	if (channelConfigs) {
 		for (uint8_t c = 0; c < channelCount; c++) {
 			azaDelayDynamicChannelConfig *channelConfig = azaDelayDynamicGetChannelConfig(data, c);
@@ -1561,7 +1561,7 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 	uint8_t numSideBuffers = 0;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	azaKernel *kernel = azaDelayDynamicGetKernel(data);
 	azaBuffer inputBuffer;
 	if (data->config.wetEffects) {
@@ -1598,7 +1598,7 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 		if (startIndex >= endIndex) continue;
 		uint8_t c2 = (c + 1) % inputBuffer.channelLayout.count;
 		for (uint32_t i = 0; i < inputBuffer.frames; i++) {
-			float index = azaLerp(startIndex, endIndex, (float)i / (float)inputBuffer.frames);
+			float index = azaLerpf(startIndex, endIndex, (float)i / (float)inputBuffer.frames);
 			uint32_t s = i * inputBuffer.stride + c;
 			float toAdd = inputBuffer.samples[s];
 			if (data->config.feedback != 0.0f) {
@@ -1623,7 +1623,7 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 		float amountDry = aza_db_to_ampf(data->config.gainDry);
 		if (startIndex >= endIndex) amount = 0.0f;
 		for (uint32_t i = 0; i < buffer.frames; i++) {
-			float index = azaLerp(startIndex, endIndex, (float)i / (float)buffer.frames);
+			float index = azaLerpf(startIndex, endIndex, (float)i / (float)buffer.frames);
 			uint32_t s = i * buffer.stride + c;
 			float wet = azaSampleWithKernel(channelData->buffer+kernelSamplesLeft, 1, -kernelSamplesLeft, delaySamplesMax+kernelSamplesRight+buffer.frames, kernel, index);
 			buffer.samples[s] = wet * amount + buffer.samples[s] * amountDry;
@@ -1665,13 +1665,13 @@ float azaKernelSample(azaKernel *kernel, float x) {
 	uint32_t index = (uint32_t)x;
 	if (index >= kernel->size-1) return 0.0f;
 	x -= (float)index;
-	return azaLerp(kernel->table[index], kernel->table[index+1], x);
+	return azaLerpf(kernel->table[index], kernel->table[index+1], x);
 }
 
 void azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius) {
 	azaKernelInit(kernel, 1, 1+radius, resolution);
 	for (uint32_t i = 0; i < kernel->size-1; i++) {
-		kernel->table[i] = lanczos((float)i / resolution, radius);
+		kernel->table[i] = azaLanczosf((float)i / resolution, radius);
 	}
 	kernel->table[kernel->size-1] = 0.0f;
 }
@@ -1940,15 +1940,15 @@ void azaFreeSpatialize(azaSpatialize *data) {
 }
 
 static float azaSpatializeGetFilterCutoff(float delay, float dot) {
-	return 192000.0f / AZA_MAX(delay, 1.0f) * (dot * 0.35f + 0.65f);
+	return 192000.0f / azaMaxf(delay, 1.0f) * (dot * 0.35f + 0.65f);
 }
 
 int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer srcBuffer, azaVec3 srcPosStart, float srcAmpStart, azaVec3 srcPosEnd, float srcAmpEnd) {
 	int err = AZA_SUCCESS;
 	err = azaCheckBuffer(dstBuffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	err = azaCheckBuffer(srcBuffer);
-	if (err) return err;
+	if AZA_UNLIKELY(err) return err;
 	if (dstBuffer.samplerate != srcBuffer.samplerate) return AZA_ERROR_MISMATCHED_SAMPLERATE;
 	if (dstBuffer.frames != srcBuffer.frames) return AZA_ERROR_MISMATCHED_FRAME_COUNT;
 	if (srcBuffer.channelLayout.count != 1) return AZA_ERROR_INVALID_CHANNEL_COUNT;
@@ -1973,17 +1973,17 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 			// Gotta do the doppler
 			azaDelayDynamic *delay = azaSpatializeGetDelayDynamic(data);
 			err = azaEnsureChannels(&data->channelData, 1);
-			if (err) return err;
+			if AZA_UNLIKELY(err) return err;
 			azaSpatializeChannelData *channelData = azaGetChannelData(&data->channelData, 0);
 			err = azaEnsureChannels(&delay->channelData, 1);
-			if (err) return err;
+			if AZA_UNLIKELY(err) return err;
 			azaDelayDynamicChannelConfig *channelConfig = azaDelayDynamicGetChannelConfig(delay, 0);
 			channelConfig->delay = delayStart;
 			err = azaDelayDynamicProcess(delay, sideBuffer, &delayEnd);
-			if (err) return err;
+			if AZA_UNLIKELY(err) return err;
 			channelData->filter.config.frequency = azaSpatializeGetFilterCutoff(delayStart, 1.0f);
 			err = azaFilterProcess(&channelData->filter, sideBuffer);
-			if (err) return err;
+			if AZA_UNLIKELY(err) return err;
 		}
 		azaBufferMixFade(dstBuffer, 1.0f, 1.0f, sideBuffer, srcAmpStart, srcAmpEnd);
 		azaPopSideBuffer();
@@ -2073,8 +2073,8 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 		totalMagnitudeStart = 0.0f;
 		totalMagnitudeEnd = 0.0f;
 		for (uint8_t i = 0; i < dstBuffer.channelLayout.count; i++) {
-			channelsStart[i].amp = linstepf(channelsStart[i].amp, ampMinRangeStart, ampMaxRangeStart) + allChannelAddAmpStart / (float)nonSubChannels;
-			channelsEnd[i].amp = linstepf(channelsEnd[i].amp, ampMinRangeEnd, ampMaxRangeEnd) + allChannelAddAmpEnd / (float)nonSubChannels;
+			channelsStart[i].amp = azaLinstepf(channelsStart[i].amp, ampMinRangeStart, ampMaxRangeStart) + allChannelAddAmpStart / (float)nonSubChannels;
+			channelsEnd[i].amp = azaLinstepf(channelsEnd[i].amp, ampMinRangeEnd, ampMaxRangeEnd) + allChannelAddAmpEnd / (float)nonSubChannels;
 			totalMagnitudeStart += channelsStart[i].amp;
 			totalMagnitudeEnd += channelsEnd[i].amp;
 		}
@@ -2112,9 +2112,9 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 		// Gotta do the doppler
 		azaDelayDynamic *delay = azaSpatializeGetDelayDynamic(data);
 		err = azaEnsureChannels(&data->channelData, sideBuffer.channelLayout.count);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 		err = azaEnsureChannels(&delay->channelData, sideBuffer.channelLayout.count);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 		for (uint8_t c = 0; c < sideBuffer.channelLayout.count; c++) {
 			azaDelayDynamicChannelConfig *channelConfig = azaDelayDynamicGetChannelConfig(delay, c);
 			channelConfig->delay = channelDelayStart[c];
@@ -2122,10 +2122,10 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 			channelData->filter.config.frequency = azaSpatializeGetFilterCutoff(channelDelayStart[c], channelDot[c]);
 			// AZA_LOG_INFO("(c %u) filter freq = %f\n", c, channelData->filter.config.frequency);
 			err = azaFilterProcess(&channelData->filter, azaBufferOneChannel(sideBuffer, c));
-			if (err) return err;
+			if AZA_UNLIKELY(err) return err;
 		}
 		err = azaDelayDynamicProcess(delay, sideBuffer, channelDelayEnd);
-		if (err) return err;
+		if AZA_UNLIKELY(err) return err;
 	}
 	azaBufferMix(dstBuffer, 1.0f, sideBuffer, 1.0f);
 #if PRINT_CHANNEL_AMPS || PRINT_CHANNEL_DELAYS

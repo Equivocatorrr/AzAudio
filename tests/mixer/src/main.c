@@ -129,7 +129,7 @@ void updateObjects(uint32_t count, float timeDelta) {
 		}
 		object->timer -= timeDelta;
 #endif
-		if (azaVec3NormSqr(azaSubVec3(object->pos, object->target)) < azaSqr(0.1f)) {
+		if (azaVec3NormSqr(azaSubVec3(object->pos, object->target)) < azaSqrf(0.1f)) {
 			float angleMin = angleSize * (float)i;
 			float angleMax = angleSize * (float)(i+1);
 			float azimuth = randomf(angleMin, angleMax);

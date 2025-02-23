@@ -345,7 +345,7 @@ static void azaStreamConvertFromNative(azaStreamData *data, uint32_t numFramesNa
 				uint8_t *src = data->deviceBufferRaw;
 				for (uint32_t i = 0; i < numFramesNative * data->waveFormatExtensible.Format.nChannels; i++) {
 					// Little endian to the rescue :)
-					data->nativeBufferStart[i] = (float)signExtend24Bit(*(uint32_t*)&src[i*3]) / 8388607.0f;
+					data->nativeBufferStart[i] = (float)azaSignExtend24Bit(*(uint32_t*)&src[i*3]) / 8388607.0f;
 				}
 			} break;
 			case 32: {
