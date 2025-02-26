@@ -799,6 +799,7 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 		float peak = azaMaxf(gainBuffer.samples[i] * aza_db_to_ampf(gain), 1.0f);
 		// float peak = azaMaxf(aza_amp_to_dbf(gainBuffer.samples[i]) + gain, 0.0f);
 		data->peakBuffer[index] = peak;
+		index = (index+1)%AZAUDIO_LOOKAHEAD_SAMPLES;
 		float slope = (peak - data->sum) / AZAUDIO_LOOKAHEAD_SAMPLES;
 		if (slope > 0.0f && slope > data->slope) {
 			data->slope = slope;
@@ -821,7 +822,6 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 			data->slope = 0.0f;
 			data->sum = 0.0f;
 		}
-		index = (index+1)%AZAUDIO_LOOKAHEAD_SAMPLES;
 		gainBuffer.samples[i] = 1.0f / data->sum;
 		// gainBuffer.samples[i] = aza_db_to_ampf(-data->sum);
 	}
