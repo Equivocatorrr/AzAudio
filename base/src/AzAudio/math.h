@@ -35,13 +35,21 @@ azaSqrf(float a) {
 
 static AZA_FORCE_INLINE(float)
 azaMinf(float a, float b) {
+#if __SSE__
 	_mm_store_ss(&a, _mm_min_ss(_mm_set_ss(a), _mm_set_ss(b)));
+#else
+	a = (a < b ? a : b);
+#endif
 	return a;
 }
 
 static AZA_FORCE_INLINE(float)
 azaMaxf(float a, float b) {
+#if __SSE__
 	_mm_store_ss(&a, _mm_max_ss(_mm_set_ss(a), _mm_set_ss(b)));
+#else
+	a = (a < b ? b : a);
+#endif
 	return a;
 }
 
@@ -58,7 +66,11 @@ azaLinstepf(float a, float min, float max) {
 
 static AZA_FORCE_INLINE(float)
 azaLerpf(float a, float b, float t) {
+#if __SSE__
 	return aza_fmadd_f32(b - a, t, a);
+#else
+	return (b - a) * t + a;
+#endif
 }
 
 static AZA_FORCE_INLINE(float)

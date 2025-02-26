@@ -53,6 +53,8 @@
 
 #include "header_utils.h"
 
+#if __AVX__
+
 // Union for accessing specific scalars in a float vector
 typedef union float_x8 {
 	__m256 v;
@@ -71,6 +73,9 @@ aza_mm256_fmadd_ps(__m256 a, __m256 b, __m256 c) {
 #endif
 	return result;
 }
+
+#endif // __AVX__
+#if __SSE__
 
 // Read above note on fmadd
 static AZA_FORCE_INLINE(__m128)
@@ -109,6 +114,9 @@ aza_mm_hsum_ps(__m128 a) {
 #endif
 }
 
+#endif // __SSE__
+#if __AVX__
+
 // returns the scalar sum of all lanes
 static inline float
 aza_mm256_hsum_ps(__m256 a) {
@@ -123,5 +131,7 @@ azaLerp_x8(__m256 a, __m256 b, __m256 t) {
 	__m256 result = aza_mm256_fmadd_ps(_mm256_sub_ps(b, a), t, a);
 	return result;
 }
+
+#endif // __AVX__
 
 #endif // AZAUDIO_SIMD_H
