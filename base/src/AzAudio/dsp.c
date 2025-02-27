@@ -758,6 +758,7 @@ void azaLookaheadLimiterInit(azaLookaheadLimiter *data, uint32_t allocSize, azaL
 	data->header.kind = AZA_DSP_LOOKAHEAD_LIMITER;
 	data->header.structSize = allocSize;
 	data->config = config;
+	data->sum = 1.0f;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaLookaheadLimiterChannelData), alignof(azaLookaheadLimiterChannelData));
 }
 
@@ -800,16 +801,16 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 		// float peak = azaMaxf(aza_amp_to_dbf(gainBuffer.samples[i]) + gain, 0.0f);
 		data->peakBuffer[index] = peak;
 		index = (index+1)%AZAUDIO_LOOKAHEAD_SAMPLES;
-		float slope = (peak - data->sum) / AZAUDIO_LOOKAHEAD_SAMPLES;
-		if (slope > 0.0f && slope > data->slope) {
+		float slope = (1.0f / peak - data->sum) / AZAUDIO_LOOKAHEAD_SAMPLES;
+		if (slope < data->slope) {
 			data->slope = slope;
 			data->cooldown = AZAUDIO_LOOKAHEAD_SAMPLES;
-		} else if (data->cooldown == 0 && data->sum > 0.0f) {
-			data->slope = -data->sum / (AZAUDIO_LOOKAHEAD_SAMPLES * 5.0f);
+		} else if (data->cooldown == 0 && data->sum < 1.0f) {
+			data->slope = (1.0f - data->sum) / (AZAUDIO_LOOKAHEAD_SAMPLES * 5.0f);
 			for (int index2 = 0; index2 < AZAUDIO_LOOKAHEAD_SAMPLES; index2++) {
 				float peak2 = data->peakBuffer[(index+index2)%AZAUDIO_LOOKAHEAD_SAMPLES];
-				float slope2 = (peak2 - data->sum) / (float)(index2+1);
-				if (slope2 > 0.0f && slope2 > data->slope) {
+				float slope2 = (1.0f / peak2 - data->sum) / (float)(index2+1);
+				if (slope2 < data->slope) {
 					data->slope = slope2;
 					data->cooldown = index2+1;
 				}
@@ -818,11 +819,11 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 			data->cooldown -= 1;
 		}
 		data->sum += data->slope;
-		if (data->sum < 0.0f) {
+		if (data->sum > 1.0f) {
 			data->slope = 0.0f;
-			data->sum = 0.0f;
+			data->sum = 1.0f;
 		}
-		gainBuffer.samples[i] = 1.0f / data->sum;
+		gainBuffer.samples[i] = data->sum;
 		// gainBuffer.samples[i] = aza_db_to_ampf(-data->sum);
 	}
 	float amountInput = aza_db_to_ampf(data->config.gainInput);
