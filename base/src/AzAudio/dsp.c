@@ -8,6 +8,7 @@
 #include "AzAudio.h"
 #include "error.h"
 #include "helpers.h"
+#include "mixer.h"
 
 // Good ol' MSVC causing problems like always. Never change, MSVC... never change.
 #ifdef _MSC_VER
@@ -99,6 +100,35 @@ void azaPopSideBuffer() {
 void azaPopSideBuffers(uint8_t count) {
 	assert(sideBuffersInUse >= count);
 	sideBuffersInUse -= count;
+}
+
+
+
+void azaMetersUpdate(azaMeters *data, azaBuffer buffer, float inputAmp) {
+	uint8_t channels = AZA_MIN((uint8_t)AZA_METERS_MAX_CHANNELS, buffer.channelLayout.count);
+	for (uint8_t c = data->activeMeters; c < channels; c++) {
+		data->rmsSquaredAvg[c] = 0.0f;
+		data->peaks[c] = 0.0f;
+		data->peaksShortTerm[c] = 0.0f;
+	}
+	data->activeMeters = channels;
+	for (uint8_t c = 0; c < channels; c++) {
+		float rmsSquaredAvg = 0.0f;
+		float peak = 0.0f;
+		for (uint32_t i = 0; i < buffer.frames; i++) {
+			float sample = buffer.samples[i * buffer.stride + c];
+			rmsSquaredAvg += azaSqrf(sample);
+			sample = azaAbsf(sample);
+			peak = azaMaxf(peak, sample);
+		}
+		rmsSquaredAvg /= (float)buffer.frames;
+		rmsSquaredAvg *= azaSqrf(inputAmp);
+		peak *= inputAmp;
+		data->rmsSquaredAvg[c] = azaLerpf(data->rmsSquaredAvg[c], rmsSquaredAvg, (float)buffer.frames / ((float)data->rmsFrames + (float)buffer.frames));
+		data->peaks[c] = azaMaxf(data->peaks[c], peak);
+		data->peaksShortTerm[c] = azaMaxf(data->peaksShortTerm[c], peak);
+	}
+	data->rmsFrames += buffer.frames;
 }
 
 
@@ -785,6 +815,12 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 	if AZA_UNLIKELY(err) return err;
 	err = azaEnsureChannels(&data->channelData, buffer.channelLayout.count);
 	if AZA_UNLIKELY(err) return err;
+	float amountInput = aza_db_to_ampf(data->config.gainInput);
+	float amountOutput = aza_db_to_ampf(data->config.gainOutput);
+	bool updateMeters = azaMixerGUIHasDSPOpen(&data->header);
+	if (updateMeters) {
+		azaMetersUpdate(&data->metersInput, buffer, amountInput);
+	}
 	azaBuffer gainBuffer;
 	gainBuffer = azaPushSideBuffer(buffer.frames, 1, buffer.samplerate);
 	memset(gainBuffer.samples, 0, sizeof(float) * gainBuffer.frames);
@@ -796,9 +832,7 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 			float sample = azaAbsf(buffer.samples[i * buffer.stride + c]);
 			gainBuffer.samples[i] = azaMaxf(sample, gainBuffer.samples[i]);
 		}
-		float gain = data->config.gainInput;
-		float peak = azaMaxf(gainBuffer.samples[i] * aza_db_to_ampf(gain), 1.0f);
-		// float peak = azaMaxf(aza_amp_to_dbf(gainBuffer.samples[i]) + gain, 0.0f);
+		float peak = azaMaxf(gainBuffer.samples[i] * amountInput, 1.0f);
 		data->peakBuffer[index] = peak;
 		index = (index+1)%AZAUDIO_LOOKAHEAD_SAMPLES;
 		float slope = (1.0f / peak - data->sum) / AZAUDIO_LOOKAHEAD_SAMPLES;
@@ -824,10 +858,7 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 			data->sum = 1.0f;
 		}
 		gainBuffer.samples[i] = data->sum;
-		// gainBuffer.samples[i] = aza_db_to_ampf(-data->sum);
 	}
-	float amountInput = aza_db_to_ampf(data->config.gainInput);
-	float amountOutput = aza_db_to_ampf(data->config.gainOutput);
 	// Apply the gain from gainBuffer to all the channels
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 		azaLookaheadLimiterChannelData *channelData = azaGetChannelData(&data->channelData, c);
@@ -840,6 +871,9 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 			float out = azaClampf(channelData->valBuffer[index] * gainBuffer.samples[i] * amountInput, -1.0f, 1.0f);
 			buffer.samples[s] = out * amountOutput;
 		}
+	}
+	if (updateMeters) {
+		azaMetersUpdate(&data->metersOutput, buffer, 1.0f);
 	}
 	data->index = index;
 	data->channelData.countActive = buffer.channelLayout.count;

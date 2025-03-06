@@ -15,8 +15,6 @@
 extern "C" {
 #endif
 
-#define AZA_TRACK_MAX_METERS 8
-
 typedef struct azaTrackRoute {
 	struct azaTrack *track;
 	float gain;
@@ -36,12 +34,7 @@ typedef struct azaTrack {
 	} receives;
 	float gain;
 	bool mute;
-	// Up to AZA_TRACK_MAX_METERS channels of RMS metering (only updated when mixer GUI is open)
-	float rmsSquaredAvg[AZA_TRACK_MAX_METERS];
-	float peaks[AZA_TRACK_MAX_METERS];
-	float peaksShortTerm[AZA_TRACK_MAX_METERS];
-	// How many samples have been counted so far
-	uint32_t rmsFrames;
+	azaMeters meters;
 	// Used to determine whether routing is cyclic.
 	uint8_t mark;
 	// Used to determine whether we've already processed this track
@@ -112,6 +105,7 @@ int azaMixerCallback(void *userdata, azaBuffer buffer);
 void azaMixerGUIOpen(azaMixer *mixer, bool onTop);
 void azaMixerGUIClose();
 bool azaMixerGUIIsOpen();
+bool azaMixerGUIHasDSPOpen(azaDSP *dsp);
 
 // Opens an output stream to process this mixer and initializes it such that the tracks have enough frames.
 // config.bufferFrames is set to the max of the value passed in or the number required for the output stream. As such you can leave this at zero.

@@ -135,6 +135,23 @@ void azaPopSideBuffers(uint8_t count);
 
 
 
+#ifndef AZA_METERS_MAX_CHANNELS
+	#define AZA_METERS_MAX_CHANNELS 8
+#endif
+// Used for metering in the GUI
+typedef struct azaMeters {
+	// Up to AZA_METERS_MAX_CHANNELS channels of RMS metering (only updated when mixer GUI is open)
+	float rmsSquaredAvg[AZA_METERS_MAX_CHANNELS];
+	float peaks[AZA_METERS_MAX_CHANNELS];
+	float peaksShortTerm[AZA_METERS_MAX_CHANNELS];
+	// How many frames have been counted so far
+	uint32_t rmsFrames;
+	uint8_t activeMeters;
+} azaMeters;
+// Will update the meters with the entirety of the buffer's contents
+void azaMetersUpdate(azaMeters *data, azaBuffer buffer, float inputAmp);
+
+
 typedef enum azaDSPKind {
 	AZA_DSP_NONE=0,
 	// User-defined DSP that acts on a single buffer (transforming it in place)
@@ -275,6 +292,9 @@ typedef struct azaLookaheadLimiterChannelData {
 typedef struct azaLookaheadLimiter {
 	azaDSP header;
 	azaLookaheadLimiterConfig config;
+
+	azaMeters metersInput;
+	azaMeters metersOutput;
 
 	// Data shared by all channels
 	float peakBuffer[AZAUDIO_LOOKAHEAD_SAMPLES];

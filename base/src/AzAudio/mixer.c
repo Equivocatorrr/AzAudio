@@ -114,21 +114,7 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 		}
 	}
 	if (azaMixerGUIIsOpen()) {
-		for (uint32_t c = 0; c < AZA_MIN((uint32_t)AZA_TRACK_MAX_METERS, data->buffer.channelLayout.count); c++) {
-			float rmsSquaredAvg = 0.0f;
-			float peak = 0.0f;
-			for (uint32_t i = 0; i < frames; i++) {
-				float sample = data->buffer.samples[i * data->buffer.stride + c];
-				rmsSquaredAvg += azaSqrf(sample);
-				sample = azaAbsf(sample);
-				peak = azaMaxf(peak, sample);
-			}
-			rmsSquaredAvg /= (float)frames;
-			data->rmsSquaredAvg[c] = azaLerpf(data->rmsSquaredAvg[c], rmsSquaredAvg, (float)frames / ((float)data->rmsFrames + (float)frames));
-			data->peaks[c] = azaMaxf(data->peaks[c], peak);
-			data->peaksShortTerm[c] = azaMaxf(data->peaksShortTerm[c], peak);
-		}
-		data->rmsFrames += frames;
+		azaMetersUpdate(&data->meters, buffer, 1.0f);
 	}
 	data->processed = true;
 	return AZA_SUCCESS;

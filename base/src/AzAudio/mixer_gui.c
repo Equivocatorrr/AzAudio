@@ -16,14 +16,6 @@
 
 #include "mixer.h"
 
-static azaMixer *currentMixer = NULL;
-static azaDSP *selectedDSP = NULL;
-static bool isWindowOpen = false;
-static bool isWindowTopmost = false;
-static azaThread thread = {};
-
-static int64_t lastClickTime = 0;
-
 static void azaRaylibTraceLogCallback(int logLevel, const char *text, va_list args) {
 	AzaLogLevel myLevel = AZA_LOG_LEVEL_INFO;
 	switch (logLevel) {
@@ -49,6 +41,30 @@ static void azaRaylibTraceLogCallback(int logLevel, const char *text, va_list ar
 	azaLog(myLevel, "raylib: %s\n", buffer);
 }
 
+
+
+
+// Global state
+
+
+
+
+static azaMixer *currentMixer = NULL;
+static azaDSP *selectedDSP = NULL;
+static bool isWindowOpen = false;
+static bool isWindowTopmost = false;
+static azaThread thread = {};
+
+static int64_t lastClickTime = 0;
+
+
+
+
+// Constants for size, color, etc.
+
+
+
+
 static const int pluginDrawHeight = 200;
 static const int trackDrawWidth = 110;
 static const int trackDrawHeight = 300;
@@ -69,6 +85,9 @@ static const Color colorBG = { 15, 25, 50, 255 };
 
 static const Color colorPluginBorderSelected = { 200, 150, 100, 255 };
 static const Color colorPluginBorder = { 100, 120, 150, 255 };
+
+static const Color colorPluginSettingsTop = {  80,  80, 110, 255 };
+static const Color colorPluginSettingsBot = {  50,  60,  80, 255 };
 
 static const Color colorTrackFXTop = {  65,  65, 130, 255 };
 static const Color colorTrackFXBot = {  40,  50,  80, 255 };
@@ -94,6 +113,14 @@ static const Color colorFaderMuteButton  = { 150,  50, 200, 255 };
 static const Color colorFaderKnobTop     = { 160, 180, 200, 255 };
 static const Color colorFaderKnobBot     = {  80, 120, 180, 255 };
 static const Color colorFaderHighlight   = { 255, 255, 255,  64 };
+
+
+
+
+// Utility functions/types
+
+
+
 
 static int TextCountLines(const char *text) {
 	if (!text) return 0;
@@ -155,6 +182,11 @@ static void azaRectShrinkTop(azaRect *rect, int h) {
 	rect->h -= h;
 }
 
+static void azaRectShrinkLeft(azaRect *rect, int w) {
+	rect->x += w;
+	rect->w -= w;
+}
+
 static bool IsMouseInRect(azaRect rect) {
 	Vector2 mouse = GetMousePosition();
 	Vector2 dpi = GetWindowScaleDPI();
@@ -179,7 +211,13 @@ static bool DidDoubleClick() {
 }
 
 
+
+
 // Scissor stack
+
+
+
+
 typedef struct azaScissorStack {
 	azaRect scissors[32];
 	int count;
@@ -218,7 +256,13 @@ static void PopScissor() {
 }
 
 
+
+
 // Hovering Text/Tooltips
+
+
+
+
 typedef struct azaTooltips {
 	char buffer[1024];
 	int posX[32];
@@ -273,14 +317,12 @@ static void azaTooltipsDraw() {
 }
 
 
-static void azaPluginDraw(azaDSP *dsp, azaRect bounds) {
-	azaRectShrinkMargin(&bounds, margin);
-	DrawRectLines(bounds, selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
-	if (selectedDSP == NULL) return;
 
-	azaRectShrinkMargin(&bounds, margin);
-	DrawText(azaDSPKindString[(uint32_t)selectedDSP->kind], bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
-}
+
+// Tracks
+
+
+
 
 static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
 	DrawRectGradientV(bounds, colorTrackFXTop, colorTrackFXBot);
@@ -326,23 +368,27 @@ static void azaDrawDBTicks(azaRect bounds, int dbRange, int dbOffset, Color colo
 	}
 }
 
-static void azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label) {
+// returns used width
+static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label) {
+	bounds.w = faderDrawWidth;
 	if(IsMouseInRect(bounds)) {
 		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2));
 	}
 	DrawRectGradientV(bounds, colorFaderBGTop, colorFaderBGBot);
 	azaRectShrinkMargin(&bounds, margin);
-	azaRect muteRect = bounds;
-	muteRect.h = muteRect.w;
-	if (IsMousePressedInRect(MOUSE_BUTTON_LEFT, muteRect)) {
-		*mute = !*mute;
+	if (mute) {
+		azaRect muteRect = bounds;
+		muteRect.h = muteRect.w;
+		if (IsMousePressedInRect(MOUSE_BUTTON_LEFT, muteRect)) {
+			*mute = !*mute;
+		}
+		if (*mute) {
+			DrawRectangle(muteRect.x, muteRect.y, muteRect.w, muteRect.h, colorFaderMuteButton);
+		} else {
+			DrawRectangleLines(muteRect.x, muteRect.y, muteRect.w, muteRect.h, colorFaderMuteButton);
+		}
+		azaRectShrinkTop(&bounds, muteRect.h + margin);
 	}
-	if (*mute) {
-		DrawRectangle(muteRect.x, muteRect.y, muteRect.w, muteRect.h, colorFaderMuteButton);
-	} else {
-		DrawRectangleLines(muteRect.x, muteRect.y, muteRect.w, muteRect.h, colorFaderMuteButton);
-	}
-	azaRectShrinkTop(&bounds, muteRect.h + margin);
 	azaDrawDBTicks((azaRect) {
 		bounds.x - margin,
 		bounds.y,
@@ -364,57 +410,52 @@ static void azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *la
 	DrawRectangleGradientV(bounds.x, bounds.y + yOffset - 6, bounds.w, 12, colorFaderKnobTop, colorFaderKnobBot);
 	DrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
 	PopScissor();
+	return faderDrawWidth;
 }
 
 // Returns used width
-static int azaDrawTrackMeters(azaTrack *track, azaRect bounds) {
-	uint32_t meteredChannels = AZA_MIN(AZA_TRACK_MAX_METERS, track->buffer.channelLayout.count);
-	int usedWidth = meterDrawWidth * meteredChannels + margin * (meteredChannels+1);
-	azaRect meterRect = {
-		bounds.x,
-		bounds.y + (faderDrawWidth-margin),
-		usedWidth,
-		bounds.h - (faderDrawWidth-margin),
-	};
-	DrawRectangleGradientV(meterRect.x, meterRect.y, meterRect.w, meterRect.h, colorMeterBGTop, colorMeterBGBot);
-	bool resetPeaks = IsMousePressedInRect(MOUSE_BUTTON_LEFT, meterRect);
-	azaRectShrinkMarginV(&meterRect, margin);
-	azaDrawDBTicks(meterRect, (int)meterDBRange, 0, colorMeterDBTick, colorMeterDBTickUnity);
-	meterRect.x += margin;
-	meterRect.w = meterDrawWidth;
-	for (uint32_t c = 0; c < meteredChannels; c++) {
-		float peakDB = aza_amp_to_dbf(track->peaks[c]);
-		int yOffset = azaDBToYOffsetClamped(-peakDB, (float)meterRect.h, meterDBRange, -2);
+static int azaDrawMeters(azaMeters *meters, azaRect bounds, float dbRange) {
+	int usedWidth = meterDrawWidth * meters->activeMeters + margin * (meters->activeMeters+1);
+	bounds.w = usedWidth;
+	DrawRectangleGradientV(bounds.x, bounds.y, bounds.w, bounds.h, colorMeterBGTop, colorMeterBGBot);
+	bool resetPeaks = IsMousePressedInRect(MOUSE_BUTTON_LEFT, bounds);
+	azaRectShrinkMarginV(&bounds, margin);
+	azaDrawDBTicks(bounds, (int)dbRange, 0, colorMeterDBTick, colorMeterDBTickUnity);
+	bounds.x += margin;
+	bounds.w = meterDrawWidth;
+	for (uint32_t c = 0; c < meters->activeMeters; c++) {
+		float peakDB = aza_amp_to_dbf(meters->peaks[c]);
+		int yOffset = azaDBToYOffsetClamped(-peakDB, (float)bounds.h, dbRange, -2);
 		Color peakColor = colorMeterPeak;
-		if (track->peaks[c] == 1.0f) {
+		if (meters->peaks[c] == 1.0f) {
 			peakColor = colorMeterPeakUnity;
-		} else if (track->peaks[c] > 1.0f) {
+		} else if (meters->peaks[c] > 1.0f) {
 			peakColor = colorMeterPeakOver;
 		}
-		DrawLine(meterRect.x, meterRect.y + yOffset, meterRect.x+meterRect.w, meterRect.y + yOffset, peakColor);
-		if (track->processed) {
-			float rmsDB = aza_amp_to_dbf(sqrtf(track->rmsSquaredAvg[c]));
-			float peakShortTermDB = aza_amp_to_dbf(track->peaksShortTerm[c]);
-			yOffset = azaDBToYOffsetClamped(-peakShortTermDB, (float)meterRect.h, meterDBRange, 0);
-			DrawRectangle(meterRect.x+meterRect.w/4, meterRect.y + yOffset, meterRect.w/2, meterRect.h - yOffset, colorMeterPeak);
+		DrawLine(bounds.x, bounds.y + yOffset, bounds.x+bounds.w, bounds.y + yOffset, peakColor);
+		if (true /* meters->processed */) {
+			float rmsDB = aza_amp_to_dbf(sqrtf(meters->rmsSquaredAvg[c]));
+			float peakShortTermDB = aza_amp_to_dbf(meters->peaksShortTerm[c]);
+			yOffset = azaDBToYOffsetClamped(-peakShortTermDB, (float)bounds.h, dbRange, 0);
+			DrawRectangle(bounds.x+bounds.w/4, bounds.y + yOffset, bounds.w/2, bounds.h - yOffset, colorMeterPeak);
 
-			yOffset = azaDBToYOffsetClamped(-rmsDB, (float)meterRect.h, meterDBRange, 0);
-			DrawRectangle(meterRect.x, meterRect.y + yOffset, meterRect.w, meterRect.h - yOffset, colorMeterRMS);
+			yOffset = azaDBToYOffsetClamped(-rmsDB, (float)bounds.h, dbRange, 0);
+			DrawRectangle(bounds.x, bounds.y + yOffset, bounds.w, bounds.h - yOffset, colorMeterRMS);
 			if (rmsDB > 0.0f) {
-				yOffset = azaDBToYOffsetClamped(rmsDB, (float)meterRect.h, meterDBRange, 0);
-				DrawRectangle(meterRect.x, meterRect.y, meterRect.w, yOffset, colorMeterRMSOver);
+				yOffset = azaDBToYOffsetClamped(rmsDB, (float)bounds.h, dbRange, 0);
+				DrawRectangle(bounds.x, bounds.y, bounds.w, yOffset, colorMeterRMSOver);
 			}
 			if (peakShortTermDB > 0.0f) {
-				yOffset = azaDBToYOffsetClamped(peakShortTermDB, (float)meterRect.h, meterDBRange, 0);
-				DrawRectangle(meterRect.x+meterRect.w/4, meterRect.y, meterRect.w/2, yOffset, colorMeterPeakOver);
+				yOffset = azaDBToYOffsetClamped(peakShortTermDB, (float)bounds.h, dbRange, 0);
+				DrawRectangle(bounds.x+bounds.w/4, bounds.y, bounds.w/2, yOffset, colorMeterPeakOver);
 			}
 		}
-		meterRect.x += meterRect.w + margin;
-		track->rmsFrames = track->rmsFrames * 7 / 8;
+		bounds.x += bounds.w + margin;
+		meters->rmsFrames = meters->rmsFrames * 7 / 8;
 		if (resetPeaks) {
-			track->peaks[c] = 0.0f;
+			meters->peaks[c] = 0.0f;
 		}
-		track->peaksShortTerm[c] = 0.0f;
+		meters->peaksShortTerm[c] = 0.0f;
 	}
 	return usedWidth;
 }
@@ -422,40 +463,29 @@ static int azaDrawTrackMeters(azaTrack *track, azaRect bounds) {
 static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 	DrawRectangleGradientV(bounds.x, bounds.y, bounds.w, bounds.h, colorTrackControlsTop, colorTrackControlsBot);
 	azaRectShrinkMargin(&bounds, margin);
-	azaRect faderRect = {
-		bounds.x,
-		bounds.y,
-		faderDrawWidth,
-		bounds.h,
-	};
 	// Fader
-	azaDrawFader(faderRect, &track->gain, &track->mute, "Track Gain");
+	azaDrawFader(bounds, &track->gain, &track->mute, "Track Gain");
+	azaRectShrinkLeft(&bounds, faderDrawWidth + margin);
 	// Meter
-	int metersWidth = azaDrawTrackMeters(track, (azaRect) {
-		bounds.x + faderRect.w + margin,
-		bounds.y,
-		bounds.w - (faderRect.w + margin),
-		bounds.h,
-	});
+	int metersWidth = azaDrawMeters(&track->meters, (azaRect) {
+		bounds.x,
+		bounds.y + (faderDrawWidth-margin), // Align with respect to the fader's mute button
+		bounds.w,
+		bounds.h - (faderDrawWidth-margin),
+	}, meterDBRange);
+	azaRectShrinkLeft(&bounds, metersWidth + margin);
 	// Sends
-	azaRect sendsRect = {
-		faderRect.x + faderRect.w + metersWidth + margin*2,
-		bounds.y,
-		bounds.x + bounds.w - (faderRect.x + faderRect.w + metersWidth + margin*2) - margin,
-		bounds.h,
-	};
-	PushScissor(sendsRect);
-	sendsRect.w = faderDrawWidth;
+	PushScissor(bounds);
 	azaTrackRoute *receive = azaTrackGetReceive(track, &currentMixer->master);
 	if (receive) {
-		azaDrawFader(sendsRect, &receive->gain, &receive->mute, "Master Send");
-		sendsRect.x += sendsRect.w + margin;
+		int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, "Master Send");
+		azaRectShrinkLeft(&bounds, faderWidth + margin);
 	}
 	for (uint32_t i = 0; i < currentMixer->config.trackCount; i++) {
 		receive = azaTrackGetReceive(track, &currentMixer->tracks[i]);
 		if (receive) {
-			azaDrawFader(sendsRect, &receive->gain, &receive->mute, TextFormat("Track %d Send", i+1));
-			sendsRect.x += sendsRect.w + margin;
+			int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, TextFormat("Track %d Send", i+1));
+			azaRectShrinkLeft(&bounds, faderWidth + margin);
 		}
 	}
 	PopScissor();
@@ -470,10 +500,17 @@ static void azaDrawTrack(azaTrack *track, azaRect bounds, char *name) {
 	azaDrawTrackControls(track, bounds);
 }
 
-static void azaMixerDraw(azaMixer *mixer) {
+
+
+
+// Mixer
+
+
+
+
+static void azaDrawMixer(azaMixer *mixer) {
 	// TODO: This granularity might get in the way of audio processing. Probably only lock the mutex when it matters most.
 	azaMutexLock(&mixer->mutex);
-	azaPluginDraw(selectedDSP, (azaRect) { margin, margin, GetLogicalWidth() - margin*2, pluginDrawHeight - margin*2 });
 	azaRect trackRect = {
 		scrollX + margin,
 		pluginDrawHeight + margin,
@@ -490,6 +527,68 @@ static void azaMixerDraw(azaMixer *mixer) {
 	azaTooltipAdd(TextFormat("CPU: %.2f%%", mixer->cpuPercentSlow), GetLogicalWidth(), 0);
 	azaMutexUnlock(&mixer->mutex);
 }
+
+
+
+
+// Controls for selected DSP
+
+
+
+
+static void azaDrawLookaheadLimiter(azaLookaheadLimiter *data, azaRect bounds) {
+	int faderWidth = azaDrawFader(bounds, &data->config.gainInput, NULL, "Input Gain");
+	azaRectShrinkLeft(&bounds, faderWidth + margin);
+	int metersWidth = azaDrawMeters(&data->metersInput, bounds, meterDBRange);
+	azaRectShrinkLeft(&bounds, metersWidth + margin);
+	azaDrawFader(bounds, &data->config.gainOutput, NULL, "Output Gain");
+	azaRectShrinkLeft(&bounds, faderWidth + margin);
+	azaDrawMeters(&data->metersOutput, bounds, meterDBRange);
+}
+
+static void azaDrawSelectedDSP() {
+	azaRect bounds = {
+		margin*2,
+		margin*2,
+		GetLogicalWidth() - margin*4,
+		pluginDrawHeight - margin*4,
+	};
+	DrawRectGradientV(bounds, colorPluginSettingsTop, colorPluginSettingsBot);
+	DrawRectLines(bounds, selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
+	if (!selectedDSP) return;
+
+	azaRectShrinkMargin(&bounds, margin*2);
+	DrawText(azaDSPKindString[(uint32_t)selectedDSP->kind], bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
+	azaRectShrinkTop(&bounds, textMargin * 2 + 20);
+	switch (selectedDSP->kind) {
+		case AZA_DSP_NONE:
+		case AZA_DSP_USER_SINGLE:
+		case AZA_DSP_USER_DUAL:
+		case AZA_DSP_CUBIC_LIMITER:
+		case AZA_DSP_RMS:
+			break;
+		case AZA_DSP_LOOKAHEAD_LIMITER:
+			azaDrawLookaheadLimiter((azaLookaheadLimiter*)selectedDSP, bounds);
+			break;
+		case AZA_DSP_FILTER:
+		case AZA_DSP_COMPRESSOR:
+		case AZA_DSP_DELAY:
+		case AZA_DSP_REVERB:
+		case AZA_DSP_SAMPLER:
+		case AZA_DSP_GATE:
+		case AZA_DSP_DELAY_DYNAMIC:
+		case AZA_DSP_SPATIALIZE:
+			break;
+	}
+}
+
+
+
+
+// API
+
+
+
 
 static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 	unsigned int configFlags = FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT;
@@ -529,7 +628,8 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 		}
 		BeginDrawing();
 			ClearBackground(colorBG);
-			azaMixerDraw(currentMixer);
+			azaDrawMixer(currentMixer);
+			azaDrawSelectedDSP();
 			azaTooltipsDraw();
 			if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
 				lastClickTime = azaGetTimestamp();
@@ -564,4 +664,8 @@ void azaMixerGUIClose() {
 
 bool azaMixerGUIIsOpen() {
 	return isWindowOpen;
+}
+
+bool azaMixerGUIHasDSPOpen(azaDSP *dsp) {
+	return dsp == selectedDSP;
 }
