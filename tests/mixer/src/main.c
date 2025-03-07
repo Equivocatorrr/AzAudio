@@ -252,7 +252,7 @@ int main(int argumentCount, char** argumentValues) {
 		// },
 	};
 
-	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) { .trackCount = 3, .channelLayouts = trackChannelLayouts } , (azaStreamConfig) {0}, false))) {
+	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) {0} , (azaStreamConfig) {0}, false))) {
 		char buffer[64];
 		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
@@ -263,23 +263,41 @@ int main(int argumentCount, char** argumentValues) {
 
 	// Track 0
 
+	azaTrack *track0;
+	azaChannelLayout track0Layout = {
+		.count = 1,
+		.positions = { AZA_POS_CENTER_FRONT },
+	};
+	if ((err = azaMixerAddTrack(&mixer, -1, &track0, track0Layout, true))) {
+		char buffer[64];
+		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		return 1;
+	}
+
 	azaDSPUserInitSingle(&dspSynth, sizeof(dspSynth), NULL, synthProcess);
 
-	azaTrackAppendDSP(&mixer.tracks[0], (azaDSP*)&dspSynth);
+	azaTrackAppendDSP(track0, (azaDSP*)&dspSynth);
 
 	filter = azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_LOW_PASS,
 		.frequency = 500.0f,
-	}, mixer.tracks[0].buffer.channelLayout.count);
+	}, track0->buffer.channelLayout.count);
 
-	azaTrackAppendDSP(&mixer.tracks[0], (azaDSP*)filter);
+	azaTrackAppendDSP(track0, (azaDSP*)filter);
 
 	// We can use this to change the gain on an existing connection
-	// azaTrackConnect(&mixer.tracks[0], &mixer.master, -6.0f, NULL, 0);
-	mixer.tracks[0].gain = -6.0f;
-	mixer.tracks[0].mute = true;
+	// azaTrackConnect(track0, &mixer.master, -6.0f, NULL, 0);
+	track0->gain = 6.0f;
+	track0->mute = true;
 
 	// Track 1
+
+	azaTrack *track1;
+	if ((err = azaMixerAddTrack(&mixer, -1, &track1, mixer.master.buffer.channelLayout, true))) {
+		char buffer[64];
+		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		return 1;
+	}
 
 	azaDSPUserInitSingle(&dspCat, sizeof(dspCat), NULL, catProcess);
 
@@ -300,25 +318,33 @@ int main(int argumentCount, char** argumentValues) {
 			.mode        = AZA_SPATIALIZE_ADVANCED,
 			.delayMax    = 0.0f,
 			.earDistance = 0.0f,
-		}, mixer.tracks[1].buffer.channelLayout.count);
+		}, track1->buffer.channelLayout.count);
 	}
 
-	azaTrackAppendDSP(&mixer.tracks[1], (azaDSP*)&dspCat);
+	azaTrackAppendDSP(track1, (azaDSP*)&dspCat);
 
-	// azaTrackConnect(&mixer.tracks[1], &mixer.master, -6.0f, NULL, 0);
-	mixer.tracks[1].gain = -9.0f;
+	// azaTrackConnect(track1, &mixer.master, -6.0f, NULL, 0);
+	track1->gain = -6.0f;
+	// track1->mute = true;
 
 	// Track 2
 
-	azaTrackConnect(&mixer.tracks[0], &mixer.tracks[2], -6.0f, NULL, 0);
-	azaTrackConnect(&mixer.tracks[1], &mixer.tracks[2], -6.0f, NULL, 0);
+	azaTrack *track2;
+	if ((err = azaMixerAddTrack(&mixer, -1, &track2, mixer.master.buffer.channelLayout, true))) {
+		char buffer[64];
+		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		return 1;
+	}
+
+	azaTrackConnect(track0, track2, -6.0f, NULL, 0);
+	azaTrackConnect(track1, track2, -6.0f, NULL, 0);
 
 	reverbHighpass = azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_HIGH_PASS,
 		.frequency = 50.0f,
 		.dryMix = 0.0f,
-	}, mixer.tracks[2].buffer.channelLayout.count);
-	azaTrackAppendDSP(&mixer.tracks[2], (azaDSP*)reverbHighpass);
+	}, track2->buffer.channelLayout.count);
+	azaTrackAppendDSP(track2, (azaDSP*)reverbHighpass);
 
 	reverb = azaMakeReverb((azaReverbConfig) {
 		.gain = 0.0f,
@@ -326,10 +352,10 @@ int main(int argumentCount, char** argumentValues) {
 		.roomsize = 5.0f,
 		.color = 5.0f,
 		.delay = 0.0f,
-	}, mixer.tracks[2].buffer.channelLayout.count);
-	azaTrackAppendDSP(&mixer.tracks[2], (azaDSP*)reverb);
+	}, track2->buffer.channelLayout.count);
+	azaTrackAppendDSP(track2, (azaDSP*)reverb);
 
-	mixer.tracks[2].mute = true;
+	// track2->mute = true;
 
 	// Master
 
@@ -340,7 +366,7 @@ int main(int argumentCount, char** argumentValues) {
 
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)limiter);
 
-	mixer.master.gain = -12.0f;
+	mixer.master.gain = 0.0f;
 
 	// Uncomment this to test if cyclic routing is detected
 	// azaTrackConnect(&mixer.master, &mixer.tracks[0], 0.0f, NULL, 0);

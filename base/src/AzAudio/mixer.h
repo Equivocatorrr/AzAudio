@@ -66,14 +66,15 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data);
 
 typedef struct azaMixerConfig {
 	uint32_t bufferFrames;
-	uint32_t trackCount;
-	// Can be NULL to default to master channel layout, otherwise must point to an array of trackCount layouts, one for each track.
-	azaChannelLayout *channelLayouts;
 } azaMixerConfig;
 
 typedef struct azaMixer {
 	azaMixerConfig config;
-	azaTrack *tracks;
+	struct {
+		azaTrack **data;
+		uint32_t count;
+		uint32_t capacity;
+	} tracks;
 	azaTrack master;
 	// We may optionally own a stream to which we output the track contents of master.
 	azaStream stream;
@@ -88,12 +89,17 @@ typedef struct azaMixer {
 	uint64_t times;
 } azaMixer;
 
-// Allocates config.trackCount tracks and initializes them
 // config.bufferFrames indicates how many frames our buffers should have. This should probably match the maximum size of the backend buffer, if applicable.
 // masterChannelLayout will be used to initialize the master track's buffer channel layout, and also all other track channel layouts if config.channelLayouts is NULL or if the channel's respective channelLayout has 0 channels
 // May return AZA_ERROR_OUT_OF_MEMORY if we failed to allocate tracks, or any error azaBufferInit can return
 int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout masterChannelLayout);
 void azaMixerDeinit(azaMixer *data);
+
+// A negative index means append to end
+// If dst is not NULL, it will point to the new track
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaMixerAddTrack(azaMixer *data, int32_t index, azaTrack **dst, azaChannelLayout channelLayout, bool connectToMaster);
+
 // Processes all the tracks to produce a result into the output track.
 // frames MUST be <= data->config.bufferFrames
 int azaMixerProcess(uint32_t frames, uint32_t samplerate, azaMixer *data);

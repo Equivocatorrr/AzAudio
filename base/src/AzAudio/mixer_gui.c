@@ -582,8 +582,8 @@ static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 		int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, "Master Send", meterDBRange, faderDBHeadroom);
 		azaRectShrinkLeft(&bounds, faderWidth + margin);
 	}
-	for (uint32_t i = 0; i < currentMixer->config.trackCount; i++) {
-		receive = azaTrackGetReceive(track, &currentMixer->tracks[i]);
+	for (uint32_t i = 0; i < currentMixer->tracks.count; i++) {
+		receive = azaTrackGetReceive(track, currentMixer->tracks.data[i]);
 		if (receive) {
 			int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, TextFormat("Track %d Send", i+1), meterDBRange, faderDBHeadroom);
 			azaRectShrinkLeft(&bounds, faderWidth + margin);
@@ -619,11 +619,11 @@ static void azaDrawMixer(azaMixer *mixer) {
 		trackDrawHeight - margin*2
 	};
 	azaDrawTrack(&mixer->master, trackRect, "Master");
-	for (uint32_t i = 0; i < mixer->config.trackCount; i++) {
+	for (uint32_t i = 0; i < mixer->tracks.count; i++) {
 		trackRect.x += trackDrawWidth;
 		char nameBuffer[32];
 		snprintf(nameBuffer, sizeof(nameBuffer), "Track %d", (int)i + 1);
-		azaDrawTrack(&mixer->tracks[i], trackRect, nameBuffer);
+		azaDrawTrack(mixer->tracks.data[i], trackRect, nameBuffer);
 	}
 	azaTooltipAdd(TextFormat("CPU: %.2f%%", mixer->cpuPercentSlow), GetLogicalWidth(), 0);
 	azaMutexUnlock(&mixer->mutex);
@@ -782,7 +782,7 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 	SetTraceLogCallback(azaRaylibTraceLogCallback);
 
 	InitWindow(
-		AZA_MIN(trackDrawWidth * (1 + currentMixer->config.trackCount) + margin*2, 640),
+		AZA_MIN(trackDrawWidth * (1 + currentMixer->tracks.count) + margin*2, 640),
 		pluginDrawHeight + trackDrawHeight,
 		"AzAudio Mixer"
 	);

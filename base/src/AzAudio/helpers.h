@@ -75,6 +75,32 @@ struct {\
 	(name).data[(name).count++] = value;\
 }
 
+#define AZA_DA_INSERT(type, name, index, value, onAllocFail) {\
+	assert((uint32_t)(index) >= 0);\
+	assert((uint32_t)(index) <= (name).count);\
+	if ((name).count == (name).capacity) {\
+		uint32_t newCapacity = (uint32_t)aza_grow((name).capacity, (name).count+1, 8);\
+		type *newData = aza_calloc(newCapacity, sizeof(type));\
+		if (!newData) { onAllocFail; }\
+		(name).capacity = newCapacity;\
+		for (uint32_t i = 0; i < (uint32_t)(index); i++) {\
+			newData[i] = (name).data[i];\
+		}\
+		newData[(index)] = (value);\
+		for (uint32_t i = (index); i < (name).count; i++) {\
+			newData[i+1] = (name).data[i];\
+		}\
+		aza_free((name).data);\
+		(name).data = newData;\
+		(name).count++;\
+	} else {\
+		for (uint32_t i = (name).count; i > (uint32_t)(index); i--) {\
+			(name).data[i] = (name).data[i-1];\
+		}\
+		(name).data[(index)] = (value);\
+	}\
+}
+
 #define AZA_DA_ERASE(name, index, num) {\
 	for (int64_t aza_i = (index); aza_i < (int64_t)(name).count - (num); aza_i++) {\
 		(name).data[aza_i] = (name).data[aza_i + (num)];\

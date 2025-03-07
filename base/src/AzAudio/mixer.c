@@ -120,27 +120,11 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 	return AZA_SUCCESS;
 }
 
-int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout bufferChannelLayout) {
+int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout masterChannelLayout) {
 	int err = AZA_SUCCESS;
 	data->config = config;
-	if (config.trackCount) {
-		data->tracks = aza_calloc(config.trackCount, sizeof(azaTrack));
-		if (!data->tracks) return AZA_ERROR_OUT_OF_MEMORY;
-	}
-	err = azaTrackInit(&data->master, config.bufferFrames, bufferChannelLayout);
+	err = azaTrackInit(&data->master, config.bufferFrames, masterChannelLayout);
 	if (err) return err;
-	for (uint32_t i = 0; i < config.trackCount; i++) {
-		azaChannelLayout channelLayout;
-		if (config.channelLayouts && config.channelLayouts[i].count) {
-			channelLayout = config.channelLayouts[i];
-		} else {
-			channelLayout = bufferChannelLayout;
-		}
-		err = azaTrackInit(&data->tracks[i], config.bufferFrames, channelLayout);
-		if (err) return err;
-		err = azaTrackConnect(&data->tracks[i], &data->master, 0.0f, NULL, 0);
-		if (err) return err;
-	}
 	azaMutexInit(&data->mutex);
 	data->tsOfflineStart = azaGetTimestamp();
 	data->cpuPercent = 0.0f;
@@ -148,11 +132,42 @@ int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout bufferC
 }
 
 void azaMixerDeinit(azaMixer *data) {
-	for (uint32_t i = 0; i < data->config.trackCount; i++) {
-		azaTrackDeinit(&data->tracks[i]);
+	for (uint32_t i = 0; i < data->tracks.count; i++) {
+		azaTrackDeinit(data->tracks.data[i]);
+		aza_free(data->tracks.data[i]);
 	}
+	if (data->tracks.data) aza_free(data->tracks.data);
+	data->tracks.count = 0;
+	data->tracks.capacity = 0;
 	azaTrackDeinit(&data->master);
 	azaMutexDeinit(&data->mutex);
+}
+
+int azaMixerAddTrack(azaMixer *data, int32_t index, azaTrack **dst, azaChannelLayout channelLayout, bool connectToMaster) {
+	int err = AZA_SUCCESS;
+	azaTrack *result = (azaTrack*)aza_calloc(1, sizeof(azaTrack));
+	if (!result) return AZA_ERROR_OUT_OF_MEMORY;
+	if (index < 0) {
+		AZA_DA_APPEND(azaTrack*, data->tracks, result, err = AZA_ERROR_OUT_OF_MEMORY);
+	} else {
+		AZA_DA_INSERT(azaTrack*, data->tracks, index, result, err = AZA_ERROR_OUT_OF_MEMORY);
+	}
+	if (err) goto fail;
+	err = azaTrackInit(result, data->config.bufferFrames, channelLayout);
+	if (err) goto fail;
+	if (connectToMaster) {
+		err = azaTrackConnect(result, &data->master, 0.0f, NULL, 0);
+		if (err) goto fail2;
+	}
+	if (dst) {
+		*dst = result;
+	}
+	return AZA_SUCCESS;
+fail2:
+	azaTrackDeinit(result);
+fail:
+	aza_free(result);
+	return err;
 }
 
 // Modified depth-first search for directed graphs to determine whether a cycle exists.
@@ -172,8 +187,8 @@ static int azaMixerCheckRoutingVisit(azaTrack *track) {
 }
 
 static int azaMixerCheckRouting(azaMixer *data) {
-	for (uint32_t i = 0; i < data->config.trackCount; i++) {
-		data->tracks[i].mark = 0;
+	for (uint32_t i = 0; i < data->tracks.count; i++) {
+		data->tracks.data[i]->mark = 0;
 	}
 	azaTrack *track = &data->master;
 	track->mark = 0;
