@@ -581,14 +581,14 @@ static azaRect textboxBounds;
 // If textCapacity is specified, this textbox will be editable.
 static void azaDrawTextBox(azaRect bounds, char *text, uint32_t textCapacity) {
 	bool mouseover = IsMouseInRect(bounds);
-	uint32_t textLen = strlen(text);
+	uint32_t textLen = (uint32_t)strlen(text);
 	if (textCapacity && mouseover && DidDoubleClick()) {
 		textboxTextBeingEdited = text;
 		textboxSelected = true;
 		textboxCursor = textLen;
 	}
 	if (textboxTextBeingEdited == text) {
-		if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)
+		if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)
 		|| (!mouseover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
 			textboxTextBeingEdited = NULL;
 		}
@@ -970,6 +970,7 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 		"AzAudio Mixer"
 	);
 	isWindowOpen = true;
+	SetExitKey(-1); // Don't let raylib use the ESC key to close
 
 	while (true) {
 		if (!isWindowOpen) break;
