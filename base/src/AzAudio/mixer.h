@@ -27,6 +27,7 @@ typedef struct azaTrack {
 	azaBuffer buffer;
 	// Plugin chain, including synths and samplers
 	azaDSP *dsp;
+	char name[32];
 	struct {
 		azaTrackRoute *data;
 		uint32_t count;
@@ -48,6 +49,8 @@ void azaTrackDeinit(azaTrack *data);
 void azaTrackAppendDSP(azaTrack *data, azaDSP *dsp);
 // Adds a dsp to the beginning of the dsp chain
 void azaTrackPrependDSP(azaTrack *data, azaDSP *dsp);
+
+void azaTrackSetName(azaTrack *data, const char *name);
 
 enum {
 	// Tells azaTrackConnect not to generate any default values for the channelMatrix (leaving them all at zero)

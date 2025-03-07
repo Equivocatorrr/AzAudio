@@ -217,41 +217,6 @@ int main(int argumentCount, char** argumentValues) {
 		return 1;
 	}
 
-	azaChannelLayout trackChannelLayouts[3] = {
-		(azaChannelLayout) {
-			.count = 1,
-			.positions = {
-				AZA_POS_CENTER_FRONT,
-			},
-		},
-		// (azaChannelLayout) {
-		// 	.count = 8,
-		// 	.positions = {
-		// 		AZA_POS_LEFT_FRONT,
-		// 		AZA_POS_RIGHT_FRONT,
-		// 		AZA_POS_CENTER_FRONT,
-		// 		AZA_POS_SUBWOOFER,
-		// 		AZA_POS_LEFT_BACK,
-		// 		AZA_POS_RIGHT_BACK,
-		// 		AZA_POS_LEFT_SIDE,
-		// 		AZA_POS_RIGHT_SIDE,
-		// 	},
-		// },
-		// (azaChannelLayout) {
-		// 	.count = 8,
-		// 	.positions = {
-		// 		AZA_POS_LEFT_FRONT,
-		// 		AZA_POS_RIGHT_FRONT,
-		// 		AZA_POS_CENTER_FRONT,
-		// 		AZA_POS_SUBWOOFER,
-		// 		AZA_POS_LEFT_BACK,
-		// 		AZA_POS_RIGHT_BACK,
-		// 		AZA_POS_LEFT_SIDE,
-		// 		AZA_POS_RIGHT_SIDE,
-		// 	},
-		// },
-	};
-
 	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) {0} , (azaStreamConfig) {0}, false))) {
 		char buffer[64];
 		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
@@ -273,6 +238,7 @@ int main(int argumentCount, char** argumentValues) {
 		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
 	}
+	azaTrackSetName(track0, "Synth");
 
 	azaDSPUserInitSingle(&dspSynth, sizeof(dspSynth), NULL, synthProcess);
 
@@ -298,6 +264,7 @@ int main(int argumentCount, char** argumentValues) {
 		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
 	}
+	azaTrackSetName(track1, "Spatialized");
 
 	azaDSPUserInitSingle(&dspCat, sizeof(dspCat), NULL, catProcess);
 
@@ -335,6 +302,7 @@ int main(int argumentCount, char** argumentValues) {
 		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
 	}
+	azaTrackSetName(track2, "Reverb Bus");
 
 	azaTrackConnect(track0, track2, -6.0f, NULL, 0);
 	azaTrackConnect(track1, track2, -6.0f, NULL, 0);

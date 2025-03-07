@@ -41,6 +41,15 @@ void azaTrackPrependDSP(azaTrack *data, azaDSP *dsp) {
 	dsp->pNext = nextDSP;
 }
 
+void azaTrackSetName(azaTrack *data, const char *name) {
+	if (!name) {
+		data->name[0] = 0;
+	} else {
+		// Truncating copy with null-terminator
+		strncpy_s(data->name, sizeof(data->name), name, sizeof(data->name)-1);
+	}
+}
+
 int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **dstTrackRoute, uint32_t flags) {
 	for (uint32_t i = 0; i < to->receives.count; i++) {
 		if (to->receives.data[i].track == from) {
@@ -125,6 +134,7 @@ int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout masterC
 	data->config = config;
 	err = azaTrackInit(&data->master, config.bufferFrames, masterChannelLayout);
 	if (err) return err;
+	azaTrackSetName(&data->master, "Master");
 	azaMutexInit(&data->mutex);
 	data->tsOfflineStart = azaGetTimestamp();
 	data->cpuPercent = 0.0f;
@@ -147,6 +157,7 @@ int azaMixerAddTrack(azaMixer *data, int32_t index, azaTrack **dst, azaChannelLa
 	int err = AZA_SUCCESS;
 	azaTrack *result = (azaTrack*)aza_calloc(1, sizeof(azaTrack));
 	if (!result) return AZA_ERROR_OUT_OF_MEMORY;
+	azaMutexLock(&data->mutex);
 	if (index < 0) {
 		AZA_DA_APPEND(azaTrack*, data->tracks, result, err = AZA_ERROR_OUT_OF_MEMORY);
 	} else {
@@ -162,11 +173,13 @@ int azaMixerAddTrack(azaMixer *data, int32_t index, azaTrack **dst, azaChannelLa
 	if (dst) {
 		*dst = result;
 	}
+	azaMutexUnlock(&data->mutex);
 	return AZA_SUCCESS;
 fail2:
 	azaTrackDeinit(result);
 fail:
 	aza_free(result);
+	azaMutexUnlock(&data->mutex);
 	return err;
 }
 

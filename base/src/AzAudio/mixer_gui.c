@@ -80,6 +80,10 @@ static const int textMargin = 5;
 
 static const Color colorBG = { 15, 25, 50, 255 };
 
+static const Color colorTooltipBGLeft  = {  15,  25,  35, 255 };
+static const Color colorTooltipBGRight = {  45,  75, 105, 255 };
+static const Color colorTooltipBorder  = { 200, 200, 200, 255 };
+
 static const Color colorPluginBorderSelected = { 200, 150, 100, 255 };
 static const Color colorPluginBorder = { 100, 120, 150, 255 };
 
@@ -198,6 +202,17 @@ static void azaRectShrinkLeft(azaRect *rect, int w) {
 	rect->w -= w;
 }
 
+static void azaRectFitOnScreen(azaRect *rect) {
+	int width = GetLogicalWidth();
+	if ((rect->x + rect->w) > width) {
+		rect->x = width - rect->w;
+	}
+	int height = GetLogicalHeight();
+	if ((rect->y + rect->h) > height) {
+		rect->y = height - rect->h;
+	}
+}
+
 static bool IsMouseInRect(azaRect rect) {
 	Vector2 mouse = GetMousePosition();
 	Vector2 dpi = GetWindowScaleDPI();
@@ -219,6 +234,10 @@ static bool DidDoubleClick() {
 		if (delta_ns < 250 * 1000000) return true;
 	}
 	return false;
+}
+
+static bool IsKeyRepeated(int key) {
+	return (IsKeyPressed(key) || IsKeyPressedRepeat(key));
 }
 
 
@@ -269,6 +288,7 @@ static void PopScissor() {
 
 
 
+
 // Hovering Text/Tooltips
 
 
@@ -314,12 +334,16 @@ static void azaTooltipsDraw() {
 			width + textMargin*2,
 			height + textMargin*2,
 		};
-		int right = rect.x + rect.w;
-		if (right > GetLogicalWidth()) {
-			// Make sure our label doesn't go off screen
-			rect.x = GetLogicalWidth() - rect.w;
-		}
-		DrawRect(rect, DARKGRAY);
+		azaRectFitOnScreen(&rect);
+		DrawRect((azaRect) {
+			rect.x + 2,
+			rect.y + 2,
+			rect.w,
+			rect.h,
+		}, Fade(BLACK, 0.5f));
+		DrawRectGradientH(rect, colorTooltipBGLeft, colorTooltipBGRight);
+		DrawRectLines(rect, colorTooltipBorder);
+		DrawText(text, rect.x + textMargin + 1, rect.y + textMargin + 1, 10, BLACK);
 		DrawText(text, rect.x + textMargin, rect.y + textMargin, 10, WHITE);
 		text += strlen(text) + 1;
 	}
@@ -528,6 +552,159 @@ static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max
 	return sliderDrawWidth;
 }
 
+static void azaTextCharInsert(char c, uint32_t index, char *text, uint32_t len, uint32_t capacity) {
+	assert(index < capacity-1);
+	for (uint32_t i = len; i > index; i--) {
+		text[i] = text[i-1];
+	}
+	text[index] = c;
+	text[len+1] = 0;
+}
+
+static void azaTextCharErase(uint32_t index, char *text, uint32_t len) {
+	assert(index < len);
+	for (uint32_t i = index; i < len; i++) {
+		text[i] = text[i+1];
+	}
+	text[len] = 0;
+}
+
+static bool azaIsWhitespace(char c) {
+	return c == ' ' || c == '\r' || c == '\n' || c == '\t';
+}
+
+static char *textboxTextBeingEdited = NULL;
+static uint32_t textboxCursor = 0;
+static bool textboxSelected = false;
+static azaRect textboxBounds;
+
+// If textCapacity is specified, this textbox will be editable.
+static void azaDrawTextBox(azaRect bounds, char *text, uint32_t textCapacity) {
+	bool mouseover = IsMouseInRect(bounds);
+	uint32_t textLen = strlen(text);
+	if (textCapacity && mouseover && DidDoubleClick()) {
+		textboxTextBeingEdited = text;
+		textboxSelected = true;
+		textboxCursor = textLen;
+	}
+	if (textboxTextBeingEdited == text) {
+		if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)
+		|| (!mouseover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
+			textboxTextBeingEdited = NULL;
+		}
+	}
+	if (textboxTextBeingEdited == text) {
+		if (IsKeyRepeated(KEY_LEFT)) {
+			if (textboxSelected) {
+				textboxCursor = 0;
+				textboxSelected = false;
+			} else if (textboxCursor > 0) {
+				textboxCursor--;
+				if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
+					while (textboxCursor > 0) {
+						textboxCursor--;
+						if (textboxCursor > 0 && azaIsWhitespace(text[textboxCursor-1])) break;
+					}
+				}
+			}
+		}
+		if (IsKeyRepeated(KEY_RIGHT)) {
+			if (textboxSelected) {
+				textboxCursor = textLen;
+				textboxSelected = false;
+			} else if (textboxCursor < textLen) {
+				textboxCursor++;
+				if (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) {
+					while (textboxCursor < textLen) {
+						textboxCursor++;
+						if (azaIsWhitespace(text[textboxCursor-1])) break;
+					}
+				}
+			}
+		}
+		if (IsKeyPressed(KEY_END)) {
+			textboxCursor = textLen;
+			textboxSelected = false;
+		}
+		if (IsKeyPressed(KEY_HOME)) {
+			textboxCursor = 0;
+			textboxSelected = false;
+		}
+		if (IsKeyRepeated(KEY_BACKSPACE)) {
+			if (textboxSelected) {
+				textLen = 0;
+				textboxCursor = 0;
+				textboxSelected = false;
+				text[0] = 0;
+			} else if (textboxCursor > 0) {
+				azaTextCharErase(textboxCursor-1, text, textLen);
+				textboxCursor--;
+				textLen--;
+			}
+		}
+		if (IsKeyRepeated(KEY_DELETE)) {
+			if (textboxSelected) {
+				textLen = 0;
+				textboxCursor = 0;
+				textboxSelected = false;
+				text[0] = 0;
+			} else if (textboxCursor < textLen) {
+				azaTextCharErase(textboxCursor, text, textLen);
+				textLen--;
+			}
+		}
+		int c;
+		while ((c = GetCharPressed()) && (textLen < textCapacity-1 || textboxSelected)) {
+			if (c < 128) {
+				if (textboxSelected) {
+					textLen = 0;
+					textboxCursor = 0;
+					textboxSelected = false;
+					text[0] = 0;
+				}
+				char cToAdd = (char)c;
+				azaTextCharInsert(cToAdd, textboxCursor, text, textLen, textCapacity);
+				textboxCursor++;
+				textLen++;
+			}
+		}
+		int textWidth = MeasureText(text, 10);
+		if (textWidth > (bounds.w - textMargin * 2)) {
+			bounds.w = textWidth + textMargin * 2;
+			azaRectFitOnScreen(&bounds);
+		}
+		textboxBounds = bounds;
+	} else {
+		if (mouseover && MeasureText(text, 10) > (bounds.w - textMargin * 2)) {
+			azaTooltipAdd(text, bounds.x, bounds.y);
+		}
+		PushScissor(bounds);
+		DrawText(text, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
+		PopScissor();
+	}
+}
+
+static void azaDrawTextboxBeingEdited() {
+	if (!textboxTextBeingEdited) return;
+	char *text = textboxTextBeingEdited;
+	char holdover = text[textboxCursor];
+	text[textboxCursor] = 0;
+	int cursorX = MeasureText(text, 10) + textboxBounds.x + textMargin;
+	text[textboxCursor] = holdover;
+	int cursorY = textboxBounds.y + textMargin;
+	DrawRect(textboxBounds, BLACK);
+	DrawRectLines(textboxBounds, WHITE);
+	azaRectShrinkMargin(&textboxBounds, textMargin);
+	if (textboxSelected) {
+		azaRect selectionRect = textboxBounds;
+		selectionRect.w = MeasureText(text, 10);
+		DrawRect(selectionRect, DARKGRAY);
+	} else {
+		DrawLine(cursorX, cursorY, cursorX, cursorY + 10, LIGHTGRAY);
+	}
+	DrawText(text, textboxBounds.x, textboxBounds.y, 10, WHITE);
+}
+
 
 
 
@@ -592,13 +769,21 @@ static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 	PopScissor();
 }
 
-static void azaDrawTrack(azaTrack *track, azaRect bounds, char *name) {
+static void azaDrawTrack(azaTrack *track, azaRect bounds) {
 	azaRectShrinkMargin(&bounds, margin);
-	DrawText(name, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
+	PushScissor(bounds);
+	azaRect nameRect = {
+		bounds.x,
+		bounds.y,
+		bounds.w,
+		textMargin * 2 + 10,
+	};
+	azaDrawTextBox(nameRect, track->name, sizeof(track->name));
 	azaRectShrinkTop(&bounds, trackLabelDrawHeight);
 	azaDrawTrackFX(track, (azaRect) { bounds.x, bounds.y, bounds.w, trackFXDrawHeight });
 	azaRectShrinkTop(&bounds, trackFXDrawHeight + margin*2);
 	azaDrawTrackControls(track, bounds);
+	PopScissor();
 }
 
 
@@ -618,12 +803,10 @@ static void azaDrawMixer(azaMixer *mixer) {
 		trackDrawWidth,
 		trackDrawHeight - margin*2
 	};
-	azaDrawTrack(&mixer->master, trackRect, "Master");
+	azaDrawTrack(&mixer->master, trackRect);
 	for (uint32_t i = 0; i < mixer->tracks.count; i++) {
 		trackRect.x += trackDrawWidth;
-		char nameBuffer[32];
-		snprintf(nameBuffer, sizeof(nameBuffer), "Track %d", (int)i + 1);
-		azaDrawTrack(mixer->tracks.data[i], trackRect, nameBuffer);
+		azaDrawTrack(mixer->tracks.data[i], trackRect);
 	}
 	azaTooltipAdd(TextFormat("CPU: %.2f%%", mixer->cpuPercentSlow), GetLogicalWidth(), 0);
 	azaMutexUnlock(&mixer->mutex);
@@ -812,6 +995,7 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 			ClearBackground(colorBG);
 			azaDrawMixer(currentMixer);
 			azaDrawSelectedDSP();
+			azaDrawTextboxBeingEdited();
 			azaTooltipsDraw();
 			if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
 				lastClickTime = azaGetTimestamp();
