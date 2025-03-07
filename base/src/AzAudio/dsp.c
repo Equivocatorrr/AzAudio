@@ -1311,6 +1311,7 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 	if AZA_UNLIKELY(err) return err;
 	azaBuffer inputBuffer = azaPushSideBufferCopy(buffer);
 	if (data->config.delay != 0.0f) {
+		data->inputDelay.config.delay = data->config.delay;
 		err = azaDelayProcess(&data->inputDelay, inputBuffer);
 		if AZA_UNLIKELY(err) return err;
 	}
@@ -1319,8 +1320,8 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 	azaBuffer sideBufferDiffuse = azaPushSideBuffer(buffer.frames, buffer.channelLayout.count, buffer.samplerate);
 	float feedback = 0.985f - (0.2f / data->config.roomsize);
 	float color = data->config.color * 4000.0f;
-	float amount = aza_db_to_ampf(data->config.gain);
-	float amountDry = aza_db_to_ampf(data->config.gainDry);
+	float amount = data->config.muteWet ? 0.0f :  aza_db_to_ampf(data->config.gain);
+	float amountDry = data->config.muteDry ? 0.0f : aza_db_to_ampf(data->config.gainDry);
 	for (int tap = 0; tap < AZAUDIO_REVERB_DELAY_COUNT*2/3; tap++) {
 		// TODO: Make feedback depend on delay time such that they all decay in amplitude at the same rate over time
 		azaDelay *delay = azaReverbGetDelayTap(data, tap);

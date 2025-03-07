@@ -322,7 +322,7 @@ int main(int argumentCount, char** argumentValues) {
 
 	reverb = azaMakeReverb((azaReverbConfig) {
 		.gain = 0.0f,
-		.gainDry = -INFINITY,
+		.muteDry = true,
 		.roomsize = 5.0f,
 		.color = 5.0f,
 		.delay = 0.0f,

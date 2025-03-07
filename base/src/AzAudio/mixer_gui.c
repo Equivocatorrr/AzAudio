@@ -700,6 +700,26 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 }
 
+static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
+
+}
+
+static void azaDrawDelay(azaDelay *data, azaRect bounds) {
+
+}
+
+static void azaDrawReverb(azaReverb *data, azaRect bounds) {
+	int usedWidth = azaDrawFader(bounds, &data->config.gain, &data->config.muteWet, "Wet Gain", 36, 6);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, "Dry Gain", 36, 6);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.roomsize, 1.0f, 100.0f, 1.0f, 10.0f, "Room Size", NULL);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.color, 1.0f, 5.0f, 0.25f, 2.0f, "Color", NULL);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.delay, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "ms");
+}
+
 static void azaDrawSelectedDSP() {
 	azaRect bounds = {
 		margin*2,
@@ -728,8 +748,14 @@ static void azaDrawSelectedDSP() {
 			azaDrawFilter((azaFilter*)selectedDSP, bounds);
 			break;
 		case AZA_DSP_COMPRESSOR:
+			azaDrawCompressor((azaCompressor*)selectedDSP, bounds);
+			break;
 		case AZA_DSP_DELAY:
+			azaDrawDelay((azaDelay*)selectedDSP, bounds);
+			break;
 		case AZA_DSP_REVERB:
+			azaDrawReverb((azaReverb*)selectedDSP, bounds);
+			break;
 		case AZA_DSP_SAMPLER:
 		case AZA_DSP_GATE:
 		case AZA_DSP_DELAY_DYNAMIC:

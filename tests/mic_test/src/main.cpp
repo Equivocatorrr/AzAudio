@@ -304,6 +304,8 @@ int main(int argumentCount, char** argumentValues) {
 		reverb = azaMakeReverb(azaReverbConfig{
 			/* .gain     = */-15.0f,
 			/* .gainDry  = */ 0.0f,
+			/* .muteWet  = */ false,
+			/* .muteDry  = */ false,
 			/* .roomsize = */ 100.0f,
 			/* .color    = */ 1.0f,
 			/* .delay    = */ 200.0f,

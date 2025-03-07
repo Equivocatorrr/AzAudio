@@ -465,6 +465,7 @@ typedef struct azaReverbConfig {
 	float gain;
 	// dry gain in dB
 	float gainDry;
+	bool muteWet, muteDry;
 	// value affecting reverb feedback, roughly in the range of 1 to 100 for reasonable results
 	float roomsize;
 	// value affecting damping of high frequencies, roughly in the range of 1 to 5
