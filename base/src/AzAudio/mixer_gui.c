@@ -77,9 +77,10 @@ static int trackFXScrollY = 0;
 static bool trackFXCanScrollDown = false;
 
 static const int meterDrawWidth = 4;
-static const float meterDBRange = 48.0f;
+static const int meterDBRange = 72;
 
 static const int faderDrawWidth = 14;
+static const int faderDBHeadroom = 12;
 
 static const Color colorBG = { 15, 25, 50, 255 };
 
@@ -105,14 +106,14 @@ static const Color colorMeterPeakOver    = { 255,   0,   0, 255 };
 static const Color colorMeterRMS         = {   0, 255, 128, 255 };
 static const Color colorMeterRMSOver     = { 255,   0,   0, 255 };
 
-static const Color colorFaderBGTop       = {  20,  30,  40, 255 };
-static const Color colorFaderBGBot       = {  10,  15,  20, 255 };
-static const Color colorFaderDBTick      = {  50,  70, 100, 255 };
-static const Color colorFaderDBTickUnity = { 100,  70,  50, 255 };
 static const Color colorFaderMuteButton  = { 150,  50, 200, 255 };
 static const Color colorFaderKnobTop     = { 160, 180, 200, 255 };
 static const Color colorFaderKnobBot     = {  80, 120, 180, 255 };
 static const Color colorFaderHighlight   = { 255, 255, 255,  64 };
+
+static const int lookaheadLimiterMeterDBRange = 48;
+static const int lookaheadLimiterAttenuationMeterDBRange = 18;
+static const Color colorLookaheadLimiterAttenuation = {   0, 128, 255, 255 };
 
 
 
@@ -353,9 +354,9 @@ static int azaDBToYOffset(float db, float height, float dbRange) {
 	return (int)AZA_MIN(db * height / dbRange, height);
 }
 
-static int azaDBToYOffsetClamped(float db, float height, float dbRange, int min) {
-	int result = azaDBToYOffset(db, height, dbRange);
-	return AZA_MAX(result, min);
+static int azaDBToYOffsetClamped(float db, int height, int minY, int dbRange) {
+	int result = azaDBToYOffset(db, (float)height, (float)dbRange);
+	return AZA_MAX(result, minY);
 }
 
 static void azaDrawDBTicks(azaRect bounds, int dbRange, int dbOffset, Color color, Color colorUnity) {
@@ -368,17 +369,24 @@ static void azaDrawDBTicks(azaRect bounds, int dbRange, int dbOffset, Color colo
 	}
 }
 
+static inline void azaDrawMeterBackground(azaRect bounds, int dbRange, int dbHeadroom) {
+	DrawRectGradientV(bounds, colorMeterBGTop, colorMeterBGBot);
+	azaRectShrinkMarginV(&bounds, margin);
+	azaDrawDBTicks(bounds, dbRange, dbHeadroom, colorMeterDBTick, colorMeterDBTickUnity);
+}
+
 // returns used width
-static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label) {
+static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label, int dbRange, int dbHeadroom) {
 	bounds.w = faderDrawWidth;
-	if(IsMouseInRect(bounds)) {
+	bool mouseover = IsMouseInRect(bounds);
+	if(mouseover) {
 		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2));
 	}
-	DrawRectGradientV(bounds, colorFaderBGTop, colorFaderBGBot);
-	azaRectShrinkMargin(&bounds, margin);
 	if (mute) {
 		azaRect muteRect = bounds;
 		muteRect.h = muteRect.w;
+		DrawRect(muteRect, colorMeterBGTop);
+		azaRectShrinkMargin(&muteRect, margin);
 		if (IsMousePressedInRect(MOUSE_BUTTON_LEFT, muteRect)) {
 			*mute = !*mute;
 		}
@@ -389,15 +397,12 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 		}
 		azaRectShrinkTop(&bounds, muteRect.h + margin);
 	}
-	azaDrawDBTicks((azaRect) {
-		bounds.x - margin,
-		bounds.y,
-		bounds.w + margin*2,
-		bounds.h,
-	}, (int)meterDBRange, 6, colorFaderDBTick, colorFaderDBTickUnity);
-	if (IsMouseInRect(bounds)) {
+	azaDrawMeterBackground(bounds, dbRange, faderDBHeadroom);
+	azaRectShrinkMargin(&bounds, margin);
+	int yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, bounds.h, 0, dbRange);
+	if (mouseover) {
 		DrawRect(bounds, colorFaderHighlight);
-		azaTooltipAdd(TextFormat("%+.1fdb", *gain), bounds.x + bounds.w + margin, bounds.y + bounds.h * 6 / (int)meterDBRange);
+		azaTooltipAdd(TextFormat("%+.1fdb", *gain), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5));
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		*gain += delta;
@@ -406,7 +411,6 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 		}
 	}
 	PushScissor(bounds);
-	int yOffset = azaDBToYOffsetClamped(6.0f - *gain, (float)bounds.h, meterDBRange, 0);
 	DrawRectangleGradientV(bounds.x, bounds.y + yOffset - 6, bounds.w, 12, colorFaderKnobTop, colorFaderKnobBot);
 	DrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
 	PopScissor();
@@ -414,18 +418,17 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 }
 
 // Returns used width
-static int azaDrawMeters(azaMeters *meters, azaRect bounds, float dbRange) {
+static int azaDrawMeters(azaMeters *meters, azaRect bounds, int dbRange) {
 	int usedWidth = meterDrawWidth * meters->activeMeters + margin * (meters->activeMeters+1);
 	bounds.w = usedWidth;
-	DrawRectangleGradientV(bounds.x, bounds.y, bounds.w, bounds.h, colorMeterBGTop, colorMeterBGBot);
 	bool resetPeaks = IsMousePressedInRect(MOUSE_BUTTON_LEFT, bounds);
+	azaDrawMeterBackground(bounds, dbRange, 0);
 	azaRectShrinkMarginV(&bounds, margin);
-	azaDrawDBTicks(bounds, (int)dbRange, 0, colorMeterDBTick, colorMeterDBTickUnity);
 	bounds.x += margin;
 	bounds.w = meterDrawWidth;
 	for (uint32_t c = 0; c < meters->activeMeters; c++) {
 		float peakDB = aza_amp_to_dbf(meters->peaks[c]);
-		int yOffset = azaDBToYOffsetClamped(-peakDB, (float)bounds.h, dbRange, -2);
+		int yOffset = azaDBToYOffsetClamped(-peakDB, bounds.h, -2, dbRange);
 		Color peakColor = colorMeterPeak;
 		if (meters->peaks[c] == 1.0f) {
 			peakColor = colorMeterPeakUnity;
@@ -436,17 +439,17 @@ static int azaDrawMeters(azaMeters *meters, azaRect bounds, float dbRange) {
 		if (true /* meters->processed */) {
 			float rmsDB = aza_amp_to_dbf(sqrtf(meters->rmsSquaredAvg[c]));
 			float peakShortTermDB = aza_amp_to_dbf(meters->peaksShortTerm[c]);
-			yOffset = azaDBToYOffsetClamped(-peakShortTermDB, (float)bounds.h, dbRange, 0);
+			yOffset = azaDBToYOffsetClamped(-peakShortTermDB, bounds.h, 0, dbRange);
 			DrawRectangle(bounds.x+bounds.w/4, bounds.y + yOffset, bounds.w/2, bounds.h - yOffset, colorMeterPeak);
 
-			yOffset = azaDBToYOffsetClamped(-rmsDB, (float)bounds.h, dbRange, 0);
+			yOffset = azaDBToYOffsetClamped(-rmsDB, bounds.h, 0, dbRange);
 			DrawRectangle(bounds.x, bounds.y + yOffset, bounds.w, bounds.h - yOffset, colorMeterRMS);
 			if (rmsDB > 0.0f) {
-				yOffset = azaDBToYOffsetClamped(rmsDB, (float)bounds.h, dbRange, 0);
+				yOffset = azaDBToYOffsetClamped(rmsDB, bounds.h, 0, dbRange);
 				DrawRectangle(bounds.x, bounds.y, bounds.w, yOffset, colorMeterRMSOver);
 			}
 			if (peakShortTermDB > 0.0f) {
-				yOffset = azaDBToYOffsetClamped(peakShortTermDB, (float)bounds.h, dbRange, 0);
+				yOffset = azaDBToYOffsetClamped(peakShortTermDB, bounds.h, 0, dbRange);
 				DrawRectangle(bounds.x+bounds.w/4, bounds.y, bounds.w/2, yOffset, colorMeterPeakOver);
 			}
 		}
@@ -464,7 +467,7 @@ static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 	DrawRectangleGradientV(bounds.x, bounds.y, bounds.w, bounds.h, colorTrackControlsTop, colorTrackControlsBot);
 	azaRectShrinkMargin(&bounds, margin);
 	// Fader
-	azaDrawFader(bounds, &track->gain, &track->mute, "Track Gain");
+	azaDrawFader(bounds, &track->gain, &track->mute, "Track Gain", meterDBRange, faderDBHeadroom);
 	azaRectShrinkLeft(&bounds, faderDrawWidth + margin);
 	// Meter
 	int metersWidth = azaDrawMeters(&track->meters, (azaRect) {
@@ -478,13 +481,13 @@ static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 	PushScissor(bounds);
 	azaTrackRoute *receive = azaTrackGetReceive(track, &currentMixer->master);
 	if (receive) {
-		int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, "Master Send");
+		int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, "Master Send", meterDBRange, faderDBHeadroom);
 		azaRectShrinkLeft(&bounds, faderWidth + margin);
 	}
 	for (uint32_t i = 0; i < currentMixer->config.trackCount; i++) {
 		receive = azaTrackGetReceive(track, &currentMixer->tracks[i]);
 		if (receive) {
-			int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, TextFormat("Track %d Send", i+1));
+			int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, TextFormat("Track %d Send", i+1), meterDBRange, faderDBHeadroom);
 			azaRectShrinkLeft(&bounds, faderWidth + margin);
 		}
 	}
@@ -537,13 +540,42 @@ static void azaDrawMixer(azaMixer *mixer) {
 
 
 static void azaDrawLookaheadLimiter(azaLookaheadLimiter *data, azaRect bounds) {
-	int faderWidth = azaDrawFader(bounds, &data->config.gainInput, NULL, "Input Gain");
+	int faderWidth = azaDrawFader(bounds, &data->config.gainInput, NULL, "Input Gain", lookaheadLimiterMeterDBRange, faderDBHeadroom);
 	azaRectShrinkLeft(&bounds, faderWidth + margin);
-	int metersWidth = azaDrawMeters(&data->metersInput, bounds, meterDBRange);
+	int metersWidth = azaDrawMeters(&data->metersInput, bounds, lookaheadLimiterMeterDBRange);
 	azaRectShrinkLeft(&bounds, metersWidth + margin);
-	azaDrawFader(bounds, &data->config.gainOutput, NULL, "Output Gain");
+
+	azaRect attenuationRect = {
+		bounds.x,
+		bounds.y,
+		meterDrawWidth*2 + margin*3,
+		bounds.h,
+	};
+	azaRectShrinkLeft(&bounds, attenuationRect.w + margin);
+	bool attenuationMouseover = IsMouseInRect(attenuationRect);
+	if (attenuationMouseover) {
+		azaTooltipAdd("Attenuation", attenuationRect.x, attenuationRect.y - (textMargin*2 + 10));
+	}
+	azaDrawMeterBackground(attenuationRect, lookaheadLimiterAttenuationMeterDBRange, 0);
+	azaRectShrinkMargin(&attenuationRect, margin);
+	int yOffset;
+	yOffset = azaDBToYOffsetClamped(-aza_amp_to_dbf(data->minAmpShort), attenuationRect.h, 0, lookaheadLimiterAttenuationMeterDBRange);
+	DrawRectangle(attenuationRect.x, attenuationRect.y, attenuationRect.w, yOffset, colorLookaheadLimiterAttenuation);
+	float attenuationPeakDB = aza_amp_to_dbf(data->minAmp);
+	yOffset = azaDBToYOffsetClamped(-attenuationPeakDB, attenuationRect.h, 0, lookaheadLimiterAttenuationMeterDBRange);
+	if (attenuationMouseover) {
+		azaTooltipAdd(TextFormat("%+.1fdb", attenuationPeakDB), attenuationRect.x + attenuationRect.w + margin, attenuationRect.y + yOffset - (textMargin + 5));
+	}
+	DrawLine(attenuationRect.x, attenuationRect.y + yOffset, attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset, colorLookaheadLimiterAttenuation);
+	if (IsMousePressedInRect(MOUSE_BUTTON_LEFT, attenuationRect)) {
+		data->minAmp = 1.0f;
+	}
+	data->minAmpShort = 1.0f;
+
+	azaDrawFader(bounds, &data->config.gainOutput, NULL, "Output Gain", lookaheadLimiterMeterDBRange, faderDBHeadroom);
 	azaRectShrinkLeft(&bounds, faderWidth + margin);
-	azaDrawMeters(&data->metersOutput, bounds, meterDBRange);
+	azaDrawMeters(&data->metersOutput, bounds, lookaheadLimiterMeterDBRange);
+	azaRectShrinkLeft(&bounds, metersWidth + margin);
 }
 
 static void azaDrawSelectedDSP() {

@@ -789,6 +789,8 @@ void azaLookaheadLimiterInit(azaLookaheadLimiter *data, uint32_t allocSize, azaL
 	data->header.structSize = allocSize;
 	data->config = config;
 	data->sum = 1.0f;
+	data->minAmp = 1.0f;
+	data->minAmpShort = 1.0f;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaLookaheadLimiterChannelData), alignof(azaLookaheadLimiterChannelData));
 }
 
@@ -853,12 +855,14 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 			data->cooldown -= 1;
 		}
 		data->sum += data->slope;
+		data->minAmpShort = azaMinf(data->minAmpShort, data->sum);
 		if (data->sum > 1.0f) {
 			data->slope = 0.0f;
 			data->sum = 1.0f;
 		}
 		gainBuffer.samples[i] = data->sum;
 	}
+	data->minAmp = azaMinf(data->minAmp, data->minAmpShort);
 	// Apply the gain from gainBuffer to all the channels
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 		azaLookaheadLimiterChannelData *channelData = azaGetChannelData(&data->channelData, c);

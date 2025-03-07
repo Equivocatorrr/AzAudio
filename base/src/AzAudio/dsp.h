@@ -295,6 +295,7 @@ typedef struct azaLookaheadLimiter {
 
 	azaMeters metersInput;
 	azaMeters metersOutput;
+	float minAmp, minAmpShort;
 
 	// Data shared by all channels
 	float peakBuffer[AZAUDIO_LOOKAHEAD_SAMPLES];
