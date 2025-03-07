@@ -53,6 +53,14 @@ const char *azaDSPKindString[] = {
 	"Dynamic Delay",
 	"Spatialize",
 };
+static_assert(sizeof(azaDSPKindString) / sizeof(const char*) == AZA_DSP_KIND_COUNT, "Pls update azaDSPKindString");
+
+const char *azaFilterKindString[] = {
+	"High Pass",
+	"Low Pass",
+	"Band Pass",
+};
+static_assert(sizeof(azaFilterKindString) / sizeof(const char*) == AZA_FILTER_KIND_COUNT, "Pls update azaFilterKindString");
 
 azaKernel azaKernelDefaultLanczos;
 

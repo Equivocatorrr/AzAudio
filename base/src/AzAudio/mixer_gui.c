@@ -57,6 +57,10 @@ static azaThread thread = {};
 
 static int64_t lastClickTime = 0;
 
+static int scrollX = 0;
+static int trackFXScrollY = 0;
+static bool trackFXCanScrollDown = false;
+
 
 
 
@@ -72,15 +76,7 @@ static const int trackFXDrawHeight = 60;
 static const int trackLabelDrawHeight = 20;
 static const int margin = 2;
 static const int textMargin = 5;
-static const int scrollX = 0;
-static int trackFXScrollY = 0;
-static bool trackFXCanScrollDown = false;
 
-static const int meterDrawWidth = 4;
-static const int meterDBRange = 72;
-
-static const int faderDrawWidth = 14;
-static const int faderDBHeadroom = 12;
 
 static const Color colorBG = { 15, 25, 50, 255 };
 
@@ -96,6 +92,10 @@ static const Color colorTrackFXBot = {  40,  50,  80, 255 };
 static const Color colorTrackControlsTop = {  50,  55,  90, 255 };
 static const Color colorTrackControlsBot = {  30,  40,  60, 255 };
 
+
+static const int meterDrawWidth = 4;
+static const int meterDBRange = 72;
+
 static const Color colorMeterBGTop       = {  20,  30,  40, 255 };
 static const Color colorMeterBGBot       = {  10,  15,  20, 255 };
 static const Color colorMeterDBTick      = {  50,  70, 100, 255 };
@@ -106,10 +106,20 @@ static const Color colorMeterPeakOver    = { 255,   0,   0, 255 };
 static const Color colorMeterRMS         = {   0, 255, 128, 255 };
 static const Color colorMeterRMSOver     = { 255,   0,   0, 255 };
 
+
+static const int faderDrawWidth = 14;
+static const int faderDBHeadroom = 12;
+
 static const Color colorFaderMuteButton  = { 150,  50, 200, 255 };
 static const Color colorFaderKnobTop     = { 160, 180, 200, 255 };
 static const Color colorFaderKnobBot     = {  80, 120, 180, 255 };
 static const Color colorFaderHighlight   = { 255, 255, 255,  64 };
+
+
+static const int sliderDrawWidth = 14;
+
+static const Color colorSliderBGTop      = {  20,  60,  40, 255 };
+static const Color colorSliderBGBot      = {  10,  40,  20, 255 };
 
 static const int lookaheadLimiterMeterDBRange = 48;
 static const int lookaheadLimiterAttenuationMeterDBRange = 18;
@@ -320,35 +330,10 @@ static void azaTooltipsDraw() {
 
 
 
-// Tracks
+// UI Utilities
 
 
 
-
-static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
-	DrawRectGradientV(bounds, colorTrackFXTop, colorTrackFXBot);
-	azaRectShrinkMargin(&bounds, margin);
-	PushScissor(bounds);
-	azaRect pluginRect = bounds;
-	pluginRect.y += trackFXScrollY;
-	pluginRect.h = 10 + margin * 2;
-	azaDSP *dsp = track->dsp;
-	while (dsp) {
-		bool mouseover = IsMouseInRect(pluginRect);
-		if (mouseover) {
-			DrawRectGradientV(pluginRect, colorPluginBorderSelected, colorPluginBorder);
-			if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-				selectedDSP = dsp;
-			}
-		}
-		DrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
-		DrawText(azaDSPKindString[(uint32_t)dsp->kind], pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
-		dsp = dsp->pNext;
-		pluginRect.y += pluginRect.h + margin;
-	}
-	if (pluginRect.y + pluginRect.h > bounds.y + bounds.h) trackFXCanScrollDown = true;
-	PopScissor();
-}
 
 static int azaDBToYOffset(float db, float height, float dbRange) {
 	return (int)AZA_MIN(db * height / dbRange, height);
@@ -379,7 +364,7 @@ static inline void azaDrawMeterBackground(azaRect bounds, int dbRange, int dbHea
 static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label, int dbRange, int dbHeadroom) {
 	bounds.w = faderDrawWidth;
 	bool mouseover = IsMouseInRect(bounds);
-	if(mouseover) {
+	if (mouseover) {
 		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2));
 	}
 	if (mute) {
@@ -461,6 +446,119 @@ static int azaDrawMeters(azaMeters *meters, azaRect bounds, int dbRange) {
 		meters->peaksShortTerm[c] = 0.0f;
 	}
 	return usedWidth;
+}
+
+// Logarithmic slider allowing values between min and max.
+// Scrolling up multiplies the value by (1.0f + step) and scrolling down divides it by the same value.
+// Double clicking will set value to def.
+// valueUnit will be appended to the end of the string showing the value.
+// returns used width
+static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueUnit) {
+	assert(min > 0.0f);
+	assert(max > min);
+	bounds.w = sliderDrawWidth;
+	bool mouseover = IsMouseInRect(bounds);
+	if (mouseover) {
+		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2));
+	}
+	DrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
+	azaRectShrinkMargin(&bounds, margin);
+	float logValue = logf(*value);
+	float logMin = logf(min);
+	float logMax = logf(max);
+	int yOffset = (int)((float)bounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
+	if (mouseover) {
+		DrawRect(bounds, colorFaderHighlight);
+		if (!valueUnit) {
+			valueUnit = "";
+		}
+		azaTooltipAdd(TextFormat("%+.1f%s", *value, valueUnit), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5));
+		float delta = GetMouseWheelMoveV().y;
+		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
+		if (delta > 0.0f) {
+			*value *= (1.0f + delta*step);
+		} else if (delta < 0.0f) {
+			*value /= (1.0f - delta*step);
+		}
+		if (DidDoubleClick()) {
+			*value = def;
+		}
+		*value = azaClampf(*value, min, max);
+	}
+	PushScissor(bounds);
+	DrawRectangleGradientV(bounds.x, bounds.y + yOffset - 6, bounds.w, 12, colorFaderKnobTop, colorFaderKnobBot);
+	DrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
+	PopScissor();
+	return sliderDrawWidth;
+}
+
+// Linear slider allowing values between min and max.
+// Scrolling up adds step and scrolling down subtracts step.
+// Double clicking will set value to def.
+// valueUnit will be appended to the end of the string showing the value.
+// returns used width
+static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueUnit) {
+	assert(max > min);
+	bounds.w = sliderDrawWidth;
+	bool mouseover = IsMouseInRect(bounds);
+	if (mouseover) {
+		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2));
+	}
+	DrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
+	azaRectShrinkMargin(&bounds, margin);
+	int yOffset = (int)((float)bounds.h * (1.0f - (*value - min) / (max - min)));
+	if (mouseover) {
+		DrawRect(bounds, colorFaderHighlight);
+		if (!valueUnit) {
+			valueUnit = "";
+		}
+		azaTooltipAdd(TextFormat("%+.1f%s", *value, valueUnit), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5));
+		float delta = GetMouseWheelMoveV().y;
+		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
+		*value += delta*step;
+		if (DidDoubleClick()) {
+			*value = def;
+		}
+		*value = azaClampf(*value, min, max);
+	}
+	PushScissor(bounds);
+	DrawRectangleGradientV(bounds.x, bounds.y + yOffset - 6, bounds.w, 12, colorFaderKnobTop, colorFaderKnobBot);
+	DrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
+	PopScissor();
+	return sliderDrawWidth;
+}
+
+
+
+
+// Tracks
+
+
+
+
+static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
+	DrawRectGradientV(bounds, colorTrackFXTop, colorTrackFXBot);
+	azaRectShrinkMargin(&bounds, margin);
+	PushScissor(bounds);
+	azaRect pluginRect = bounds;
+	pluginRect.y += trackFXScrollY;
+	pluginRect.h = 10 + margin * 2;
+	azaDSP *dsp = track->dsp;
+	while (dsp) {
+		bool mouseover = IsMouseInRect(pluginRect);
+		if (mouseover) {
+			DrawRectGradientV(pluginRect, colorPluginBorderSelected, colorPluginBorder);
+			if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+				selectedDSP = dsp;
+			}
+		}
+		DrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
+		DrawText(azaDSPKindString[(uint32_t)dsp->kind], pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
+		dsp = dsp->pNext;
+		pluginRect.y += pluginRect.h + margin;
+	}
+	if (pluginRect.y + pluginRect.h > bounds.y + bounds.h) trackFXCanScrollDown = true;
+	PopScissor();
 }
 
 static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
@@ -578,6 +676,30 @@ static void azaDrawLookaheadLimiter(azaLookaheadLimiter *data, azaRect bounds) {
 	azaRectShrinkLeft(&bounds, metersWidth + margin);
 }
 
+static void azaDrawFilter(azaFilter *data, azaRect bounds) {
+	azaRect rectKind = bounds;
+	rectKind.w = 80;
+	rectKind.h = textMargin*2 + 10;
+	for (int i = 0; i < AZA_FILTER_KIND_COUNT; i++) {
+		if (IsMousePressedInRect(MOUSE_BUTTON_LEFT, rectKind)) {
+			data->config.kind = (azaFilterKind)i;
+		}
+		bool selected = ((int)data->config.kind == i);
+		DrawRect(rectKind, colorMeterBGBot);
+		if (selected) {
+			DrawRectLines(rectKind, colorPluginBorderSelected);
+		}
+		DrawText(azaFilterKindString[i], rectKind.x + textMargin, rectKind.y + textMargin, 10, WHITE);
+		rectKind.y += rectKind.h + margin;
+	}
+	azaRectShrinkTop(&rectKind, (rectKind.h + margin) * AZA_FILTER_KIND_COUNT);
+	azaRectShrinkLeft(&bounds, rectKind.w + margin);
+	int usedWidth = azaDrawSliderFloatLog(bounds, &data->config.frequency, 5.0f, 24000.0f, 0.1f, 500.0f, "Cutoff Frequency", "Hz");
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.dryMix, 0.0f, 1.0f, 0.1f, 0.0f, "Dry Mix", NULL);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+}
+
 static void azaDrawSelectedDSP() {
 	azaRect bounds = {
 		margin*2,
@@ -603,6 +725,8 @@ static void azaDrawSelectedDSP() {
 			azaDrawLookaheadLimiter((azaLookaheadLimiter*)selectedDSP, bounds);
 			break;
 		case AZA_DSP_FILTER:
+			azaDrawFilter((azaFilter*)selectedDSP, bounds);
+			break;
 		case AZA_DSP_COMPRESSOR:
 		case AZA_DSP_DELAY:
 		case AZA_DSP_REVERB:

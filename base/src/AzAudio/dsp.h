@@ -172,6 +172,7 @@ typedef enum azaDSPKind {
 	AZA_DSP_SPATIALIZE,
 } azaDSPKind;
 extern const char *azaDSPKindString[];
+#define AZA_DSP_KIND_COUNT (AZA_DSP_SPATIALIZE+1)
 
 // Generic interface to all the DSP structures
 typedef struct azaDSP {
@@ -329,6 +330,8 @@ typedef enum azaFilterKind {
 	AZA_FILTER_LOW_PASS,
 	AZA_FILTER_BAND_PASS,
 } azaFilterKind;
+extern const char *azaFilterKindString[];
+#define AZA_FILTER_KIND_COUNT (AZA_FILTER_BAND_PASS+1)
 
 typedef struct azaFilterConfig {
 	azaFilterKind kind;
