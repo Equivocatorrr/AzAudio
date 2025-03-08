@@ -14,6 +14,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "AzAudio.h"
+
 #include "mixer.h"
 
 static void azaRaylibTraceLogCallback(int logLevel, const char *text, va_list args) {
@@ -80,9 +82,12 @@ static const int textMargin = 5;
 
 static const Color colorBG = { 15, 25, 50, 255 };
 
-static const Color colorTooltipBGLeft  = {  15,  25,  35, 255 };
-static const Color colorTooltipBGRight = {  45,  75, 105, 255 };
-static const Color colorTooltipBorder  = { 200, 200, 200, 255 };
+static const Color colorTooltipBGLeft       = {  15,  25,  35, 255 };
+static const Color colorTooltipBGRight      = {  45,  75, 105, 255 };
+static const Color colorTooltipBorder       = { 100, 200, 255, 255 };
+static const Color colorTooltipErrorBGLeft  = {  40,   0,   0, 255 };
+static const Color colorTooltipErrorBGRight = {  20,   0,   0, 255 };
+static const Color colorTooltipErrorBorder  = { 200,   0,   0, 255 };
 
 static const Color colorPluginBorderSelected = { 200, 150, 100, 255 };
 static const Color colorPluginBorder = { 100, 120, 150, 255 };
@@ -213,7 +218,10 @@ static void azaRectFitOnScreen(azaRect *rect) {
 	}
 }
 
-static bool IsMouseInRect(azaRect rect) {
+// Used for UI input culling (for context menus and such)
+int mouseDepth = 0;
+
+static bool azaMouseInRect(azaRect rect) {
 	Vector2 mouse = GetMousePosition();
 	Vector2 dpi = GetWindowScaleDPI();
 	mouse.x /= dpi.x;
@@ -223,12 +231,16 @@ static bool IsMouseInRect(azaRect rect) {
 	return (mx >= rect.x && my >= rect.y && mx <= rect.x+rect.w && my <= rect.y+rect.h);
 }
 
-static bool IsMousePressedInRect(int button, azaRect rect) {
-	return IsMouseButtonPressed(button) && IsMouseInRect(rect);
+static bool azaMouseButtonPressed(int button, int depth) {
+	return (depth >= mouseDepth && IsMouseButtonPressed(button));
 }
 
-static bool DidDoubleClick() {
-	if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+static bool azaMousePressedInRect(int button, int depth, azaRect rect) {
+	return azaMouseButtonPressed(button, depth) && azaMouseInRect(rect);
+}
+
+static bool azaDidDoubleClick(int depth) {
+	if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, depth)) {
 		int64_t delta = azaGetTimestamp() - lastClickTime;
 		int64_t delta_ns = azaGetTimestampDeltaNanoseconds(delta);
 		if (delta_ns < 250 * 1000000) return true;
@@ -298,6 +310,7 @@ typedef struct azaTooltips {
 	char buffer[1024];
 	int posX[32];
 	int posY[32];
+	bool isError[32];
 	// How many bytes have already been written to buffer
 	uint32_t bufferCount;
 	// How many tooltips are represented
@@ -311,7 +324,7 @@ static void azaTooltipsReset() {
 	tooltips.count = 0;
 }
 
-static void azaTooltipAdd(const char *text, int posX, int posY) {
+static void azaTooltipAdd(const char *text, int posX, int posY, bool isError) {
 	assert(text);
 	assert(tooltips.bufferCount < sizeof(tooltips.buffer));
 	assert(tooltips.count < sizeof(tooltips.posX) / sizeof(int));
@@ -320,10 +333,11 @@ static void azaTooltipAdd(const char *text, int posX, int posY) {
 	tooltips.bufferCount += count;
 	tooltips.posX[tooltips.count] = posX;
 	tooltips.posY[tooltips.count] = posY;
+	tooltips.isError[tooltips.count] = isError;
 	tooltips.count++;
 }
 
-static void azaTooltipsDraw() {
+static void azaDrawTooltips() {
 	const char *text = tooltips.buffer;
 	for (uint32_t i = 0; i < tooltips.count; i++) {
 		int width = MeasureText(text, 10);
@@ -341,8 +355,13 @@ static void azaTooltipsDraw() {
 			rect.w,
 			rect.h,
 		}, Fade(BLACK, 0.5f));
-		DrawRectGradientH(rect, colorTooltipBGLeft, colorTooltipBGRight);
-		DrawRectLines(rect, colorTooltipBorder);
+		if (tooltips.isError[i]) {
+			DrawRectGradientH(rect, colorTooltipErrorBGLeft, colorTooltipErrorBGRight);
+			DrawRectLines(rect, colorTooltipErrorBorder);
+		} else {
+			DrawRectGradientH(rect, colorTooltipBGLeft, colorTooltipBGRight);
+			DrawRectLines(rect, colorTooltipBorder);
+		}
 		DrawText(text, rect.x + textMargin + 1, rect.y + textMargin + 1, 10, BLACK);
 		DrawText(text, rect.x + textMargin, rect.y + textMargin, 10, WHITE);
 		text += strlen(text) + 1;
@@ -387,16 +406,16 @@ static inline void azaDrawMeterBackground(azaRect bounds, int dbRange, int dbHea
 // returns used width
 static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label, int dbRange, int dbHeadroom) {
 	bounds.w = faderDrawWidth;
-	bool mouseover = IsMouseInRect(bounds);
+	bool mouseover = azaMouseInRect(bounds);
 	if (mouseover) {
-		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2));
+		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
 	}
 	if (mute) {
 		azaRect muteRect = bounds;
 		muteRect.h = muteRect.w;
 		DrawRect(muteRect, colorMeterBGTop);
 		azaRectShrinkMargin(&muteRect, margin);
-		if (IsMousePressedInRect(MOUSE_BUTTON_LEFT, muteRect)) {
+		if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, muteRect)) {
 			*mute = !*mute;
 		}
 		if (*mute) {
@@ -411,11 +430,11 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 	int yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, bounds.h, 0, dbRange);
 	if (mouseover) {
 		DrawRect(bounds, colorFaderHighlight);
-		azaTooltipAdd(TextFormat("%+.1fdb", *gain), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5));
+		azaTooltipAdd(TextFormat("%+.1fdb", *gain), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		*gain += delta;
-		if (DidDoubleClick()) {
+		if (azaDidDoubleClick(0)) {
 			*gain = 0.0f;
 		}
 	}
@@ -430,7 +449,7 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 static int azaDrawMeters(azaMeters *meters, azaRect bounds, int dbRange) {
 	int usedWidth = meterDrawWidth * meters->activeMeters + margin * (meters->activeMeters+1);
 	bounds.w = usedWidth;
-	bool resetPeaks = IsMousePressedInRect(MOUSE_BUTTON_LEFT, bounds);
+	bool resetPeaks = azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, bounds);
 	azaDrawMeterBackground(bounds, dbRange, 0);
 	azaRectShrinkMarginV(&bounds, margin);
 	bounds.x += margin;
@@ -481,9 +500,9 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 	assert(min > 0.0f);
 	assert(max > min);
 	bounds.w = sliderDrawWidth;
-	bool mouseover = IsMouseInRect(bounds);
+	bool mouseover = azaMouseInRect(bounds);
 	if (mouseover) {
-		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2));
+		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
 	}
 	DrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
 	azaRectShrinkMargin(&bounds, margin);
@@ -496,7 +515,7 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 		if (!valueUnit) {
 			valueUnit = "";
 		}
-		azaTooltipAdd(TextFormat("%+.1f%s", *value, valueUnit), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5));
+		azaTooltipAdd(TextFormat("%+.1f%s", *value, valueUnit), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		if (delta > 0.0f) {
@@ -504,7 +523,7 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 		} else if (delta < 0.0f) {
 			*value /= (1.0f - delta*step);
 		}
-		if (DidDoubleClick()) {
+		if (azaDidDoubleClick(0)) {
 			*value = def;
 		}
 		*value = azaClampf(*value, min, max);
@@ -524,9 +543,9 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueUnit) {
 	assert(max > min);
 	bounds.w = sliderDrawWidth;
-	bool mouseover = IsMouseInRect(bounds);
+	bool mouseover = azaMouseInRect(bounds);
 	if (mouseover) {
-		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2));
+		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
 	}
 	DrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
 	azaRectShrinkMargin(&bounds, margin);
@@ -536,11 +555,11 @@ static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max
 		if (!valueUnit) {
 			valueUnit = "";
 		}
-		azaTooltipAdd(TextFormat("%+.1f%s", *value, valueUnit), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5));
+		azaTooltipAdd(TextFormat("%+.1f%s", *value, valueUnit), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		*value += delta*step;
-		if (DidDoubleClick()) {
+		if (azaDidDoubleClick(0)) {
 			*value = def;
 		}
 		*value = azaClampf(*value, min, max);
@@ -580,16 +599,16 @@ static azaRect textboxBounds;
 
 // If textCapacity is specified, this textbox will be editable.
 static void azaDrawTextBox(azaRect bounds, char *text, uint32_t textCapacity) {
-	bool mouseover = IsMouseInRect(bounds);
+	bool mouseover = azaMouseInRect(bounds);
 	uint32_t textLen = (uint32_t)strlen(text);
-	if (textCapacity && mouseover && DidDoubleClick()) {
+	if (textCapacity && mouseover && azaDidDoubleClick(0)) {
 		textboxTextBeingEdited = text;
 		textboxSelected = true;
 		textboxCursor = textLen;
 	}
 	if (textboxTextBeingEdited == text) {
 		if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)
-		|| (!mouseover && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
+		|| (!mouseover && azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0))) {
 			textboxTextBeingEdited = NULL;
 		}
 	}
@@ -676,7 +695,7 @@ static void azaDrawTextBox(azaRect bounds, char *text, uint32_t textCapacity) {
 		textboxBounds = bounds;
 	} else {
 		if (mouseover && MeasureText(text, 10) > (bounds.w - textMargin * 2)) {
-			azaTooltipAdd(text, bounds.x, bounds.y);
+			azaTooltipAdd(text, bounds.x, bounds.y, false);
 		}
 		PushScissor(bounds);
 		DrawText(text, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
@@ -708,6 +727,202 @@ static void azaDrawTextboxBeingEdited() {
 
 
 
+// Context Menus
+
+
+
+
+static const int contextMenuItemWidth = 100;
+// textMargin*2 + 10
+static const int contextMenuItemHeight = 20;
+
+typedef void (*fp_ContextMenuAction)();
+
+typedef enum azaContextMenuKind {
+	AZA_CONTEXT_MENU_NONE=0,
+	AZA_CONTEXT_MENU_TRACK,
+	AZA_CONTEXT_MENU_SEND_ADD,
+	AZA_CONTEXT_MENU_SEND_REMOVE,
+} azaContextMenuKind;
+#define AZA_CONTEXT_MENU_KIND_COUNT (AZA_CONTEXT_MENU_TRACK+1)
+
+static void azaContextMenuOpen(azaContextMenuKind kind);
+
+static azaContextMenuKind contextMenuKind = AZA_CONTEXT_MENU_NONE;
+static azaRect contextMenuRect = {0};
+
+
+
+
+static int contextMenuTrackIndex = 0;
+
+static azaTrack* azaContextMenuTrackFromIndex() {
+	if (contextMenuTrackIndex <= 0) {
+		return &currentMixer->master;
+	} else {
+		return currentMixer->tracks.data[contextMenuTrackIndex-1];
+	}
+}
+
+static void azaContextMenuTrackAdd() {
+	AZA_LOG_TRACE("Track Add at index %d!\n", contextMenuTrackIndex);
+	azaTrack *track;
+	azaMixerAddTrack(currentMixer, contextMenuTrackIndex, &track, currentMixer->master.buffer.channelLayout, true);
+	azaTrackSetName(track, TextFormat("Track %d", contextMenuTrackIndex));
+}
+
+static void azaContextMenuTrackRemove() {
+	int toRemove = contextMenuTrackIndex-1;
+	if (toRemove >= 0) {
+		AZA_LOG_TRACE("Track Remove at index %d!\n", toRemove);
+		azaMixerRemoveTrack(currentMixer, toRemove);
+	}
+}
+
+static void azaContextMenuTrackAddSend() {
+	azaContextMenuOpen(AZA_CONTEXT_MENU_SEND_ADD);
+}
+
+static void azaContextMenuTrackRemoveSend() {
+	azaContextMenuOpen(AZA_CONTEXT_MENU_SEND_REMOVE);
+}
+
+static const fp_ContextMenuAction contextMenuTrackActions[] = {
+	azaContextMenuTrackAdd,
+	azaContextMenuTrackRemove,
+	azaContextMenuTrackAddSend,
+	azaContextMenuTrackRemoveSend,
+};
+static const char *contextMenuTrackLabels[] = {
+	"Add Track",
+	"Remove Track",
+	"Add Send",
+	"Remove Send",
+};
+
+static const uint32_t contextMenuActionCounts[] = {
+	0,
+	sizeof(contextMenuTrackActions) / sizeof(fp_ContextMenuAction),
+	0, // Dynamic
+	0, // Dynamic
+};
+static const fp_ContextMenuAction *contextMenuActions[] = {
+	NULL,
+	contextMenuTrackActions,
+	NULL, // Dynamo
+	NULL, // Dynamo
+};
+static const char **contextMenuLabels[] = {
+	NULL,
+	contextMenuTrackLabels,
+	NULL, // Hydrodynamic
+	NULL, // Hydrodynamic
+};
+
+
+
+
+static void azaContextMenuOpen(azaContextMenuKind kind) {
+	assert(kind != AZA_CONTEXT_MENU_NONE);
+	contextMenuKind = kind;
+	Vector2 mouse = GetMousePosition();
+	contextMenuRect.x = (int)mouse.x;
+	contextMenuRect.y = (int)mouse.y;
+	contextMenuRect.w = contextMenuItemWidth;
+	contextMenuRect.h = contextMenuItemHeight * contextMenuActionCounts[(uint32_t)kind];
+	azaRectFitOnScreen(&contextMenuRect);
+	mouseDepth = 1;
+}
+
+static void azaContextMenuClose() {
+	contextMenuKind = AZA_CONTEXT_MENU_NONE;
+	mouseDepth = 0;
+}
+
+static void azaDrawContextMenu() {
+	if (contextMenuKind == AZA_CONTEXT_MENU_NONE) return;
+	if (IsKeyPressed(KEY_ESCAPE) || (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1) && !azaMouseInRect(contextMenuRect))) {
+		azaContextMenuClose();
+		return;
+	}
+	azaRect choiceRect = contextMenuRect;
+	choiceRect.h = contextMenuItemHeight;
+	switch (contextMenuKind) {
+		case AZA_CONTEXT_MENU_SEND_ADD: {
+			uint32_t count = currentMixer->tracks.count; // +1 for Master, -1 for self
+			if (count == 0) {
+				azaContextMenuClose();
+			}
+			contextMenuRect.h = count * contextMenuItemHeight;
+			DrawRect(contextMenuRect, BLACK);
+			PushScissor(contextMenuRect);
+			azaTrack *target = &currentMixer->master;
+			azaTrack *track = azaContextMenuTrackFromIndex();
+			for (int32_t i = 0; i < (int32_t)currentMixer->tracks.count+1; target = currentMixer->tracks.data[i++]) {
+				if (i == contextMenuTrackIndex) continue; // Skip self
+				if (azaMouseInRect(choiceRect)) {
+					DrawRectGradientH(choiceRect, colorTooltipBGLeft, colorTooltipBGRight);
+					if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
+						azaContextMenuClose();
+						azaTrackConnect(track, target, 0.0f, NULL, 0);
+					}
+				}
+				DrawText(target->name, choiceRect.x + textMargin, choiceRect.y + textMargin, 10, WHITE);
+				choiceRect.y += choiceRect.h;
+			}
+		} break;
+		case AZA_CONTEXT_MENU_SEND_REMOVE: {
+			azaTrack *track = azaContextMenuTrackFromIndex();
+			uint32_t count = (azaTrackGetReceive(track, &currentMixer->master) != NULL);
+			for (uint32_t i = 0; i < currentMixer->tracks.count; i++) {
+				if (azaTrackGetReceive(track, currentMixer->tracks.data[i])) count++;
+			}
+			if (count == 0) {
+				azaContextMenuClose();
+			}
+			contextMenuRect.h = count * contextMenuItemHeight;
+			DrawRect(contextMenuRect, BLACK);
+			PushScissor(contextMenuRect);
+			azaTrack *target = &currentMixer->master;
+			for (int32_t i = 0; i < (int32_t)currentMixer->tracks.count+1; target = currentMixer->tracks.data[i++]) {
+				if (azaTrackGetReceive(track, target) == NULL) continue;
+				if (azaMouseInRect(choiceRect)) {
+					DrawRectGradientH(choiceRect, colorTooltipBGLeft, colorTooltipBGRight);
+					if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
+						azaContextMenuClose();
+						azaTrackDisconnect(track, target);
+					}
+				}
+				DrawText(target->name, choiceRect.x + textMargin, choiceRect.y + textMargin, 10, WHITE);
+				choiceRect.y += choiceRect.h;
+			}
+		} break;
+		default: { // Simple non-dynamic
+			DrawRect(contextMenuRect, BLACK);
+			PushScissor(contextMenuRect);
+			uint32_t count = contextMenuActionCounts[(uint32_t)contextMenuKind];
+			const char **labels = contextMenuLabels[(uint32_t)contextMenuKind];
+			const fp_ContextMenuAction *actions = contextMenuActions[(uint32_t)contextMenuKind];
+			for (uint32_t i = 0; i < count; i++) {
+				if (azaMouseInRect(choiceRect)) {
+					DrawRectGradientH(choiceRect, colorTooltipBGLeft, colorTooltipBGRight);
+					if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
+						azaContextMenuClose();
+						actions[i]();
+					}
+				}
+				DrawText(labels[i], choiceRect.x + textMargin, choiceRect.y + textMargin, 10, WHITE);
+				choiceRect.y += choiceRect.h;
+			}
+		} break;
+	}
+	DrawRectLines(contextMenuRect, WHITE);
+	PopScissor();
+}
+
+
+
+
 // Tracks
 
 
@@ -722,10 +937,10 @@ static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
 	pluginRect.h = 10 + margin * 2;
 	azaDSP *dsp = track->dsp;
 	while (dsp) {
-		bool mouseover = IsMouseInRect(pluginRect);
+		bool mouseover = azaMouseInRect(pluginRect);
 		if (mouseover) {
 			DrawRectGradientV(pluginRect, colorPluginBorderSelected, colorPluginBorder);
-			if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
 				selectedDSP = dsp;
 			}
 		}
@@ -762,7 +977,7 @@ static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 	for (uint32_t i = 0; i < currentMixer->tracks.count; i++) {
 		receive = azaTrackGetReceive(track, currentMixer->tracks.data[i]);
 		if (receive) {
-			int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, TextFormat("Track %d Send", i+1), meterDBRange, faderDBHeadroom);
+			int faderWidth = azaDrawFader(bounds, &receive->gain, &receive->mute, TextFormat("%s Send", currentMixer->tracks.data[i]->name), meterDBRange, faderDBHeadroom);
 			azaRectShrinkLeft(&bounds, faderWidth + margin);
 		}
 	}
@@ -770,6 +985,19 @@ static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 }
 
 static void azaDrawTrack(azaTrack *track, azaRect bounds) {
+	if (azaMousePressedInRect(MOUSE_BUTTON_RIGHT, 1, bounds)) {
+		if (track == &currentMixer->master) {
+			contextMenuTrackIndex = 0;
+		} else {
+			for (uint32_t i = 0; i < currentMixer->tracks.count; i++) {
+				if (track == currentMixer->tracks.data[i]) {
+					contextMenuTrackIndex = i+1;
+					break;
+				}
+			}
+		}
+		azaContextMenuOpen(AZA_CONTEXT_MENU_TRACK);
+	}
 	azaRectShrinkMargin(&bounds, margin);
 	PushScissor(bounds);
 	azaRect nameRect = {
@@ -808,7 +1036,10 @@ static void azaDrawMixer(azaMixer *mixer) {
 		trackRect.x += trackDrawWidth;
 		azaDrawTrack(mixer->tracks.data[i], trackRect);
 	}
-	azaTooltipAdd(TextFormat("CPU: %.2f%%", mixer->cpuPercentSlow), GetLogicalWidth(), 0);
+	azaTooltipAdd(TextFormat("CPU: %.2f%%", mixer->cpuPercentSlow), GetLogicalWidth(), 0, false);
+	if (mixer->hasCircularRouting) {
+		azaTooltipAdd("Circular Routing Detected!!!", 0, pluginDrawHeight - (textMargin*2 + 10), true);
+	}
 	azaMutexUnlock(&mixer->mutex);
 }
 
@@ -833,9 +1064,9 @@ static void azaDrawLookaheadLimiter(azaLookaheadLimiter *data, azaRect bounds) {
 		bounds.h,
 	};
 	azaRectShrinkLeft(&bounds, attenuationRect.w + margin);
-	bool attenuationMouseover = IsMouseInRect(attenuationRect);
+	bool attenuationMouseover = azaMouseInRect(attenuationRect);
 	if (attenuationMouseover) {
-		azaTooltipAdd("Attenuation", attenuationRect.x, attenuationRect.y - (textMargin*2 + 10));
+		azaTooltipAdd("Attenuation", attenuationRect.x, attenuationRect.y - (textMargin*2 + 10), false);
 	}
 	azaDrawMeterBackground(attenuationRect, lookaheadLimiterAttenuationMeterDBRange, 0);
 	azaRectShrinkMargin(&attenuationRect, margin);
@@ -845,10 +1076,10 @@ static void azaDrawLookaheadLimiter(azaLookaheadLimiter *data, azaRect bounds) {
 	float attenuationPeakDB = aza_amp_to_dbf(data->minAmp);
 	yOffset = azaDBToYOffsetClamped(-attenuationPeakDB, attenuationRect.h, 0, lookaheadLimiterAttenuationMeterDBRange);
 	if (attenuationMouseover) {
-		azaTooltipAdd(TextFormat("%+.1fdb", attenuationPeakDB), attenuationRect.x + attenuationRect.w + margin, attenuationRect.y + yOffset - (textMargin + 5));
+		azaTooltipAdd(TextFormat("%+.1fdb", attenuationPeakDB), attenuationRect.x + attenuationRect.w + margin, attenuationRect.y + yOffset - (textMargin + 5), false);
 	}
 	DrawLine(attenuationRect.x, attenuationRect.y + yOffset, attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset, colorLookaheadLimiterAttenuation);
-	if (IsMousePressedInRect(MOUSE_BUTTON_LEFT, attenuationRect)) {
+	if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, attenuationRect)) {
 		data->minAmp = 1.0f;
 	}
 	data->minAmpShort = 1.0f;
@@ -864,7 +1095,7 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 	rectKind.w = 80;
 	rectKind.h = textMargin*2 + 10;
 	for (int i = 0; i < AZA_FILTER_KIND_COUNT; i++) {
-		if (IsMousePressedInRect(MOUSE_BUTTON_LEFT, rectKind)) {
+		if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, rectKind)) {
 			data->config.kind = (azaFilterKind)i;
 		}
 		bool selected = ((int)data->config.kind == i);
@@ -997,8 +1228,9 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 			azaDrawMixer(currentMixer);
 			azaDrawSelectedDSP();
 			azaDrawTextboxBeingEdited();
-			azaTooltipsDraw();
-			if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+			azaDrawContextMenu();
+			azaDrawTooltips();
+			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 100)) {
 				lastClickTime = azaGetTimestamp();
 			}
 		EndDrawing();

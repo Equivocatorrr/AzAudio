@@ -22,6 +22,10 @@ typedef struct azaTrackRoute {
 	azaChannelMatrix channelMatrix;
 } azaTrackRoute;
 
+static inline void azaTrackRouteDeinit(azaTrackRoute *data) {
+	azaChannelMatrixDeinit(&data->channelMatrix);
+}
+
 // a track has the capabilities of a bus and can have sound sources on it
 typedef struct azaTrack {
 	azaBuffer buffer;
@@ -61,6 +65,7 @@ enum {
 // if dstTrackRoute is not NULL, this outputs the connection that was just made (or the existing one). This pointer is only guaranteed to be valid until the next time you call this function, so don't hold on to it)
 // May return AZA_ERROR_OUT_OF_MEMORY
 int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **dstTrackRoute, uint32_t flags);
+// Disconnects tracks if they're connected. If they're not connected, nothing happens.
 void azaTrackDisconnect(azaTrack *from, azaTrack *to);
 // Will return NULL if no such route exists.
 azaTrackRoute* azaTrackGetReceive(azaTrack *from, azaTrack *to);
@@ -90,6 +95,7 @@ typedef struct azaMixer {
 	float cpuPercentSlow;
 	// How many times have we processed?
 	uint64_t times;
+	bool hasCircularRouting;
 } azaMixer;
 
 // config.bufferFrames indicates how many frames our buffers should have. This should probably match the maximum size of the backend buffer, if applicable.
@@ -102,6 +108,7 @@ void azaMixerDeinit(azaMixer *data);
 // If dst is not NULL, it will point to the new track
 // May return AZA_ERROR_OUT_OF_MEMORY
 int azaMixerAddTrack(azaMixer *data, int32_t index, azaTrack **dst, azaChannelLayout channelLayout, bool connectToMaster);
+void azaMixerRemoveTrack(azaMixer *data, int32_t index);
 
 // Processes all the tracks to produce a result into the output track.
 // frames MUST be <= data->config.bufferFrames

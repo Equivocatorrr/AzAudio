@@ -19,8 +19,9 @@ int azaTrackInit(azaTrack *data, uint32_t bufferFrames, azaChannelLayout bufferC
 void azaTrackDeinit(azaTrack *data) {
 	azaBufferDeinit(&data->buffer);
 	for (uint32_t i = 0; i < data->receives.count; i++) {
-		azaChannelMatrixDeinit(&data->receives.data[i].channelMatrix);
+		azaTrackRouteDeinit(&data->receives.data[i]);
 	}
+	AZA_DA_DEINIT(data->receives);
 }
 
 void azaTrackAppendDSP(azaTrack *data, azaDSP *dsp) {
@@ -79,7 +80,7 @@ int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **ds
 void azaTrackDisconnect(azaTrack *from, azaTrack *to) {
 	for (uint32_t i = 0; i < to->receives.count; i++) {
 		if (to->receives.data[i].track == from) {
-			azaChannelMatrixDeinit(&to->receives.data[i].channelMatrix);
+			azaTrackRouteDeinit(&to->receives.data[i]);
 			AZA_DA_ERASE(to->receives, i, 1);
 			break;
 		}
@@ -183,6 +184,22 @@ fail:
 	return err;
 }
 
+void azaMixerRemoveTrack(azaMixer *data, int32_t index) {
+	assert(index >= 0);
+	assert(index < (int32_t)data->tracks.count);
+	azaMutexLock(&data->mutex);
+	azaTrack *track = data->tracks.data[index];
+	azaTrackDisconnect(track, &data->master);
+	for (uint32_t i = 0; i < data->tracks.count; i++) {
+		// Remove our receives from all the tracks
+		azaTrack *other = data->tracks.data[i];
+		azaTrackDisconnect(track, other);
+	}
+	azaTrackDeinit(data->tracks.data[index]);
+	AZA_DA_ERASE(data->tracks, index, 1);
+	azaMutexUnlock(&data->mutex);
+}
+
 // Modified depth-first search for directed graphs to determine whether a cycle exists.
 static int azaMixerCheckRoutingVisit(azaTrack *track) {
 	// Co-opt this search to reset whether track is processed
@@ -234,6 +251,14 @@ int azaMixerCallback(void *userdata, azaBuffer buffer) {
 	azaBuffer stash = mixer->master.buffer;
 	mixer->master.buffer = buffer;
 	int err = azaMixerProcess(buffer.frames, buffer.samplerate, mixer);
+	if (err == AZA_ERROR_MIXER_ROUTING_CYCLE) {
+		// Gracefully zero out audio since a cycle can be remedied with the mixer GUI now
+		mixer->hasCircularRouting = true;
+		azaBufferZero(buffer);
+		err = AZA_SUCCESS;
+	} else {
+		mixer->hasCircularRouting = false;
+	}
 	mixer->master.buffer = stash;
 	return err;
 }
