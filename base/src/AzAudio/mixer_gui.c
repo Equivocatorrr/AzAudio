@@ -221,11 +221,16 @@ static void azaRectFitOnScreen(azaRect *rect) {
 // Used for UI input culling (for context menus and such)
 int mouseDepth = 0;
 
-static bool azaMouseInRect(azaRect rect) {
+static Vector2 azaMousePosition() {
 	Vector2 mouse = GetMousePosition();
 	Vector2 dpi = GetWindowScaleDPI();
 	mouse.x /= dpi.x;
 	mouse.y /= dpi.y;
+	return mouse;
+}
+
+static bool azaMouseInRect(azaRect rect) {
+	Vector2 mouse = azaMousePosition();
 	int mx = (int)mouse.x;
 	int my = (int)mouse.y;
 	return (mx >= rect.x && my >= rect.y && mx <= rect.x+rect.w && my <= rect.y+rect.h);
@@ -825,7 +830,7 @@ static const char **contextMenuLabels[] = {
 static void azaContextMenuOpen(azaContextMenuKind kind) {
 	assert(kind != AZA_CONTEXT_MENU_NONE);
 	contextMenuKind = kind;
-	Vector2 mouse = GetMousePosition();
+	Vector2 mouse = azaMousePosition();
 	contextMenuRect.x = (int)mouse.x;
 	contextMenuRect.y = (int)mouse.y;
 	contextMenuRect.w = contextMenuItemWidth;
@@ -837,6 +842,21 @@ static void azaContextMenuOpen(azaContextMenuKind kind) {
 static void azaContextMenuClose() {
 	contextMenuKind = AZA_CONTEXT_MENU_NONE;
 	mouseDepth = 0;
+}
+
+// Returns whether the button was pressed
+static bool azaDrawContextMenuButton(azaRect bounds, const char *label) {
+	bool result = false;
+	if (azaMouseInRect(bounds)) {
+		DrawRectGradientH(bounds, colorTooltipBGLeft, colorTooltipBGRight);
+		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
+			result = true;
+		}
+	}
+	if (label) {
+		DrawText(label, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
+	}
+	return result;
 }
 
 static void azaDrawContextMenu() {
@@ -860,14 +880,10 @@ static void azaDrawContextMenu() {
 			azaTrack *track = azaContextMenuTrackFromIndex();
 			for (int32_t i = 0; i < (int32_t)currentMixer->tracks.count+1; target = currentMixer->tracks.data[i++]) {
 				if (i == contextMenuTrackIndex) continue; // Skip self
-				if (azaMouseInRect(choiceRect)) {
-					DrawRectGradientH(choiceRect, colorTooltipBGLeft, colorTooltipBGRight);
-					if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
-						azaContextMenuClose();
-						azaTrackConnect(track, target, 0.0f, NULL, 0);
-					}
+				if (azaDrawContextMenuButton(choiceRect, target->name)) {
+					azaContextMenuClose();
+					azaTrackConnect(track, target, 0.0f, NULL, 0);
 				}
-				DrawText(target->name, choiceRect.x + textMargin, choiceRect.y + textMargin, 10, WHITE);
 				choiceRect.y += choiceRect.h;
 			}
 		} break;
@@ -886,14 +902,10 @@ static void azaDrawContextMenu() {
 			azaTrack *target = &currentMixer->master;
 			for (int32_t i = 0; i < (int32_t)currentMixer->tracks.count+1; target = currentMixer->tracks.data[i++]) {
 				if (azaTrackGetReceive(track, target) == NULL) continue;
-				if (azaMouseInRect(choiceRect)) {
-					DrawRectGradientH(choiceRect, colorTooltipBGLeft, colorTooltipBGRight);
-					if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
-						azaContextMenuClose();
-						azaTrackDisconnect(track, target);
-					}
+				if (azaDrawContextMenuButton(choiceRect, target->name)) {
+					azaContextMenuClose();
+					azaTrackDisconnect(track, target);
 				}
-				DrawText(target->name, choiceRect.x + textMargin, choiceRect.y + textMargin, 10, WHITE);
 				choiceRect.y += choiceRect.h;
 			}
 		} break;
@@ -904,14 +916,10 @@ static void azaDrawContextMenu() {
 			const char **labels = contextMenuLabels[(uint32_t)contextMenuKind];
 			const fp_ContextMenuAction *actions = contextMenuActions[(uint32_t)contextMenuKind];
 			for (uint32_t i = 0; i < count; i++) {
-				if (azaMouseInRect(choiceRect)) {
-					DrawRectGradientH(choiceRect, colorTooltipBGLeft, colorTooltipBGRight);
-					if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
-						azaContextMenuClose();
-						actions[i]();
-					}
+				if (azaDrawContextMenuButton(choiceRect, labels[i])) {
+					azaContextMenuClose();
+					actions[i]();
 				}
-				DrawText(labels[i], choiceRect.x + textMargin, choiceRect.y + textMargin, 10, WHITE);
 				choiceRect.y += choiceRect.h;
 			}
 		} break;
