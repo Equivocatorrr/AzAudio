@@ -96,7 +96,7 @@ void updateObjects(uint32_t count, float timeDelta) {
 	}
 }
 
-int mixCallbackOutput(void *userdata, azaBuffer buffer) {
+int processCallbackOutput(void *userdata, azaBuffer buffer) {
 	float timeDelta = (float)buffer.frames / (float)buffer.samplerate;
 	int err;
 	updateObjects(bufferCat.channelLayout.count, timeDelta);
@@ -167,7 +167,7 @@ int main(int argumentCount, char** argumentValues) {
 	}
 
 	azaStream streamOutput = {0};
-	streamOutput.mixCallback = mixCallbackOutput;
+	streamOutput.processCallback = processCallbackOutput;
 	if ((err = azaStreamInitDefault(&streamOutput, AZA_OUTPUT, false)) != AZA_SUCCESS) {
 		char buffer[64];
 		fprintf(stderr, "Failed to init output stream! (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));

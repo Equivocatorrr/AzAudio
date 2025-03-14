@@ -41,7 +41,7 @@ typedef struct azaStream {
 	// Are we an AZA_INPUT or AZA_OUTPUT device? A zero value indicates AZA_OUTPUT.
 	azaDeviceInterface deviceInterface;
 	// This will be called whenever new samples are needed or produced by the backend.
-	fp_azaMixCallback mixCallback;
+	fp_azaProcessCallback processCallback;
 	// Passed into mixCallback
 	void *userdata;
 	// backend-specific data

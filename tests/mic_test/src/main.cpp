@@ -76,7 +76,7 @@ float angle = 0.0f;
 float angle2 = 0.0f;
 std::vector<float> endChannelDelays;
 
-int mixCallbackOutput(void *userdata, azaBuffer buffer) {
+int processCallbackOutput(void *userdata, azaBuffer buffer) {
 	static float *processingBuffer = new float[2048];
 	static size_t processingBufferCapacity = 2048;
 	if (processingBufferCapacity < buffer.frames) {
@@ -187,7 +187,7 @@ int mixCallbackOutput(void *userdata, azaBuffer buffer) {
 	return AZA_SUCCESS;
 }
 
-int mixCallbackInput(void *userdata, azaBuffer buffer) {
+int processCallbackInput(void *userdata, azaBuffer buffer) {
 	numInputBuffers++;
 	lastInputBufferSize = buffer.frames;
 	size_t b_i = micBuffer.size();
@@ -228,7 +228,7 @@ int main(int argumentCount, char** argumentValues) {
 			}
 		}
 		azaStream streamInput = {0};
-		streamInput.mixCallback = mixCallbackInput;
+		streamInput.processCallback = processCallbackInput;
 		if (azaStreamInit(&streamInput, azaStreamConfig {
 				/*.deviceName = */ NULL,
 				/*.samplerate = */ 0,
@@ -238,7 +238,7 @@ int main(int argumentCount, char** argumentValues) {
 		}
 		azaStream streamOutput = {0};
 		// streamOutput.channels = azaChannelLayoutStandardFromCount(NUM_CHANNELS);
-		streamOutput.mixCallback = mixCallbackOutput;
+		streamOutput.processCallback = processCallbackOutput;
 		if (azaStreamInit(&streamOutput, azaStreamConfig {
 				/* .deviceName = */ NULL,
 				/* .samplerate = */ azaStreamGetSamplerate(&streamInput),

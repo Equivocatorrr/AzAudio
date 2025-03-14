@@ -119,8 +119,8 @@ void azaChannelMatrixGenerateRoutingFromLayouts(azaChannelMatrix *data, azaChann
 // NOTE: asserts that dst and src have the same frame count
 void azaBufferMixMatrix(azaBuffer dst, float volumeDst, azaBuffer src, float volumeSrc, azaChannelMatrix *matrix);
 
-typedef int (*fp_azaMixCallback)(void *userdata, azaBuffer buffer);
-typedef int (*fp_azaMixCallbackDual)(void *userdata, azaBuffer dst, azaBuffer src);
+typedef int (*fp_azaProcessCallback)(void *userdata, azaBuffer buffer);
+typedef int (*fp_azaProcessDualCallback)(void *userdata, azaBuffer dst, azaBuffer src);
 
 
 azaBuffer azaPushSideBuffer(uint32_t frames, uint32_t channels, uint32_t samplerate);
@@ -189,12 +189,12 @@ typedef struct azaDSPUser {
 	azaDSP header;
 	void *userdata;
 	union {
-		fp_azaMixCallback processSingle;
-		fp_azaMixCallbackDual processDual;
+		fp_azaProcessCallback processSingle;
+		fp_azaProcessDualCallback processDual;
 	};
 } azaDSPUser;
-void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaMixCallback processCallback);
-void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaMixCallbackDual processCallback);
+void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaProcessCallback processCallback);
+void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaProcessDualCallback processCallback);
 int azaDSPUserProcessSingle(azaDSPUser *data, azaBuffer buffer);
 int azaDSPUserProcessDual(azaDSPUser *data, azaBuffer dst, azaBuffer src);
 
@@ -667,7 +667,8 @@ void azaKernelDeinit(azaKernel *kernel);
 float azaKernelSample(azaKernel *kernel, int i, float pos);
 
 // Makes a lanczos kernel. resolution is the number of samples between zero crossings
-void azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius);
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius);
 
 
 float azaSampleWithKernel(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos);

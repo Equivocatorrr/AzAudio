@@ -514,14 +514,14 @@ int azaDSPProcessDual(azaDSP *data, azaBuffer dst, azaBuffer src) {
 
 
 
-void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaMixCallback processCallback) {
+void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaProcessCallback processCallback) {
 	data->header.kind = AZA_DSP_USER_SINGLE;
 	data->header.structSize = allocSize;
 	data->userdata = userdata;
 	data->processSingle = processCallback;
 }
 
-void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaMixCallbackDual processCallback) {
+void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaProcessDualCallback processCallback) {
 	data->header.kind = AZA_DSP_USER_DUAL;
 	data->header.structSize = allocSize;
 	data->userdata = userdata;
@@ -1843,12 +1843,14 @@ static __m256 azaKernelSample_x8(azaKernel *kernel, int i, float pos) {
 }
 #endif // __AVX__
 
-void azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius) {
-	azaKernelInit(kernel, 1, 1+radius, resolution);
+int azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius) {
+	int err = azaKernelInit(kernel, 1, 1+radius, resolution);
+	if (err) return err;
 	for (uint32_t i = 0; i < kernel->size-1; i++) {
 		kernel->table[i] = azaLanczosf((float)i / resolution, radius);
 	}
 	kernel->table[kernel->size-1] = 0.0f;
+	return AZA_SUCCESS;
 }
 
 float azaSampleWithKernel(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos) {

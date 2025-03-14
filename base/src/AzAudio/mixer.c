@@ -264,7 +264,7 @@ int azaMixerCallback(void *userdata, azaBuffer buffer) {
 }
 
 int azaMixerStreamOpen(azaMixer *data, azaMixerConfig config, azaStreamConfig streamConfig, bool activate) {
-	data->stream.mixCallback = azaMixerCallback;
+	data->stream.processCallback = azaMixerCallback;
 	data->stream.userdata = data;
 	int err;
 	if ((err = azaStreamInit(&data->stream, streamConfig, AZA_OUTPUT, AZA_STREAM_COMMIT_FORMAT, false))) {

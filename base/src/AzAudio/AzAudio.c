@@ -57,7 +57,9 @@ int azaInit() {
 	}
 	AZA_LOG_INFO("AzAudio Version: " AZA_VERSION_FORMAT_STR "\n", AZA_VERSION_ARGS);
 
-	azaKernelMakeLanczos(&azaKernelDefaultLanczos, 128.0f, 32.0f);
+	int err;
+	err = azaKernelMakeLanczos(&azaKernelDefaultLanczos, 128.0f, 32.0f);
+	if (err) return err;
 	azaInitOscillators();
 
 	memset(&azaWorldDefault, 0, sizeof(azaWorldDefault));

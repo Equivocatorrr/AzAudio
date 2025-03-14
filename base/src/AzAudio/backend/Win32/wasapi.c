@@ -560,7 +560,7 @@ static void azaStreamProcess(azaStreamData *data) {
 	}
 
 	int err;
-	err = stream->mixCallback(stream->userdata, (azaBuffer){
+	err = stream->processCallback(stream->userdata, (azaBuffer){
 		.samples = samples,
 		.samplerate = data->processingBuffer.samplerate,
 		.frames = numFrames,
@@ -767,7 +767,7 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 	azaStreamData *data = NULL;
 	WAVEFORMATEXTENSIBLE *defaultFormat = NULL;
 	WAVEFORMATEXTENSIBLE *pClosestFormat = NULL;
-	if (stream->mixCallback == NULL) {
+	if (stream->processCallback == NULL) {
 		AZA_LOG_ERR("azaStreamInitWASAPI error: no mix callback provided.\n");
 		return AZA_ERROR_NULL_POINTER;
 	}
