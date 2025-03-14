@@ -187,14 +187,15 @@ int azaDSPProcessDual(azaDSP *data, azaBuffer dst, azaBuffer src);
 
 typedef struct azaDSPUser {
 	azaDSP header;
+	char name[32];
 	void *userdata;
 	union {
 		fp_azaProcessCallback processSingle;
 		fp_azaProcessDualCallback processDual;
 	};
 } azaDSPUser;
-void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaProcessCallback processCallback);
-void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaProcessDualCallback processCallback);
+void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, const char *name, void *userdata, fp_azaProcessCallback processCallback);
+void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, const char *name, void *userdata, fp_azaProcessDualCallback processCallback);
 int azaDSPUserProcessSingle(azaDSPUser *data, azaBuffer buffer);
 int azaDSPUserProcessDual(azaDSPUser *data, azaBuffer dst, azaBuffer src);
 

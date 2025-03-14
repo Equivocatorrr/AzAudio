@@ -142,6 +142,16 @@ static const Color colorLookaheadLimiterAttenuation = {   0, 128, 255, 255 };
 
 
 
+static const char* azaGetDSPName(azaDSP *data) {
+	switch (data->kind) {
+		case AZA_DSP_USER_SINGLE:
+		case AZA_DSP_USER_DUAL:
+			return TextFormat("[User] %s", ((azaDSPUser*)data)->name);
+		default:
+			return azaDSPKindString[(uint32_t)data->kind];
+	}
+}
+
 static int TextCountLines(const char *text) {
 	if (!text) return 0;
 	int result = 1;
@@ -953,7 +963,7 @@ static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
 			}
 		}
 		DrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
-		DrawText(azaDSPKindString[(uint32_t)dsp->kind], pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
+		DrawText(azaGetDSPName(dsp), pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
 		dsp = dsp->pNext;
 		pluginRect.y += pluginRect.h + margin;
 	}
@@ -1154,7 +1164,7 @@ static void azaDrawSelectedDSP() {
 	if (!selectedDSP) return;
 
 	azaRectShrinkMargin(&bounds, margin*2);
-	DrawText(azaDSPKindString[(uint32_t)selectedDSP->kind], bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
+	DrawText(azaGetDSPName(selectedDSP), bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
 	azaRectShrinkTop(&bounds, textMargin * 2 + 20);
 	switch (selectedDSP->kind) {
 		case AZA_DSP_NONE:

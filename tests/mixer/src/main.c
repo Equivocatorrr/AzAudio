@@ -240,7 +240,7 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	azaTrackSetName(track0, "Synth");
 
-	azaDSPUserInitSingle(&dspSynth, sizeof(dspSynth), NULL, synthProcess);
+	azaDSPUserInitSingle(&dspSynth, sizeof(dspSynth), "Synth", NULL, synthProcess);
 
 	azaTrackAppendDSP(track0, (azaDSP*)&dspSynth);
 
@@ -266,7 +266,7 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	azaTrackSetName(track1, "Spatialized");
 
-	azaDSPUserInitSingle(&dspCat, sizeof(dspCat), NULL, catProcess);
+	azaDSPUserInitSingle(&dspCat, sizeof(dspCat), "Spatializer", NULL, catProcess);
 
 	samplerCat = azaMakeSampler((azaSamplerConfig) {
 		.buffer = &bufferCat,

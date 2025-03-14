@@ -514,16 +514,26 @@ int azaDSPProcessDual(azaDSP *data, azaBuffer dst, azaBuffer src) {
 
 
 
-void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaProcessCallback processCallback) {
+void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, const char *name, void *userdata, fp_azaProcessCallback processCallback) {
 	data->header.kind = AZA_DSP_USER_SINGLE;
 	data->header.structSize = allocSize;
+	if (name) {
+		strncpy_s(data->name, sizeof(data->name), name, sizeof(data->name)-1);
+	} else {
+		memset(data->name, 0, sizeof(data->name));
+	}
 	data->userdata = userdata;
 	data->processSingle = processCallback;
 }
 
-void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, void *userdata, fp_azaProcessDualCallback processCallback) {
+void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, const char *name, void *userdata, fp_azaProcessDualCallback processCallback) {
 	data->header.kind = AZA_DSP_USER_DUAL;
 	data->header.structSize = allocSize;
+	if (name) {
+		strncpy_s(data->name, sizeof(data->name), name, sizeof(data->name)-1);
+	} else {
+		memset(data->name, 0, sizeof(data->name));
+	}
 	data->userdata = userdata;
 	data->processDual = processCallback;
 }
