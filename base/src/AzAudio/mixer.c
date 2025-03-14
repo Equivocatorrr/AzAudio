@@ -70,7 +70,7 @@ int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **ds
 	if (!(flags & AZA_TRACK_CHANNEL_ROUTING_ZERO)) {
 		azaChannelMatrixGenerateRoutingFromLayouts(&route.channelMatrix, from->buffer.channelLayout, to->buffer.channelLayout);
 	}
-	AZA_DA_APPEND(azaTrackRoute, to->receives, route, return AZA_ERROR_OUT_OF_MEMORY);
+	AZA_DA_APPEND(to->receives, route, return AZA_ERROR_OUT_OF_MEMORY);
 	if (dstTrackRoute) {
 		*dstTrackRoute = &to->receives.data[to->receives.count-1];
 	}
@@ -160,9 +160,9 @@ int azaMixerAddTrack(azaMixer *data, int32_t index, azaTrack **dst, azaChannelLa
 	if (!result) return AZA_ERROR_OUT_OF_MEMORY;
 	azaMutexLock(&data->mutex);
 	if (index < 0) {
-		AZA_DA_APPEND(azaTrack*, data->tracks, result, err = AZA_ERROR_OUT_OF_MEMORY);
+		AZA_DA_APPEND(data->tracks, result, err = AZA_ERROR_OUT_OF_MEMORY);
 	} else {
-		AZA_DA_INSERT(azaTrack*, data->tracks, index, result, err = AZA_ERROR_OUT_OF_MEMORY);
+		AZA_DA_INSERT(data->tracks, index, result, err = AZA_ERROR_OUT_OF_MEMORY);
 	}
 	if (err) goto fail;
 	err = azaTrackInit(result, data->config.bufferFrames, channelLayout);

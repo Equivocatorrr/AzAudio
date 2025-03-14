@@ -66,6 +66,37 @@ azaKernel azaKernelDefaultLanczos;
 
 azaWorld azaWorldDefault;
 
+azaDSPRegEntries azaDSPRegistry = {0};
+
+int azaDSPAddRegEntry(const char *name, azaDSP* (*fp_makeDSP)(uint8_t), void (*fp_freeDSP)(azaDSP*)) {
+	AZA_DA_RESERVE_ONE_AT_END(azaDSPRegistry, return AZA_ERROR_OUT_OF_MEMORY);
+	azaDSPRegEntry *dst = &azaDSPRegistry.data[azaDSPRegistry.count++];
+	if (name) {
+		strncpy_s(dst->name, sizeof(dst->name), name, sizeof(dst->name)-1);
+	} else {
+		memset(dst->name, 0, sizeof(dst->name));
+	}
+	dst->fp_makeDSP = fp_makeDSP;
+	dst->fp_freeDSP = fp_freeDSP;
+	return AZA_SUCCESS;
+}
+
+int azaDSPRegistryInit() {
+	AZA_DA_RESERVE_COUNT(azaDSPRegistry, 10, return AZA_ERROR_OUT_OF_MEMORY);
+	azaDSPAddRegEntry("Cubic Limiter", azaMakeDefaultCubicLimiter, azaFreeCubicLimiter);
+	azaDSPAddRegEntry("Lookahead Limiter", azaMakeDefaultLookaheadLimiter, (void(*)(azaDSP*))azaFreeLookaheadLimiter);
+	azaDSPAddRegEntry("Filter", azaMakeDefaultFilter, (void(*)(azaDSP*))azaFreeFilter);
+	azaDSPAddRegEntry("Compressor", azaMakeDefaultCompressor, (void(*)(azaDSP*))azaFreeCompressor);
+	azaDSPAddRegEntry("Gate", azaMakeDefaultGate, (void(*)(azaDSP*))azaFreeGate);
+	azaDSPAddRegEntry("Delay", azaMakeDefaultDelay, (void(*)(azaDSP*))azaFreeDelay);
+	azaDSPAddRegEntry("Dynamic Delay", azaMakeDefaultDelayDynamic, (void(*)(azaDSP*))azaFreeDelayDynamic);
+	azaDSPAddRegEntry("Reverb", azaMakeDefaultReverb, (void(*)(azaDSP*))azaFreeReverb);
+	azaDSPAddRegEntry("Sampler", azaMakeDefaultSampler, (void(*)(azaDSP*))azaFreeSampler);
+	azaDSPAddRegEntry("RMS", azaMakeDefaultRMS, (void(*)(azaDSP*))azaFreeRMS);
+	return AZA_SUCCESS;
+}
+
+
 azaBuffer azaPushSideBuffer(uint32_t frames, uint32_t channels, uint32_t samplerate) {
 	assert(sideBuffersInUse < AZA_MAX_SIDE_BUFFERS);
 	azaBuffer *buffer = &sideBufferPool[sideBuffersInUse];
@@ -667,6 +698,13 @@ void azaFreeRMS(azaRMS *data) {
 	aza_free(data);
 }
 
+azaDSP* azaMakeDefaultRMS(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeRMS((azaRMSConfig) {
+		.windowSamples = 128,
+		.combineOp = NULL,
+	}, channelCapInline);
+}
+
 static int azaHandleRMSBuffer(azaRMS *data, uint8_t channels) {
 	if (data->bufferCap < data->config.windowSamples * channels) {
 		uint32_t newBufferCap = (uint32_t)aza_grow(data->bufferCap, data->config.windowSamples * channels, 32);
@@ -776,6 +814,10 @@ void azaFreeCubicLimiter(azaCubicLimiter *data) {
 	aza_free(data);
 }
 
+azaDSP* azaMakeDefaultCubicLimiter(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeCubicLimiter();
+}
+
 int azaCubicLimiterProcess(azaCubicLimiter *data, azaBuffer buffer) {
 	int err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
@@ -826,6 +868,13 @@ azaLookaheadLimiter* azaMakeLookaheadLimiter(azaLookaheadLimiterConfig config, u
 void azaFreeLookaheadLimiter(azaLookaheadLimiter *data) {
 	azaLookaheadLimiterDeinit(data);
 	aza_free(data);
+}
+
+azaDSP* azaMakeDefaultLookaheadLimiter(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
+		.gainInput = 0.0f,
+		.gainOutput = 0.0f,
+	}, channelCapInline);
 }
 
 int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
@@ -937,6 +986,14 @@ void azaFreeFilter(azaFilter *data) {
 	aza_free(data);
 }
 
+azaDSP* azaMakeDefaultFilter(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeFilter((azaFilterConfig) {
+		.kind = AZA_FILTER_LOW_PASS,
+		.frequency = 500.0f,
+		.dryMix = 0.0f,
+	}, channelCapInline);
+}
+
 int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
@@ -1018,6 +1075,15 @@ azaCompressor* azaMakeCompressor(azaCompressorConfig config, uint8_t channelCapI
 void azaFreeCompressor(azaCompressor *data) {
 	azaCompressorDeinit(data);
 	aza_free(data);
+}
+
+azaDSP* azaMakeDefaultCompressor(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeCompressor((azaCompressorConfig) {
+		.threshold = -12.0f,
+		.ratio = 10.0f,
+		.attack = 50.0f,
+		.decay = 200.0f,
+	}, channelCapInline);
 }
 
 int azaCompressorProcess(azaCompressor *data, azaBuffer buffer) {
@@ -1104,6 +1170,17 @@ azaDelay* azaMakeDelay(azaDelayConfig config, uint8_t channelCapInline) {
 void azaFreeDelay(azaDelay *data) {
 	azaDelayDeinit(data);
 	aza_free(data);
+}
+
+azaDSP* azaMakeDefaultDelay(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeDelay((azaDelayConfig) {
+		.gain = -6.0f,
+		.gainDry = 0.0f,
+		.delay = 300.0f,
+		.feedback = 0.5f,
+		.pingpong = 0.0f,
+		.wetEffects = NULL,
+	}, channelCapInline);
 }
 
 static int azaDelayHandleBufferResizes(azaDelay *data, uint32_t samplerate, uint8_t channelCount) {
@@ -1314,6 +1391,18 @@ void azaFreeReverb(azaReverb *data) {
 	aza_free(data);
 }
 
+azaDSP* azaMakeDefaultReverb(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeReverb((azaReverbConfig) {
+		.gain = -9.0f,
+		.gainDry = 0.0f,
+		.muteWet = false,
+		.muteDry = false,
+		.roomsize = 5.0f,
+		.color = 1.0f,
+		.delay = 50.0f,
+	}, channelCapInline);
+}
+
 int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
@@ -1396,11 +1485,20 @@ void azaFreeSampler(azaSampler *data) {
 	aza_free(data);
 }
 
+azaDSP* azaMakeDefaultSampler(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeSampler((azaSamplerConfig) {
+		.buffer = NULL,
+		.speed = 1.0f,
+		.gain = 0.0f,
+	});
+}
+
 int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
-	if (data == NULL || data->config.buffer == NULL) return AZA_ERROR_NULL_POINTER;
+	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
+	if (!data->config.buffer) return AZA_SUCCESS;
 	if (buffer.channelLayout.count != data->config.buffer->channelLayout.count) return AZA_ERROR_MISMATCHED_CHANNEL_COUNT;
 	float transition = expf(-1.0f / (AZAUDIO_SAMPLER_TRANSITION_FRAMES));
 	float samplerateFactor = (float)data->config.buffer->samplerate / (float)buffer.samplerate;
@@ -1499,6 +1597,15 @@ azaGate* azaMakeGate(azaGateConfig config) {
 void azaFreeGate(azaGate *data) {
 	azaGateDeinit(data);
 	aza_free(data);
+}
+
+azaDSP* azaMakeDefaultGate(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeGate((azaGateConfig) {
+		.threshold = -18.0f,
+		.attack = 5.0f,
+		.decay = 100.0f,
+		.activationEffects = NULL,
+	});
 }
 
 int azaGateProcess(azaGate *data, azaBuffer buffer) {
@@ -1673,6 +1780,18 @@ azaDelayDynamic* azaMakeDelayDynamic(azaDelayDynamicConfig config, uint8_t chann
 void azaFreeDelayDynamic(azaDelayDynamic *data) {
 	azaDelayDynamicDeinit(data);
 	aza_free(data);
+}
+
+azaDSP* azaMakeDefaultDelayDynamic(uint8_t channelCapInline) {
+	return (azaDSP*)azaMakeDelayDynamic((azaDelayDynamicConfig) {
+		.gain = -6.0f,
+		.gainDry = 0.0f,
+		.delayMax = 500.0f,
+		.feedback = 0.5f,
+		.pingpong = 0.0f,
+		.wetEffects = NULL,
+		.kernel = NULL,
+	}, channelCapInline, channelCapInline, NULL);
 }
 
 int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endChannelDelays) {

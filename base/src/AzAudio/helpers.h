@@ -62,42 +62,46 @@ struct {\
 	uint32_t capacity;\
 } name;
 
-#define AZA_DA_APPEND(type, name, value, onAllocFail) {\
-	if ((name).count == (name).capacity) {\
-		uint32_t aza_newCapacity = (uint32_t)aza_grow((name).capacity, (name).count+1, 8);\
-		type *aza_newData = aza_calloc(aza_newCapacity, sizeof(type));\
-		if (!aza_newData) { onAllocFail; }\
-		(name).capacity = aza_newCapacity;\
-		memcpy(aza_newData, (name).data, (name).count * sizeof(type));\
+#define AZA_DA_RESERVE_COUNT(name, num, onAllocFail)\
+if ((name).capacity < (num)) {\
+	uint32_t aza_newCapacity = (uint32_t)aza_grow((name).capacity, (num), 8);\
+	void *aza_newData = aza_calloc(aza_newCapacity, sizeof((name).data[0]));\
+	if (!aza_newData) { onAllocFail; }\
+	(name).capacity = aza_newCapacity;\
+	if ((name).data) {\
+		memcpy(aza_newData, (name).data, (name).count * sizeof((name).data[0]));\
 		aza_free((name).data);\
-		(name).data = aza_newData;\
 	}\
+	(name).data = aza_newData;\
+}
+
+#define AZA_DA_RESERVE_ONE_AT_END(name, onAllocFail) AZA_DA_RESERVE_COUNT(name, (name).count+1, onAllocFail)
+
+#define AZA_DA_APPEND(name, value, onAllocFail) {\
+	AZA_DA_RESERVE_ONE_AT_END(name, onAllocFail);\
 	(name).data[(name).count++] = value;\
 }
 
-#define AZA_DA_INSERT(type, name, index, value, onAllocFail) {\
+#define AZA_DA_INSERT(name, index, value, onAllocFail) {\
 	assert((uint32_t)(index) >= 0);\
 	assert((uint32_t)(index) <= (name).count);\
 	if ((name).count == (name).capacity) {\
 		uint32_t aza_newCapacity = (uint32_t)aza_grow((name).capacity, (name).count+1, 8);\
-		type *aza_newData = aza_calloc(aza_newCapacity, sizeof(type));\
+		void *aza_newData = aza_calloc(aza_newCapacity, sizeof((name).data[0]));\
 		if (!aza_newData) { onAllocFail; }\
 		(name).capacity = aza_newCapacity;\
-		for (uint32_t aza_i = 0; aza_i < (uint32_t)(index); aza_i++) {\
-			aza_newData[aza_i] = (name).data[aza_i];\
+		if ((name).data) {\
+			memcpy(aza_newData, (name).data, (uint32_t)(index) * sizeof((name).data[0]));\
+			memcpy((char*)aza_newData + (uint32_t)((index)+1) * sizeof((name).data[0]), (name).data + (uint32_t)(index), ((name).count - (uint32_t)(index)) * sizeof((name).data[0]));\
+			aza_free((name).data);\
 		}\
-		aza_newData[(index)] = (value);\
-		for (uint32_t aza_i = (index); aza_i < (name).count; aza_i++) {\
-			aza_newData[aza_i+1] = (name).data[aza_i];\
-		}\
-		aza_free((name).data);\
 		(name).data = aza_newData;\
 	} else {\
 		for (uint32_t aza_i = (name).count; aza_i > (uint32_t)(index); aza_i--) {\
 			(name).data[aza_i] = (name).data[aza_i-1];\
 		}\
-		(name).data[(index)] = (value);\
 	}\
+	(name).data[(uint32_t)(index)] = (value);\
 	(name).count++;\
 }
 
