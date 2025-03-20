@@ -142,16 +142,6 @@ static const Color colorLookaheadLimiterAttenuation = {   0, 128, 255, 255 };
 
 
 
-static const char* azaGetDSPName(azaDSP *data) {
-	switch (data->kind) {
-		case AZA_DSP_USER_SINGLE:
-		case AZA_DSP_USER_DUAL:
-			return TextFormat("[User] %s", ((azaDSPUser*)data)->name);
-		default:
-			return azaDSPKindString[(uint32_t)data->kind];
-	}
-}
-
 static int TextCountLines(const char *text) {
 	if (!text) return 0;
 	int result = 1;
@@ -758,18 +748,30 @@ typedef enum azaContextMenuKind {
 	AZA_CONTEXT_MENU_TRACK,
 	AZA_CONTEXT_MENU_SEND_ADD,
 	AZA_CONTEXT_MENU_SEND_REMOVE,
+	AZA_CONTEXT_MENU_TRACK_FX,
+	AZA_CONTEXT_MENU_TRACK_FX_ADD,
+	AZA_CONTEXT_MENU_KIND_COUNT,
 } azaContextMenuKind;
-#define AZA_CONTEXT_MENU_KIND_COUNT (AZA_CONTEXT_MENU_TRACK+1)
 
 static void azaContextMenuOpen(azaContextMenuKind kind);
+
+
+
+// Context Menu layout state
+
+
 
 static azaContextMenuKind contextMenuKind = AZA_CONTEXT_MENU_NONE;
 static azaRect contextMenuRect = {0};
 
 
 
+// Specific context menu state
+
+
 
 static int contextMenuTrackIndex = 0;
+static azaDSP *contextMenuTrackFXDSP = NULL;
 
 static azaTrack* azaContextMenuTrackFromIndex() {
 	if (contextMenuTrackIndex <= 0) {
@@ -778,6 +780,25 @@ static azaTrack* azaContextMenuTrackFromIndex() {
 		return currentMixer->tracks.data[contextMenuTrackIndex-1];
 	}
 }
+
+static void azaContextMenuSetIndexFromTrack(azaTrack *track) {
+	if (track == &currentMixer->master) {
+		contextMenuTrackIndex = 0;
+	} else {
+		for (uint32_t i = 0; i < currentMixer->tracks.count; i++) {
+			if (track == currentMixer->tracks.data[i]) {
+				contextMenuTrackIndex = i+1;
+				break;
+			}
+		}
+	}
+}
+
+
+
+// AZA_CONTEXT_MENU_TRACK
+
+
 
 static void azaContextMenuTrackAdd() {
 	AZA_LOG_TRACE("Track Add at index %d!\n", contextMenuTrackIndex);
@@ -815,26 +836,42 @@ static const char *contextMenuTrackLabels[] = {
 	"Remove Send",
 };
 
+
+
+// Tables for generic context menus (non-dynamic ones)
+
+
+
 static const uint32_t contextMenuActionCounts[] = {
 	0,
 	sizeof(contextMenuTrackActions) / sizeof(fp_ContextMenuAction),
 	0, // Dynamic
 	0, // Dynamic
+	0, // Dynamic
+	0, // Dynamic
 };
+static_assert((sizeof(contextMenuActionCounts) / sizeof(contextMenuActionCounts[0])) == AZA_CONTEXT_MENU_KIND_COUNT, "Pls update contextMenuActionCounts");
 static const fp_ContextMenuAction *contextMenuActions[] = {
 	NULL,
 	contextMenuTrackActions,
 	NULL, // Dynamo
 	NULL, // Dynamo
+	NULL, // Dynamo
+	NULL, // Dynamo
 };
+static_assert((sizeof(contextMenuActions) / sizeof(contextMenuActions[0])) == AZA_CONTEXT_MENU_KIND_COUNT, "Pls update contextMenuActions");
 static const char **contextMenuLabels[] = {
 	NULL,
 	contextMenuTrackLabels,
 	NULL, // Hydrodynamic
 	NULL, // Hydrodynamic
+	NULL, // Hydrodynamic
+	NULL, // Hydrodynamic
 };
+static_assert((sizeof(contextMenuLabels) / sizeof(contextMenuLabels[0])) == AZA_CONTEXT_MENU_KIND_COUNT, "Pls update contextMenuLabels");
 
 
+// Context menu interface
 
 
 static void azaContextMenuOpen(azaContextMenuKind kind) {
@@ -884,6 +921,7 @@ static void azaDrawContextMenu() {
 				azaContextMenuClose();
 			}
 			contextMenuRect.h = count * contextMenuItemHeight;
+			azaRectFitOnScreen(&contextMenuRect);
 			DrawRect(contextMenuRect, BLACK);
 			PushScissor(contextMenuRect);
 			azaTrack *target = &currentMixer->master;
@@ -907,6 +945,7 @@ static void azaDrawContextMenu() {
 				azaContextMenuClose();
 			}
 			contextMenuRect.h = count * contextMenuItemHeight;
+			azaRectFitOnScreen(&contextMenuRect);
 			DrawRect(contextMenuRect, BLACK);
 			PushScissor(contextMenuRect);
 			azaTrack *target = &currentMixer->master;
@@ -915,6 +954,50 @@ static void azaDrawContextMenu() {
 				if (azaDrawContextMenuButton(choiceRect, target->name)) {
 					azaContextMenuClose();
 					azaTrackDisconnect(track, target);
+				}
+				choiceRect.y += choiceRect.h;
+			}
+		} break;
+		case AZA_CONTEXT_MENU_TRACK_FX: {
+			uint32_t count = 1 + (contextMenuTrackFXDSP != NULL);
+			contextMenuRect.h = count * contextMenuItemHeight;
+			azaRectFitOnScreen(&contextMenuRect);
+			DrawRect(contextMenuRect, BLACK);
+			PushScissor(contextMenuRect);
+			if (contextMenuTrackFXDSP) {
+				if (azaDrawContextMenuButton(choiceRect, TextFormat("Remove %s", azaGetDSPName(contextMenuTrackFXDSP)))) {
+					azaTrackRemoveDSP(azaContextMenuTrackFromIndex(), contextMenuTrackFXDSP);
+					if (azaDSPMetadataGetOwned(contextMenuTrackFXDSP->metadata)) {
+						if (selectedDSP == contextMenuTrackFXDSP) {
+							selectedDSP = NULL;
+						}
+						azaFreeDSP(contextMenuTrackFXDSP);
+						contextMenuTrackFXDSP = NULL;
+					}
+					azaContextMenuClose();
+				}
+				choiceRect.y += choiceRect.h;
+			}
+			if (azaDrawContextMenuButton(choiceRect, "Add Plugin")) {
+				azaContextMenuOpen(AZA_CONTEXT_MENU_TRACK_FX_ADD);
+			}
+		} break;
+		case AZA_CONTEXT_MENU_TRACK_FX_ADD: {
+			azaTrack *track = azaContextMenuTrackFromIndex();
+			uint32_t count = 0;
+			for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
+				count += (uint32_t)(azaDSPRegistry.data[i].fp_makeDSP != NULL);
+			}
+			contextMenuRect.h = count * contextMenuItemHeight;
+			azaRectFitOnScreen(&contextMenuRect);
+			DrawRect(contextMenuRect, BLACK);
+			PushScissor(contextMenuRect);
+			for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
+				if (azaDSPRegistry.data[i].fp_makeDSP == NULL) continue;
+				if (azaDrawContextMenuButton(choiceRect, azaDSPRegistry.data[i].name)) {
+					azaDSP *newDSP = azaDSPRegistry.data[i].fp_makeDSP(track->buffer.channelLayout.count);
+					azaTrackInsertDSP(track, newDSP, contextMenuTrackFXDSP);
+					azaContextMenuClose();
 				}
 				choiceRect.y += choiceRect.h;
 			}
@@ -953,6 +1036,7 @@ static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
 	azaRect pluginRect = bounds;
 	pluginRect.y += trackFXScrollY;
 	pluginRect.h = 10 + margin * 2;
+	azaDSP *mouseoverDSP = NULL;
 	azaDSP *dsp = track->dsp;
 	while (dsp) {
 		bool mouseover = azaMouseInRect(pluginRect);
@@ -961,6 +1045,7 @@ static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
 			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
 				selectedDSP = dsp;
 			}
+			mouseoverDSP = dsp;
 		}
 		DrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
 		DrawText(azaGetDSPName(dsp), pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
@@ -969,9 +1054,18 @@ static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
 	}
 	if (pluginRect.y + pluginRect.h > bounds.y + bounds.h) trackFXCanScrollDown = true;
 	PopScissor();
+	if (azaMousePressedInRect(MOUSE_BUTTON_RIGHT, 1, bounds)) {
+		azaContextMenuSetIndexFromTrack(track);
+		contextMenuTrackFXDSP = mouseoverDSP;
+		azaContextMenuOpen(AZA_CONTEXT_MENU_TRACK_FX);
+	}
 }
 
 static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
+	if (azaMousePressedInRect(MOUSE_BUTTON_RIGHT, 1, bounds)) {
+		azaContextMenuSetIndexFromTrack(track);
+		azaContextMenuOpen(AZA_CONTEXT_MENU_TRACK);
+	}
 	DrawRectangleGradientV(bounds.x, bounds.y, bounds.w, bounds.h, colorTrackControlsTop, colorTrackControlsBot);
 	azaRectShrinkMargin(&bounds, margin);
 	// Fader
@@ -1003,19 +1097,6 @@ static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 }
 
 static void azaDrawTrack(azaTrack *track, azaRect bounds) {
-	if (azaMousePressedInRect(MOUSE_BUTTON_RIGHT, 1, bounds)) {
-		if (track == &currentMixer->master) {
-			contextMenuTrackIndex = 0;
-		} else {
-			for (uint32_t i = 0; i < currentMixer->tracks.count; i++) {
-				if (track == currentMixer->tracks.data[i]) {
-					contextMenuTrackIndex = i+1;
-					break;
-				}
-			}
-		}
-		azaContextMenuOpen(AZA_CONTEXT_MENU_TRACK);
-	}
 	azaRectShrinkMargin(&bounds, margin);
 	PushScissor(bounds);
 	azaRect nameRect = {

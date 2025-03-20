@@ -53,6 +53,10 @@ void azaTrackDeinit(azaTrack *data);
 void azaTrackAppendDSP(azaTrack *data, azaDSP *dsp);
 // Adds a dsp to the beginning of the dsp chain
 void azaTrackPrependDSP(azaTrack *data, azaDSP *dsp);
+// Inserts the dsp into the place of dst, making dst come after dsp. If dst is NULL, this works the same as append.
+void azaTrackInsertDSP(azaTrack *data, azaDSP *dsp, azaDSP *dst);
+// Finds the dsp in the chain and removes it (does not free dsp)
+void azaTrackRemoveDSP(azaTrack *data, azaDSP *dsp);
 
 void azaTrackSetName(azaTrack *data, const char *name);
 

@@ -21,52 +21,69 @@ azaLookaheadLimiter *limiter = NULL;
 
 // Track 0
 
-azaFilter *filter = NULL;
-azaDSPUser dspSynth;
-float gen[8] = {0.0f};
-float freqs[8] = {
-	// 25.0f,
-	// 50.0f,
-	// 75.0f,
-	100.0f,
-	125.0f,
-	150.0f,
-	175.0f,
-	200.0f,
-	300.0f,
-	400.0f,
-	500.0f,
-	// 600.0f,
-	// 700.0f,
-	// 800.0f,
-	// 900.0f,
-};
-float gains[8] = {
-	1.0f,
-	0.5f,
-	0.25f,
-	0.125f,
-	0.0625f,
-	0.03125f,
-	0.015625f,
-	0.0078125f,
-};
-float lfo = 0.0f;
+typedef struct Synth {
+	azaDSPUser header;
+	azaFilter *filter;
+	float gen[1];
+	float lfo;
+	int32_t impulseFrame;
+} Synth;
+azaDSP *dspSynth = NULL;
+
 int synthProcess(void *userdata, azaBuffer buffer) {
+	Synth *synth = userdata;
 	float timestep = 1.0f / (float)buffer.samplerate;
 	for (uint32_t i = 0; i < buffer.frames; i++) {
 		float sample = 0.0f;
-		for (uint32_t o = 0; o < sizeof(gen) / sizeof(float); o++) {
-			sample += azaOscTriangle(gen[o]) * gains[o];
-			gen[o] = azaWrap01f(gen[o] + timestep * freqs[o]);
+		// float freqMul = (1.0f + (azaOscTriangle(synth->lfo) * 0.5f + 0.5f) * 9.0f);
+		for (uint32_t o = 0; o < sizeof(synth->gen) / sizeof(float); o++) {
+			float freq = (float)(o*2+1) * 100.0f;
+			float amp = 1.0f / (float)(o*2+1);
+			float genstep = timestep * freq;
+			float antialiasingGain = azaLinstepf(genstep, 0.5f, 0.495f);
+			if (antialiasingGain == 0.0f) break;
+			sample += azaOscSine(synth->gen[o]) * amp * antialiasingGain;
+			// sample += -azaOscSaw(synth->gen[o] + 0.5f) * amp * antialiasingGain;
+			synth->gen[o] = azaWrap01f(synth->gen[o] + genstep);
 		}
-		sample *= (1.0f + azaOscSine(lfo)) * 0.5f;
-		lfo = azaWrap01f(lfo + timestep);
+		// sample *= (1.0f + azaOscSine(synth->lfo)) * 0.5f;
+		synth->lfo = azaWrap01f(synth->lfo + timestep * 0.1f);
+		if ((int32_t)i == synth->impulseFrame) {
+			sample = 10.0f;
+		}
 		for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 			buffer.samples[i * buffer.stride + c] = sample;
 		}
 	}
+	synth->impulseFrame -= buffer.frames;
+	if (synth->impulseFrame < 0) {
+		synth->impulseFrame += 100000;
+	}
 	return AZA_SUCCESS;
+}
+
+azaDSP* MakeDefaultSynth(uint8_t channelCountInline) {
+	Synth *result = aza_calloc(1, sizeof(Synth));
+	if (!result) return NULL;
+	azaDSPUserInitSingle(&result->header, sizeof(*result), "Synth", result, synthProcess);
+	result->filter = azaMakeFilter((azaFilterConfig) {
+		.kind = AZA_FILTER_LOW_PASS,
+		.frequency = 500.0f,
+	}, channelCountInline);
+	result->header.header.pNext = (azaDSP*)result->filter;
+	if (!result->filter) goto fail;
+	result->gen[0] = 0.0f;
+	result->lfo = 0.25f;
+	result->impulseFrame = 100000;
+	return (azaDSP*)result;
+fail:
+	aza_free(result);
+	return NULL;
+}
+
+void FreeSynth(Synth *data) {
+	azaFreeFilter(data->filter);
+	aza_free(data);
 }
 
 // Track 1
@@ -226,6 +243,8 @@ int main(int argumentCount, char** argumentValues) {
 
 	// Configure all the DSP functions
 
+	azaDSPAddRegEntry("Synth", MakeDefaultSynth, (void(*)(azaDSP*))FreeSynth);
+
 	// Track 0
 
 	azaTrack *track0;
@@ -240,16 +259,8 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	azaTrackSetName(track0, "Synth");
 
-	azaDSPUserInitSingle(&dspSynth, sizeof(dspSynth), "Synth", NULL, synthProcess);
-
-	azaTrackAppendDSP(track0, (azaDSP*)&dspSynth);
-
-	filter = azaMakeFilter((azaFilterConfig) {
-		.kind = AZA_FILTER_LOW_PASS,
-		.frequency = 500.0f,
-	}, track0->buffer.channelLayout.count);
-
-	azaTrackAppendDSP(track0, (azaDSP*)filter);
+	dspSynth = MakeDefaultSynth(track0->buffer.channelLayout.count);
+	azaTrackAppendDSP(track0, dspSynth);
 
 	// We can use this to change the gain on an existing connection
 	// azaTrackConnect(track0, &mixer.master, -6.0f, NULL, 0);
@@ -367,6 +378,8 @@ int main(int argumentCount, char** argumentValues) {
 
 	azaFreeReverb(reverb);
 	azaFreeFilter(reverbHighpass);
+
+	FreeSynth((Synth*)dspSynth);
 
 	azaDeinit();
 	return 0;

@@ -178,11 +178,38 @@ extern const char *azaDSPKindString[];
 // Generic interface to all the DSP structures
 typedef struct azaDSP {
 	azaDSPKind kind;
-	uint32_t structSize;
+	/* struct {
+		uint32_t structSize : 31;
+		// This bit will be set if we were created with any of the azaMake... functions. As such, removal from a dsp chain will imply calling azaFree... on us as well.
+		bool owned : 1;
+	} metadata;
+	We do manual bit packing because god forbid our language spec gives us any guarantees or control over anything. */
+	uint32_t metadata;
 	struct azaDSP *pNext;
 } azaDSP;
 int azaDSPProcessSingle(azaDSP *data, azaBuffer buffer);
 int azaDSPProcessDual(azaDSP *data, azaBuffer dst, azaBuffer src);
+static inline uint32_t azaDSPPackMetadata(uint32_t structSize, bool owned) {
+	assert(structSize < ((uint32_t)1 << 31));
+	uint32_t result = structSize | ((uint32_t)owned << 31);
+	return result;
+}
+static inline uint32_t azaDSPMetadataGetStructSize(uint32_t metadata) {
+	return metadata & (((uint32_t)1 << 31) - 1);
+}
+static inline bool azaDSPMetadataGetOwned(uint32_t metadata) {
+	return metadata >> 31;
+}
+static inline void azaDSPMetadataSetOwned(uint32_t *metadata) {
+	*metadata |= (uint32_t)1 << 31;
+}
+
+// If you need to hold on to the name, copy it out as this pointer is only valid until the next call.
+const char* azaGetDSPName(azaDSP *data);
+
+// Will look for the dsp in the registry by name, and if it finds it, call the appropriate azaFree on it.
+// Returns whether it was found and freed.
+bool azaFreeDSP(azaDSP *dsp);
 
 
 

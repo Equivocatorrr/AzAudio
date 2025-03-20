@@ -25,21 +25,41 @@ void azaTrackDeinit(azaTrack *data) {
 }
 
 void azaTrackAppendDSP(azaTrack *data, azaDSP *dsp) {
-	if (data->dsp) {
-		azaDSP *nextDSP = data->dsp;
-		while (nextDSP->pNext) {
-			nextDSP = nextDSP->pNext;
-		}
-		nextDSP->pNext = dsp;
-	} else {
-		data->dsp = dsp;
+	azaDSP **ppdst = &data->dsp;
+	while (*ppdst) {
+		ppdst = &(*ppdst)->pNext;
 	}
+	*ppdst = dsp;
 }
 
 void azaTrackPrependDSP(azaTrack *data, azaDSP *dsp) {
 	azaDSP *nextDSP = data->dsp;
 	data->dsp = dsp;
 	dsp->pNext = nextDSP;
+}
+
+void azaTrackInsertDSP(azaTrack *data, azaDSP *dsp, azaDSP *dst) {
+	azaDSP **ppdst = &data->dsp;
+	while (true) {
+		if (*ppdst == dst) {
+			dsp->pNext = *ppdst;
+			*ppdst = dsp;
+			break;
+		}
+		assert(*ppdst); // Means dst is not found.
+		ppdst = &(*ppdst)->pNext;
+	}
+}
+
+void azaTrackRemoveDSP(azaTrack *data, azaDSP *dsp) {
+	azaDSP **ppdst = &data->dsp;
+	while (*ppdst) {
+		if (*ppdst == dsp) {
+			*ppdst = dsp->pNext;
+			break;
+		}
+		ppdst = &(*ppdst)->pNext;
+	}
 }
 
 void azaTrackSetName(azaTrack *data, const char *name) {

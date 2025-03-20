@@ -20,6 +20,7 @@
 #endif
 
 #include <stdlib.h>
+#include <stdio.h> // snprintf
 #include <string.h>
 #ifndef AZAUDIO_NO_THREADS_H
 #include <threads.h>
@@ -55,6 +56,18 @@ const char *azaDSPKindString[] = {
 };
 static_assert(sizeof(azaDSPKindString) / sizeof(const char*) == AZA_DSP_KIND_COUNT, "Pls update azaDSPKindString");
 
+const char* azaGetDSPName(azaDSP *data) {
+	static char buffer[64];
+	switch (data->kind) {
+		case AZA_DSP_USER_SINGLE:
+		case AZA_DSP_USER_DUAL:
+			snprintf(buffer, sizeof(buffer), "[User] %s", ((azaDSPUser*)data)->name);
+			return buffer;
+		default:
+			return azaDSPKindString[(uint32_t)data->kind];
+	}
+}
+
 const char *azaFilterKindString[] = {
 	"High Pass",
 	"Low Pass",
@@ -82,18 +95,30 @@ int azaDSPAddRegEntry(const char *name, azaDSP* (*fp_makeDSP)(uint8_t), void (*f
 }
 
 int azaDSPRegistryInit() {
-	AZA_DA_RESERVE_COUNT(azaDSPRegistry, 10, return AZA_ERROR_OUT_OF_MEMORY);
-	azaDSPAddRegEntry("Cubic Limiter", azaMakeDefaultCubicLimiter, azaFreeCubicLimiter);
-	azaDSPAddRegEntry("Lookahead Limiter", azaMakeDefaultLookaheadLimiter, (void(*)(azaDSP*))azaFreeLookaheadLimiter);
-	azaDSPAddRegEntry("Filter", azaMakeDefaultFilter, (void(*)(azaDSP*))azaFreeFilter);
-	azaDSPAddRegEntry("Compressor", azaMakeDefaultCompressor, (void(*)(azaDSP*))azaFreeCompressor);
-	azaDSPAddRegEntry("Gate", azaMakeDefaultGate, (void(*)(azaDSP*))azaFreeGate);
-	azaDSPAddRegEntry("Delay", azaMakeDefaultDelay, (void(*)(azaDSP*))azaFreeDelay);
-	azaDSPAddRegEntry("Dynamic Delay", azaMakeDefaultDelayDynamic, (void(*)(azaDSP*))azaFreeDelayDynamic);
-	azaDSPAddRegEntry("Reverb", azaMakeDefaultReverb, (void(*)(azaDSP*))azaFreeReverb);
-	azaDSPAddRegEntry("Sampler", azaMakeDefaultSampler, (void(*)(azaDSP*))azaFreeSampler);
-	azaDSPAddRegEntry("RMS", azaMakeDefaultRMS, (void(*)(azaDSP*))azaFreeRMS);
+	AZA_DA_RESERVE_COUNT(azaDSPRegistry, 11, return AZA_ERROR_OUT_OF_MEMORY);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_CUBIC_LIMITER], azaMakeDefaultCubicLimiter, azaFreeCubicLimiter);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_LOOKAHEAD_LIMITER], azaMakeDefaultLookaheadLimiter, (void(*)(azaDSP*))azaFreeLookaheadLimiter);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_FILTER], azaMakeDefaultFilter, (void(*)(azaDSP*))azaFreeFilter);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_COMPRESSOR], azaMakeDefaultCompressor, (void(*)(azaDSP*))azaFreeCompressor);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_GATE], azaMakeDefaultGate, (void(*)(azaDSP*))azaFreeGate);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_DELAY], azaMakeDefaultDelay, (void(*)(azaDSP*))azaFreeDelay);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_DELAY_DYNAMIC], azaMakeDefaultDelayDynamic, (void(*)(azaDSP*))azaFreeDelayDynamic);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_REVERB], azaMakeDefaultReverb, (void(*)(azaDSP*))azaFreeReverb);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_SAMPLER], azaMakeDefaultSampler, (void(*)(azaDSP*))azaFreeSampler);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_RMS], azaMakeDefaultRMS, (void(*)(azaDSP*))azaFreeRMS);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_SPATIALIZE], NULL, (void(*)(azaDSP*))azaFreeSpatialize);
 	return AZA_SUCCESS;
+}
+
+bool azaFreeDSP(azaDSP *dsp) {
+	const char *name = azaGetDSPName(dsp);
+	for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
+		if (strncmp(azaDSPRegistry.data[i].name, name, sizeof(azaDSPRegistry.data[0].name)) == 0) {
+			azaDSPRegistry.data[i].fp_freeDSP(dsp);
+			return true;
+		}
+	}
+	return false;
 }
 
 
@@ -547,7 +572,7 @@ int azaDSPProcessDual(azaDSP *data, azaBuffer dst, azaBuffer src) {
 
 void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, const char *name, void *userdata, fp_azaProcessCallback processCallback) {
 	data->header.kind = AZA_DSP_USER_SINGLE;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	if (name) {
 		strncpy_s(data->name, sizeof(data->name), name, sizeof(data->name)-1);
 	} else {
@@ -559,7 +584,7 @@ void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, const char *name
 
 void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, const char *name, void *userdata, fp_azaProcessDualCallback processCallback) {
 	data->header.kind = AZA_DSP_USER_DUAL;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	if (name) {
 		strncpy_s(data->name, sizeof(data->name), name, sizeof(data->name)-1);
 	} else {
@@ -667,7 +692,7 @@ uint32_t azaRMSGetAllocSize(azaRMSConfig config, uint8_t channelCapInline) {
 
 void azaRMSInit(azaRMS *data, uint32_t allocSize, azaRMSConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_RMS;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaRMSChannelData), alignof(azaRMSChannelData));
 
@@ -689,7 +714,10 @@ void azaRMSDeinit(azaRMS *data) {
 azaRMS* azaMakeRMS(azaRMSConfig config, uint8_t channelCapInline) {
 	uint32_t size = azaRMSGetAllocSize(config, channelCapInline);
 	azaRMS *result = aza_calloc(1, size);
-	if (result) azaRMSInit(result, size, config, channelCapInline);
+	if (result) {
+		azaRMSInit(result, size, config, channelCapInline);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
@@ -800,13 +828,16 @@ static float azaCubicLimiterSample(float sample) {
 
 void azaCubicLimiterInit(azaCubicLimiter *data, uint32_t allocSize) {
 	data->kind = AZA_DSP_CUBIC_LIMITER;
-	data->structSize = allocSize;
+	data->metadata = azaDSPPackMetadata(allocSize, false);
 }
 
 azaCubicLimiter* azaMakeCubicLimiter() {
 	uint32_t size = azaCubicLimiterGetAllocSize();
 	azaCubicLimiter *result = aza_calloc(1, size);
-	if (result) azaCubicLimiterInit(result, size);
+	if (result) {
+		azaCubicLimiterInit(result, size);
+		azaDSPMetadataSetOwned(&result->metadata);
+	}
 	return result;
 }
 
@@ -846,7 +877,7 @@ uint32_t azaLookaheadLimiterGetAllocSize(uint8_t channelCapInline) {
 
 void azaLookaheadLimiterInit(azaLookaheadLimiter *data, uint32_t allocSize, azaLookaheadLimiterConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_LOOKAHEAD_LIMITER;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	data->sum = 1.0f;
 	data->minAmp = 1.0f;
@@ -861,7 +892,10 @@ void azaLookaheadLimiterDeinit(azaLookaheadLimiter *data) {
 azaLookaheadLimiter* azaMakeLookaheadLimiter(azaLookaheadLimiterConfig config, uint8_t channelCapInline) {
 	uint32_t size = azaLookaheadLimiterGetAllocSize(channelCapInline);
 	azaLookaheadLimiter *result = aza_calloc(1, size);
-	if (result) azaLookaheadLimiterInit(result, size, config, channelCapInline);
+	if (result) {
+		azaLookaheadLimiterInit(result, size, config, channelCapInline);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
@@ -965,7 +999,7 @@ uint32_t azaFilterGetAllocSize(uint8_t channelCapInline) {
 
 void azaFilterInit(azaFilter *data, uint32_t allocSize, azaFilterConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_FILTER;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaFilterChannelData), alignof(azaFilterChannelData));
 }
@@ -977,7 +1011,10 @@ void azaFilterDeinit(azaFilter *data) {
 azaFilter* azaMakeFilter(azaFilterConfig config, uint8_t channelCapInline) {
 	uint32_t size = azaFilterGetAllocSize(channelCapInline);
 	azaFilter *result = aza_calloc(1, size);
-	if (result) azaFilterInit(result, size, config, channelCapInline);
+	if (result) {
+		azaFilterInit(result, size, config, channelCapInline);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
@@ -1052,7 +1089,7 @@ uint32_t azaCompressorGetAllocSize(uint8_t channelCapInline) {
 
 void azaCompressorInit(azaCompressor *data, uint32_t allocSize, azaCompressorConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_COMPRESSOR;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	azaRMSConfig rmsConfig = (azaRMSConfig) {
 		.windowSamples = 128,
@@ -1068,7 +1105,10 @@ void azaCompressorDeinit(azaCompressor *data) {
 azaCompressor* azaMakeCompressor(azaCompressorConfig config, uint8_t channelCapInline) {
 	uint32_t size = azaCompressorGetAllocSize(channelCapInline);
 	azaCompressor *result = aza_calloc(1, size);
-	if (result) azaCompressorInit(result, size, config, channelCapInline);
+	if (result) {
+		azaCompressorInit(result, size, config, channelCapInline);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
@@ -1143,7 +1183,7 @@ uint32_t azaDelayGetAllocSize(uint8_t channelCapInline) {
 
 void azaDelayInit(azaDelay *data, uint32_t allocSize, azaDelayConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_DELAY;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaDelayChannelData), alignof(azaDelayChannelData));
 }
@@ -1163,7 +1203,10 @@ azaDelayChannelConfig* azaDelayGetChannelConfig(azaDelay *data, uint8_t channel)
 azaDelay* azaMakeDelay(azaDelayConfig config, uint8_t channelCapInline) {
 	uint32_t size = azaDelayGetAllocSize(channelCapInline);
 	azaDelay *result = aza_calloc(1, size);
-	if (result) azaDelayInit(result, size, config, channelCapInline);
+	if (result) {
+		azaDelayInit(result, size, config, channelCapInline);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
@@ -1284,7 +1327,7 @@ uint32_t azaReverbGetAllocSize(uint8_t channelCapInline) {
 
 void azaReverbInit(azaReverb *data, uint32_t allocSize, azaReverbConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_REVERB;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 
 	uint32_t delayAllocSize = azaDelayGetAllocSize(channelCapInline);
@@ -1382,7 +1425,10 @@ azaFilter* azaReverbGetFilterTap(azaReverb *data, int tap) {
 azaReverb* azaMakeReverb(azaReverbConfig config, uint8_t channelCapInline) {
 	uint32_t size = azaReverbGetAllocSize(channelCapInline);
 	azaReverb *result = aza_calloc(1, size);
-	if (result) azaReverbInit(result, size, config, channelCapInline);
+	if (result) {
+		azaReverbInit(result, size, config, channelCapInline);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
@@ -1459,7 +1505,7 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 
 void azaSamplerInit(azaSampler *data, uint32_t allocSize, azaSamplerConfig config) {
 	data->header.kind = AZA_DSP_SAMPLER;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	data->pos.frame = 0;
 	data->pos.fraction = 0.0f;
@@ -1476,7 +1522,10 @@ void azaSamplerDeinit(azaSampler *data) {
 azaSampler* azaMakeSampler(azaSamplerConfig config) {
 	uint32_t size = azaSamplerGetAllocSize();
 	azaSampler *result = aza_calloc(1, size);
-	if (result) azaSamplerInit(result, size, config);
+	if (result) {
+		azaSamplerInit(result, size, config);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
@@ -1574,7 +1623,7 @@ uint32_t azaGateGetAllocSize() {
 
 void azaGateInit(azaGate *data, uint32_t allocSize, azaGateConfig config) {
 	data->header.kind = AZA_DSP_GATE;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	azaRMSConfig rmsConfig = (azaRMSConfig) {
 		.windowSamples = 128,
@@ -1590,7 +1639,10 @@ void azaGateDeinit(azaGate *data) {
 azaGate* azaMakeGate(azaGateConfig config) {
 	uint32_t size = azaGateGetAllocSize();
 	azaGate *result = aza_calloc(1, size);
-	if (result) azaGateInit(result, size, config);
+	if (result) {
+		azaGateInit(result, size, config);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
@@ -1742,7 +1794,7 @@ uint32_t azaDelayDynamicGetAllocSize(uint8_t channelCapInline) {
 
 int azaDelayDynamicInit(azaDelayDynamic *data, uint32_t allocSize, azaDelayDynamicConfig config, uint8_t channelCapInline, uint8_t channelCount, azaDelayDynamicChannelConfig *channelConfigs) {
 	data->header.kind = AZA_DSP_DELAY_DYNAMIC;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaDelayDynamicChannelData), alignof(azaDelayDynamicChannelData));
 	int err = azaEnsureChannels(&data->channelData, channelCount);
@@ -1773,6 +1825,7 @@ azaDelayDynamic* azaMakeDelayDynamic(azaDelayDynamicConfig config, uint8_t chann
 			aza_free(result);
 			return NULL;
 		}
+		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -2233,7 +2286,7 @@ uint32_t azaSpatializeGetAllocSize(uint8_t channelCapInline) {
 void azaSpatializeInit(azaSpatialize *data, uint32_t allocSize, azaSpatializeConfig config, uint8_t channelCapInline) {
 	uint32_t filterAllocSize = azaFilterGetAllocSize(1);
 	data->header.kind = AZA_DSP_SPATIALIZE;
-	data->header.structSize = allocSize;
+	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, filterAllocSize, alignof(azaSpatializeChannelData));
 	for (uint8_t c = 0; c < channelCapInline; c++) {
@@ -2274,7 +2327,10 @@ azaDelayDynamic* azaSpatializeGetDelayDynamic(azaSpatialize *data) {
 azaSpatialize* azaMakeSpatialize(azaSpatializeConfig config, uint8_t channelCapInline) {
 	uint32_t size = azaSpatializeGetAllocSize(channelCapInline);
 	azaSpatialize *result = aza_calloc(1, size);
-	if (result) azaSpatializeInit(result, size, config, channelCapInline);
+	if (result) {
+		azaSpatializeInit(result, size, config, channelCapInline);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
 	return result;
 }
 
