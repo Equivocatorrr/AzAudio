@@ -8,7 +8,7 @@
 #define AZAUDIO_SIMD_H
 
 // Deal with Michaelsoft's ineptitude yet again.
-#if __AVX2__
+#if __AVX2__ && defined(_MSC_VER)
 	#ifndef __FMA__
 		#define __FMA__ 1
 	#endif

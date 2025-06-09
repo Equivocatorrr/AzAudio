@@ -8,7 +8,9 @@
 #define AZAUDIO_HELPERS_H
 
 #include <assert.h>
+#include <string.h>
 #include <stdint.h>
+#include <stddef.h> // size_t
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,6 +28,15 @@ size_t aza_grow(size_t size, size_t minSize, size_t alignment);
 #define AZA_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #define AZA_CLAMP(a, min, max) AZA_MAX(min, AZA_MIN(max, a))
+
+// Guarantees dst is null-terminated, and that no more than dstSize-1 bytes are copied. Returns src size.
+static inline size_t aza_strcpy(char *dst, const char *src, size_t dstSize) {
+	size_t srcSize = strlen(src);
+	size_t toCopy = AZA_MIN(srcSize, dstSize-1);
+	memcpy(dst, src, toCopy);
+	dst[toCopy] = 0;
+	return srcSize;
+}
 
 // Returns the 32-bit signed integer representation of a 24-bit integer stored in the lower 24 bits of a u32. You don't have to worry about what's in the high 8 bits as they'll be masked out.
 int32_t azaSignExtend24Bit(uint32_t value);
@@ -109,7 +120,7 @@ if ((name).capacity < (num)) {\
 	for (int64_t aza_i = (index); aza_i < (int64_t)(name).count - (num); aza_i++) {\
 		(name).data[aza_i] = (name).data[aza_i + (num)];\
 	}\
-	(name).count--;\
+	(name).count -= (num);\
 }
 
 #define AZA_DA_DEINIT(name) {\

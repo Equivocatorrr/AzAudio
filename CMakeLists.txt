@@ -4,6 +4,8 @@ set(CMAKE_DEBUG_POSTFIX _debug)
 
 project(AzAudio)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 include(GNUInstallDirs)
 
 if (NOT ${CMAKE_INSTALL_PREFIX})
@@ -18,7 +20,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 if (MSVC)
 	add_compile_options(/W3 /arch:AVX2)
 else()
-	add_compile_options(-mavx2 -Wall -fmax-errors=1)
+	add_compile_options(-mavx2 -mfma -Wall -Wno-missing-braces -fmax-errors=1)
 	if (CMAKE_SYSTEM MATCHES Windows)
 		add_compile_options(-D_GLIBCXX_USE_NANOSLEEP)
 		add_link_options(-static-libgcc -static-libstdc++ -static -Llibwinpthread-1.dll)

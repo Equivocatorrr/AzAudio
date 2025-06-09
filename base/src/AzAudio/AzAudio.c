@@ -17,6 +17,7 @@
 #if defined(_MSC_VER)
 	// Michaelsoft will not be spared my wrath at the end of days
 	#define _CRT_USE_CONFORMING_ANNEX_K_TIME 1
+	#define _CRT_SECURE_NO_WARNINGS
 #endif
 #include <time.h>
 
@@ -41,18 +42,20 @@ void azaInitOscillators() {
 
 int azaInit() {
 	char levelStr[64];
-	size_t levelLen = 0;
-	errno_t hasLogLevel = getenv_s(&levelLen, levelStr, 64, "AZAUDIO_LOG_LEVEL");
-	if (0 == hasLogLevel && levelLen <= sizeof(levelStr)) {
-		azaStrToLower(levelStr, sizeof(levelStr), levelStr);
-		if (strncmp(levelStr, "none", sizeof(levelStr)) == 0) {
-			azaLogLevel = AZA_LOG_LEVEL_NONE;
-		} else if (strncmp(levelStr, "error", sizeof(levelStr)) == 0) {
-			azaLogLevel = AZA_LOG_LEVEL_ERROR;
-		} else if (strncmp(levelStr, "info", sizeof(levelStr)) == 0) {
-			azaLogLevel = AZA_LOG_LEVEL_INFO;
-		} else if (strncmp(levelStr, "trace", sizeof(levelStr)) == 0) {
-			azaLogLevel = AZA_LOG_LEVEL_TRACE;
+	char *envStr = getenv("AZAUDIO_LOG_LEVEL");
+	if (envStr) {
+		size_t levelLen = aza_strcpy(levelStr, envStr, sizeof(levelStr));
+		if (levelLen <= sizeof(levelStr)) {
+			azaStrToLower(levelStr, sizeof(levelStr), levelStr);
+			if (strncmp(levelStr, "none", sizeof(levelStr)) == 0) {
+				azaLogLevel = AZA_LOG_LEVEL_NONE;
+			} else if (strncmp(levelStr, "error", sizeof(levelStr)) == 0) {
+				azaLogLevel = AZA_LOG_LEVEL_ERROR;
+			} else if (strncmp(levelStr, "info", sizeof(levelStr)) == 0) {
+				azaLogLevel = AZA_LOG_LEVEL_INFO;
+			} else if (strncmp(levelStr, "trace", sizeof(levelStr)) == 0) {
+				azaLogLevel = AZA_LOG_LEVEL_TRACE;
+			}
 		}
 	}
 	AZA_LOG_INFO("AzAudio Version: " AZA_VERSION_FORMAT_STR "\n", AZA_VERSION_ARGS);
@@ -80,8 +83,7 @@ void azaLogDefault(AzaLogLevel level, const char* format, ...) {
 	if (level > azaLogLevel) return;
 	FILE *file = level == AZA_LOG_LEVEL_ERROR ? stderr : stdout;
 	char timeStr[64];
-	struct tm timeBuffer;
-	strftime(timeStr, sizeof(timeStr), "%T", localtime_s(&(time_t){time(NULL)}, &timeBuffer));
+	strftime(timeStr, sizeof(timeStr), "%T", localtime(&(time_t){time(NULL)}));
 	fprintf(file, "AzAudio[%s] ", timeStr);
 	va_list args;
 	va_start(args, format);

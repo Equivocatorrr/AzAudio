@@ -85,7 +85,7 @@ int azaDSPAddRegEntry(const char *name, azaDSP* (*fp_makeDSP)(uint8_t), void (*f
 	AZA_DA_RESERVE_ONE_AT_END(azaDSPRegistry, return AZA_ERROR_OUT_OF_MEMORY);
 	azaDSPRegEntry *dst = &azaDSPRegistry.data[azaDSPRegistry.count++];
 	if (name) {
-		strncpy_s(dst->name, sizeof(dst->name), name, sizeof(dst->name)-1);
+		aza_strcpy(dst->name, name, sizeof(dst->name));
 	} else {
 		memset(dst->name, 0, sizeof(dst->name));
 	}
@@ -574,7 +574,7 @@ void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, const char *name
 	data->header.kind = AZA_DSP_USER_SINGLE;
 	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	if (name) {
-		strncpy_s(data->name, sizeof(data->name), name, sizeof(data->name)-1);
+		aza_strcpy(data->name, name, sizeof(data->name));
 	} else {
 		memset(data->name, 0, sizeof(data->name));
 	}
@@ -586,7 +586,7 @@ void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, const char *name, 
 	data->header.kind = AZA_DSP_USER_DUAL;
 	data->header.metadata = azaDSPPackMetadata(allocSize, false);
 	if (name) {
-		strncpy_s(data->name, sizeof(data->name), name, sizeof(data->name)-1);
+		aza_strcpy(data->name, name, sizeof(data->name));
 	} else {
 		memset(data->name, 0, sizeof(data->name));
 	}
@@ -728,7 +728,7 @@ void azaFreeRMS(azaRMS *data) {
 
 azaDSP* azaMakeDefaultRMS(uint8_t channelCapInline) {
 	return (azaDSP*)azaMakeRMS((azaRMSConfig) {
-		.windowSamples = 128,
+		.windowSamples = 512,
 		.combineOp = NULL,
 	}, channelCapInline);
 }
@@ -863,6 +863,9 @@ int azaCubicLimiterProcess(azaCubicLimiter *data, azaBuffer buffer) {
 				buffer.samples[s] = azaCubicLimiterSample(buffer.samples[s]);
 			}
 		}
+	}
+	if (data->pNext) {
+		return azaDSPProcessSingle(data->pNext, buffer);
 	}
 	return AZA_SUCCESS;
 }

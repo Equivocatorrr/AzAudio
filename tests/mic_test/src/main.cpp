@@ -22,6 +22,7 @@
 #include <csignal>
 #include <cstdlib>
 #include <cmath>
+#include <cstring>
 #include <execinfo.h>
 #include <unistd.h>
 
@@ -43,8 +44,7 @@ void logCallback(AzaLogLevel level, const char* format, ...) {
 	if (level > azaLogLevel) return;
 	char buffer[1024];
 	time_t now = time(nullptr);
-	struct tm timeBuffer;
-	strftime(buffer, sizeof(buffer), "%T", localtime_s(&now, &timeBuffer));
+	strftime(buffer, sizeof(buffer), "%T", localtime(&now));
 	sys::cout << "AzAudio[" << buffer << "] ";
 	va_list args;
 	va_start(args, format);
@@ -89,7 +89,7 @@ int processCallbackOutput(void *userdata, azaBuffer buffer) {
 		sys::cout << "Shrunk!" << std::endl;
 		// Crossfade from new end to actual end
 		float t = 0.0f;
-		size_t crossFadeLen = std::min(micBuffer.size() - buffer.frames, 256ull);
+		size_t crossFadeLen = std::min((size_t)(micBuffer.size() - buffer.frames), (size_t)256);
 		for (size_t i = micBuffer.size()-crossFadeLen; i < micBuffer.size(); i++) {
 			t = std::min(1.0f, t + 1.0f / (float)crossFadeLen);
 			float *dst = &micBuffer[i - buffer.frames];

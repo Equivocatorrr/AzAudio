@@ -66,8 +66,7 @@ void azaTrackSetName(azaTrack *data, const char *name) {
 	if (!name) {
 		data->name[0] = 0;
 	} else {
-		// Truncating copy with null-terminator
-		strncpy_s(data->name, sizeof(data->name), name, sizeof(data->name)-1);
+		aza_strcpy(data->name, name, sizeof(data->name));
 	}
 }
 

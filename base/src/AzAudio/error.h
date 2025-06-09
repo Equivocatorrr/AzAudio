@@ -7,6 +7,8 @@
 #ifndef AZAUDIO_ERROR_H
 #define AZAUDIO_ERROR_H
 
+#include <stddef.h> // size_t
+
 #ifdef __cplusplus
 extern "C" {
 #endif

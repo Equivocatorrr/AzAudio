@@ -66,14 +66,14 @@ static uint8_t azaPositionFloorArc[] = {
 	AZA_POS_LEFT_BACK,
 	AZA_POS_LEFT_SIDE,
 };
-static uint8_t azaPositionCeilArc[] = {
-	AZA_POS_LEFT_FRONT_TOP,
-	AZA_POS_CENTER_FRONT_TOP,
-	AZA_POS_RIGHT_FRONT_TOP,
-	AZA_POS_RIGHT_BACK_TOP,
-	AZA_POS_CENTER_BACK_TOP,
-	AZA_POS_LEFT_BACK_TOP,
-};
+// static uint8_t azaPositionCeilArc[] = {
+// 	AZA_POS_LEFT_FRONT_TOP,
+// 	AZA_POS_CENTER_FRONT_TOP,
+// 	AZA_POS_RIGHT_FRONT_TOP,
+// 	AZA_POS_RIGHT_BACK_TOP,
+// 	AZA_POS_CENTER_BACK_TOP,
+// 	AZA_POS_LEFT_BACK_TOP,
+// };
 static uint8_t azaPositionToFloor[] = {
 	/* AZA_POS_LEFT_FRONT         -> */ AZA_POS_LEFT_FRONT,
 	/* AZA_POS_RIGHT_FRONT        -> */ AZA_POS_RIGHT_FRONT,

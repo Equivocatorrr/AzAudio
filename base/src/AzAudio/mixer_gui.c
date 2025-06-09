@@ -59,9 +59,18 @@ static azaThread thread = {};
 
 static int64_t lastClickTime = 0;
 
-static int scrollX = 0;
-static int trackFXScrollY = 0;
-static bool trackFXCanScrollDown = false;
+static int scrollTracksX = 0;
+
+typedef struct azaTrackGUIMetadata {
+	int scrollFXY;
+	int scrollControlsX;
+} azaTrackGUIMetadata;
+
+static struct {
+	azaTrackGUIMetadata *data;
+	uint32_t count;
+	uint32_t capacity;
+} azaTrackGUIMetadatas = {0};
 
 
 
@@ -130,6 +139,12 @@ static const int sliderDrawWidth = 14;
 static const Color colorSliderBGTop      = {  20,  60,  40, 255 };
 static const Color colorSliderBGBot      = {  10,  40,  20, 255 };
 
+
+static const int scrollbarSize = 8;
+
+static const Color colorScrollbarBG = {  30,  40,  60, 255 };
+static const Color colorScrollbarFG = {  60,  80, 120, 255 };
+
 static const int lookaheadLimiterMeterDBRange = 48;
 static const int lookaheadLimiterAttenuationMeterDBRange = 18;
 static const Color colorLookaheadLimiterAttenuation = {   0, 128, 255, 255 };
@@ -152,16 +167,36 @@ static int TextCountLines(const char *text) {
 	return result;
 }
 
+// TODO: Figure out how to deal with DPI since the behavior in raylib doesn't seem consistent between Windows and Linux. Probably do it manually ourselves instead of asking raylib to do anything for us?
+//       Also, for raylib on glfw, wayland support appears incredibly broken, so I guess we can't have nice things for now. Check back later for updates to raylib that might address this (even if that just means they updated the version of glfw they ship.)
+
 static int GetLogicalWidth() {
-	return (int)((float)GetRenderWidth() / GetWindowScaleDPI().x);
+	return GetRenderWidth();
+	// return (int)((float)GetRenderWidth() / GetWindowScaleDPI().x);
 }
 
 static int GetLogicalHeight() {
-	return (int)((float)GetRenderHeight() / GetWindowScaleDPI().y);
+	return GetRenderHeight();
+	// return (int)((float)GetRenderHeight() / GetWindowScaleDPI().y);
+}
+
+typedef struct azaPoint {
+	int x, y;
+} azaPoint;
+
+static inline azaPoint azaPointSub(azaPoint lhs, azaPoint rhs) {
+	return (azaPoint) { lhs.x - rhs.x, lhs.y - rhs.y };
 }
 
 typedef struct azaRect {
-	int x, y, w, h;
+	union {
+		struct { int x, y; };
+		azaPoint xy;
+	};
+	union {
+		struct { int w, h; };
+		azaPoint size;
+	};
 } azaRect;
 
 static inline void DrawRect(azaRect rect, Color color) {
@@ -219,25 +254,31 @@ static void azaRectFitOnScreen(azaRect *rect) {
 }
 
 // Used for UI input culling (for context menus and such)
-int mouseDepth = 0;
+static int mouseDepth = 0;
+static azaPoint mousePrev = {0};
 
-static Vector2 azaMousePosition() {
+static azaPoint azaMousePosition() {
 	Vector2 mouse = GetMousePosition();
-	Vector2 dpi = GetWindowScaleDPI();
-	mouse.x /= dpi.x;
-	mouse.y /= dpi.y;
-	return mouse;
+	// Vector2 dpi = GetWindowScaleDPI();
+	// mouse.x /= dpi.x;
+	// mouse.y /= dpi.y;
+	return (azaPoint) { (int)mouse.x, (int)mouse.y };
+}
+
+static bool azaPointInRect(azaRect rect, azaPoint point) {
+	return (point.x >= rect.x && point.y >= rect.y && point.x <= rect.x+rect.w && point.y <= rect.y+rect.h);
 }
 
 static bool azaMouseInRect(azaRect rect) {
-	Vector2 mouse = azaMousePosition();
-	int mx = (int)mouse.x;
-	int my = (int)mouse.y;
-	return (mx >= rect.x && my >= rect.y && mx <= rect.x+rect.w && my <= rect.y+rect.h);
+	return azaPointInRect(rect, azaMousePosition());
 }
 
 static bool azaMouseButtonPressed(int button, int depth) {
 	return (depth >= mouseDepth && IsMouseButtonPressed(button));
+}
+
+static bool azaMouseButtonDown(int button, int depth) {
+	return (depth >= mouseDepth && IsMouseButtonDown(button));
 }
 
 static bool azaMousePressedInRect(int button, int depth, azaRect rect) {
@@ -255,6 +296,60 @@ static bool azaDidDoubleClick(int depth) {
 
 static bool IsKeyRepeated(int key) {
 	return (IsKeyPressed(key) || IsKeyPressedRepeat(key));
+}
+
+static void *mouseDragID = NULL;
+static int64_t currentFrameTimestamp = 0;
+static int64_t mouseDragTimestamp = 0;
+static azaPoint mouseDragStart = {0};
+
+// Don't use this directly (use azaCaptureMouse___)
+static void azaMouseCaptureStart(void *id) {
+	mouseDragID = id;
+	mouseDepth = 2;
+	mouseDragTimestamp = azaGetTimestamp();
+	mouseDragStart = azaMousePosition();
+}
+// Don't use this directly (use azaCaptureMouse___)
+static void azaMouseCaptureEnd() {
+	mouseDragID = NULL;
+	mouseDepth = 0;
+}
+// Call at the start of a frame
+static void azaMouseCaptureStartFrame() {
+	currentFrameTimestamp = azaGetTimestamp();
+}
+// Call at the end of a frame
+static void azaMouseCaptureEndFrame() {
+	// Handle resetting from ids disappearing (probably should never happen, but would be a really annoying bug if it did).
+	if (mouseDragID != NULL && mouseDragTimestamp < currentFrameTimestamp) {
+		azaMouseCaptureEnd();
+	}
+}
+// Pass in a unique pointer identifier for continuity. A const char* can work just fine.
+// returns true if we're capturing the mouse
+// outputs the deltas from the last frame (if we're capturing, else zeroes them)
+static bool azaCaptureMouseDelta(azaRect bounds, azaPoint *out_delta, void *id) {
+	assert(out_delta);
+	assert(id);
+	azaPoint mouse = azaMousePosition();
+	*out_delta = (azaPoint) {0};
+
+	if (mouseDragID == NULL) {
+		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) && azaPointInRect(bounds, mouse)) {
+			azaMouseCaptureStart(id);
+			return true;
+		}
+	} else if (mouseDragID == id) {
+		if (!azaMouseButtonDown(MOUSE_BUTTON_LEFT, 2)) {
+			azaMouseCaptureEnd();
+			return false;
+		}
+		mouseDragTimestamp = azaGetTimestamp();
+		*out_delta = azaPointSub(mouse, mousePrev);
+		return true;
+	}
+	return false;
 }
 
 
@@ -729,6 +824,40 @@ static void azaDrawTextboxBeingEdited() {
 	DrawText(text, textboxBounds.x, textboxBounds.y, 10, WHITE);
 }
 
+// needs an id for mouse capture
+static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int max, int step, void *id) {
+	assert(max >= min);
+	bool mouseover = azaMouseInRect(bounds);
+	int scrollbarWidth = bounds.w / 4;
+	int useableWidth = bounds.w - scrollbarWidth;
+	int mouseX = (int)azaMousePosition().x - bounds.x;
+	DrawRect(bounds, colorScrollbarBG);
+	if (mouseover) {
+		int scroll = (int)GetMouseWheelMoveV().y;
+		int click = (int)azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) * ((int)(mouseX >= bounds.w/2) * 2 - 1);
+		*value += step * (scroll + click);
+		*value = AZA_CLAMP(*value, min, max);
+	}
+	if (min == max) return;
+	azaRect knobRect = {
+		bounds.x,
+		bounds.y,
+		scrollbarWidth,
+		bounds.h,
+	};
+	int offset = useableWidth * (*value - min) / AZA_MAX(max - min, 1);
+	if (step >= 0) {
+		knobRect.x += offset;
+	} else {
+		knobRect.x += (bounds.w - scrollbarWidth) - offset;
+	}
+	DrawRect(knobRect, colorScrollbarFG);
+	azaPoint delta;
+	if (azaCaptureMouseDelta(knobRect, &delta, id)) {
+// asdf
+	}
+}
+
 
 
 
@@ -805,6 +934,7 @@ static void azaContextMenuTrackAdd() {
 	azaTrack *track;
 	azaMixerAddTrack(currentMixer, contextMenuTrackIndex, &track, currentMixer->master.buffer.channelLayout, true);
 	azaTrackSetName(track, TextFormat("Track %d", contextMenuTrackIndex));
+	AZA_DA_INSERT(azaTrackGUIMetadatas, contextMenuTrackIndex+1, (azaTrackGUIMetadata){0}, do{}while(0));
 }
 
 static void azaContextMenuTrackRemove() {
@@ -812,6 +942,7 @@ static void azaContextMenuTrackRemove() {
 	if (toRemove >= 0) {
 		AZA_LOG_TRACE("Track Remove at index %d!\n", toRemove);
 		azaMixerRemoveTrack(currentMixer, toRemove);
+		AZA_DA_ERASE(azaTrackGUIMetadatas, contextMenuTrackIndex, 1);
 	}
 }
 
@@ -877,9 +1008,7 @@ static_assert((sizeof(contextMenuLabels) / sizeof(contextMenuLabels[0])) == AZA_
 static void azaContextMenuOpen(azaContextMenuKind kind) {
 	assert(kind != AZA_CONTEXT_MENU_NONE);
 	contextMenuKind = kind;
-	Vector2 mouse = azaMousePosition();
-	contextMenuRect.x = (int)mouse.x;
-	contextMenuRect.y = (int)mouse.y;
+	contextMenuRect.xy = azaMousePosition();
 	contextMenuRect.w = contextMenuItemWidth;
 	contextMenuRect.h = contextMenuItemHeight * contextMenuActionCounts[(uint32_t)kind];
 	azaRectFitOnScreen(&contextMenuRect);
@@ -1029,12 +1158,13 @@ static void azaDrawContextMenu() {
 
 
 
-static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
+static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect bounds) {
 	DrawRectGradientV(bounds, colorTrackFXTop, colorTrackFXBot);
 	azaRectShrinkMargin(&bounds, margin);
 	PushScissor(bounds);
+	azaTrackGUIMetadata *metadata = &azaTrackGUIMetadatas.data[metadataIndex];
 	azaRect pluginRect = bounds;
-	pluginRect.y += trackFXScrollY;
+	pluginRect.y += metadata->scrollFXY;
 	pluginRect.h = 10 + margin * 2;
 	azaDSP *mouseoverDSP = NULL;
 	azaDSP *dsp = track->dsp;
@@ -1052,7 +1182,14 @@ static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
 		dsp = dsp->pNext;
 		pluginRect.y += pluginRect.h + margin;
 	}
-	if (pluginRect.y + pluginRect.h > bounds.y + bounds.h) trackFXCanScrollDown = true;
+	if (azaMouseInRect(bounds)) {
+		bool trackFXCanScrollDown = (pluginRect.y + pluginRect.h > bounds.y + bounds.h);
+		int scroll = (int)GetMouseWheelMoveV().y * 8;
+		if (!trackFXCanScrollDown && scroll < 0) scroll = 0;
+		metadata->scrollFXY += scroll;
+		if (metadata->scrollFXY > 0) metadata->scrollFXY = 0;
+		trackFXCanScrollDown = false;
+	}
 	PopScissor();
 	if (azaMousePressedInRect(MOUSE_BUTTON_RIGHT, 1, bounds)) {
 		azaContextMenuSetIndexFromTrack(track);
@@ -1061,7 +1198,7 @@ static void azaDrawTrackFX(azaTrack *track, azaRect bounds) {
 	}
 }
 
-static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
+static void azaDrawTrackControls(azaTrack *track, uint32_t metadataIndex, azaRect bounds) {
 	if (azaMousePressedInRect(MOUSE_BUTTON_RIGHT, 1, bounds)) {
 		azaContextMenuSetIndexFromTrack(track);
 		azaContextMenuOpen(AZA_CONTEXT_MENU_TRACK);
@@ -1096,7 +1233,7 @@ static void azaDrawTrackControls(azaTrack *track, azaRect bounds) {
 	PopScissor();
 }
 
-static void azaDrawTrack(azaTrack *track, azaRect bounds) {
+static void azaDrawTrack(azaTrack *track, uint32_t metadataIndex, azaRect bounds) {
 	azaRectShrinkMargin(&bounds, margin);
 	PushScissor(bounds);
 	azaRect nameRect = {
@@ -1107,9 +1244,9 @@ static void azaDrawTrack(azaTrack *track, azaRect bounds) {
 	};
 	azaDrawTextBox(nameRect, track->name, sizeof(track->name));
 	azaRectShrinkTop(&bounds, trackLabelDrawHeight);
-	azaDrawTrackFX(track, (azaRect) { bounds.x, bounds.y, bounds.w, trackFXDrawHeight });
+	azaDrawTrackFX(track, metadataIndex, (azaRect) { bounds.x, bounds.y, bounds.w, trackFXDrawHeight });
 	azaRectShrinkTop(&bounds, trackFXDrawHeight + margin*2);
-	azaDrawTrackControls(track, bounds);
+	azaDrawTrackControls(track, metadataIndex, bounds);
 	PopScissor();
 }
 
@@ -1121,25 +1258,36 @@ static void azaDrawTrack(azaTrack *track, azaRect bounds) {
 
 
 
-static void azaDrawMixer(azaMixer *mixer) {
+static void azaDrawMixer() {
 	// TODO: This granularity might get in the way of audio processing. Probably only lock the mutex when it matters most.
-	azaMutexLock(&mixer->mutex);
+	azaMutexLock(&currentMixer->mutex);
 	azaRect trackRect = {
-		scrollX + margin,
-		pluginDrawHeight + margin,
+		scrollTracksX + margin,
+		pluginDrawHeight,
 		trackDrawWidth,
-		trackDrawHeight - margin*2
+		trackDrawHeight - margin,
 	};
-	azaDrawTrack(&mixer->master, trackRect);
-	for (uint32_t i = 0; i < mixer->tracks.count; i++) {
+	AZA_DA_RESERVE_COUNT(azaTrackGUIMetadatas, currentMixer->tracks.count+1, do{}while(0));
+	azaTrackGUIMetadatas.count = currentMixer->tracks.count+1;
+	azaDrawTrack(&currentMixer->master, 0, trackRect);
+	for (uint32_t i = 0; i < currentMixer->tracks.count; i++) {
 		trackRect.x += trackDrawWidth;
-		azaDrawTrack(mixer->tracks.data[i], trackRect);
+		azaDrawTrack(currentMixer->tracks.data[i], i+1, trackRect);
 	}
-	azaTooltipAdd(TextFormat("CPU: %.2f%%", mixer->cpuPercentSlow), GetLogicalWidth(), 0, false);
-	if (mixer->hasCircularRouting) {
+	int screenWidth = GetLogicalWidth();
+	azaRect scrollbarRect = {
+		0,
+		pluginDrawHeight + trackDrawHeight,
+		screenWidth,
+		scrollbarSize,
+	};
+	int scrollableWidth = screenWidth - (trackDrawWidth * (currentMixer->tracks.count+1) + margin*2);
+	azaDrawScrollbarHorizontal(scrollbarRect, &scrollTracksX, AZA_MIN(scrollableWidth, 0), 0, -trackDrawWidth / 3, "Mixer Scrollbar :)");
+	azaTooltipAdd(TextFormat("CPU: %.2f%%", currentMixer->cpuPercentSlow), screenWidth, 0, false);
+	if (currentMixer->hasCircularRouting) {
 		azaTooltipAdd("Circular Routing Detected!!!", 0, pluginDrawHeight - (textMargin*2 + 10), true);
 	}
-	azaMutexUnlock(&mixer->mutex);
+	azaMutexUnlock(&currentMixer->mutex);
 }
 
 
@@ -1286,7 +1434,7 @@ static void azaDrawSelectedDSP() {
 
 
 static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
-	unsigned int configFlags = FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT;
+	unsigned int configFlags = FLAG_VSYNC_HINT /*| FLAG_WINDOW_HIGHDPI*/ | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT;
 	if (isWindowTopmost) {
 		configFlags |= FLAG_WINDOW_TOPMOST;
 	}
@@ -1296,7 +1444,7 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 
 	InitWindow(
 		AZA_MIN(trackDrawWidth * (1 + currentMixer->tracks.count) + margin*2, 640),
-		pluginDrawHeight + trackDrawHeight,
+		pluginDrawHeight + trackDrawHeight + scrollbarSize,
 		"AzAudio Mixer"
 	);
 	isWindowOpen = true;
@@ -1315,16 +1463,10 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 			configFlags &= ~FLAG_WINDOW_TOPMOST;
 			ClearWindowState(FLAG_WINDOW_TOPMOST);
 		}
-		{
-			int scroll = (int)GetMouseWheelMoveV().y * 8;
-			if (!trackFXCanScrollDown && scroll < 0) scroll = 0;
-			trackFXScrollY += scroll;
-			if (trackFXScrollY > 0) trackFXScrollY = 0;
-			trackFXCanScrollDown = false;
-		}
+		azaMouseCaptureStartFrame();
 		BeginDrawing();
 			ClearBackground(colorBG);
-			azaDrawMixer(currentMixer);
+			azaDrawMixer();
 			azaDrawSelectedDSP();
 			azaDrawTextboxBeingEdited();
 			azaDrawContextMenu();
@@ -1333,6 +1475,8 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 				lastClickTime = azaGetTimestamp();
 			}
 		EndDrawing();
+		azaMouseCaptureEndFrame();
+		mousePrev = azaMousePosition();
 	}
 
 	CloseWindow();

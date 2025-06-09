@@ -29,7 +29,11 @@ extern "C" {
 
 #define AZA_THREAD_ALIGNMENT 8
 // This should be the total size in bytes of the actual platform-specific thread struct including any padding
-#define AZA_THREAD_SIZE 12
+#ifdef __unix
+	#define AZA_THREAD_SIZE 8
+#elif defined(WIN32)
+	#define AZA_THREAD_SIZE 12
+#endif
 
 typedef struct azaThread {
 	alignas(AZA_THREAD_ALIGNMENT) uint8_t data[AZA_THREAD_SIZE];
