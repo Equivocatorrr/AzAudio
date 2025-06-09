@@ -454,13 +454,13 @@ void azaBufferMixMatrix(azaBuffer dst, float volumeDst, azaBuffer src, float vol
 		float *matPremult = (float*)alloca(dst.channelLayout.count * src.channelLayout.count * sizeof(float));
 		for (uint8_t c = 0; c < src.channelLayout.count; c++) {
 			for (uint8_t r = 0; r < dst.channelLayout.count; r++) {
-				matPremult[c * dst.channelLayout.count + r] = volumeSrc * matrix->matrix[c * matrix->outputs + r];
+				matPremult[r * src.channelLayout.count + c] = volumeSrc * matrix->matrix[c * matrix->outputs + r];
 			}
 		}
 		uint32_t i = 0;
 		uint32_t totalSamples = dst.frames*dst.channelLayout.count;
 		// TODO: Probably do some runtime checks for SIMD availability and backwards compatibility, to support compiling for AVX2 and having it just work anyway if lesser versions are available. Also implement 128-bit wide SIMD. Also probably support ARM's Neon (when testing on ARM becomes feasible).
-#if __AVX__
+#if __AVX__ && 0
 		if ((uint64_t)dst.samples % 32 != 0) {
 			// Process the first few as scalar to get into the right alignment
 			// _mm256_load_ps and _mm256_store_ps expects the data to be aligned on a 32-byte boundary
