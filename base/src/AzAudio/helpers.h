@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stddef.h> // size_t
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,6 +38,9 @@ static inline size_t aza_strcpy(char *dst, const char *src, size_t dstSize) {
 	dst[toCopy] = 0;
 	return srcSize;
 }
+
+// test can be shorter than string, and as long as the first strlen(test) characters match, this will return true.
+bool aza_str_begins_with(const char *string, const char *test);
 
 // Returns the 32-bit signed integer representation of a 24-bit integer stored in the lower 24 bits of a u32. You don't have to worry about what's in the high 8 bits as they'll be masked out.
 int32_t azaSignExtend24Bit(uint32_t value);

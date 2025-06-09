@@ -2457,7 +2457,7 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 		totalMagnitudeEnd += channelsEnd[i].amp;
 	}
 
-	float minAmp = data->config.mode == AZA_SPATIALIZE_SIMPLE ? 0.0f : 0.8f;
+	float minAmp = dstBuffer.channelLayout.formFactor == AZA_FORM_FACTOR_HEADPHONES ? 0.75f : 0.0f;
 
 	if (dstBuffer.channelLayout.count > 2) {
 		int minChannel = 2;

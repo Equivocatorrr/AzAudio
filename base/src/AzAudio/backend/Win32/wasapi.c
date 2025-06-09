@@ -83,6 +83,7 @@ typedef struct azaDeviceInfo {
 	const WCHAR *idWStr;
 	// Contains the mask of where the channels are physically positioned, such as SPEAKER_FRONT_LEFT etc.
 	UINT speakerConfig;
+	enum azaFormFactor formFactor;
 	const char *name;
 	unsigned channels;
 	unsigned sampleBitDepth;
@@ -720,6 +721,36 @@ static int azaWASAPIInit() {
 			default: break;
 		}
 		if (render) {
+			// This is apparently not necessarily accurate, so we'll see if we can match the name for headphones right below
+			PROPERTY_STORE_GET(pPropertyStore, PKEY_AudioEndpoint_FormFactor, VT_UI4,
+				// onSuccess:
+				switch (propVariant.uintVal) {
+					case RemoteNetworkDevice:
+					case Speakers:
+					case LineLevel:
+					case Microphone:
+					case Handset:
+					case UnknownDigitalPassthrough:
+					case SPDIF:
+					case DigitalAudioDisplayDevice:
+					case UnknownFormFactor:
+						device[i].formFactor = AZA_FORM_FACTOR_SPEAKERS;
+						AZA_LOG_TRACE("%s is Speakers\n", device[i].name);
+						break;
+					case Headphones:
+					case Headset:
+						device[i].formFactor = AZA_FORM_FACTOR_HEADPHONES;
+						AZA_LOG_TRACE("%s is Headphones\n", device[i].name);
+						break;
+				},
+				// onFail:
+				device[i].formFactor = AZA_FORM_FACTOR_SPEAKERS
+			);
+			// TODO: This is super fragile... probably get some other way to get the form factor (or give up and let the user configure it).
+			if (aza_str_begins_with(device[i].name, "Headphones")) {
+				device[i].formFactor = AZA_FORM_FACTOR_HEADPHONES;
+				AZA_LOG_TRACE("%s is Headphones (matched name string)\n", device[i].name);
+			}
 			deviceOutput[deviceOutputCount++] = device[i];
 		}
 		if (capture) {
@@ -914,6 +945,7 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 		data->processingBuffer.samples = NULL;
 		data->processingBuffer.channelLayout = azaGetChannelLayoutFromMask(data->processingBuffer.channelLayout.count, data->waveFormatExtensible.dwChannelMask);
 	}
+	data->processingBuffer.channelLayout.formFactor = deviceInfo->formFactor;
 	data->stream = stream;
 	stream->data = data;
 

@@ -40,6 +40,18 @@ size_t aza_align_non_power_of_two(size_t size, size_t alignment) {
 	}
 }
 
+bool aza_str_begins_with(const char *string, const char *test) {
+	while (*string != 0) {
+		if (*test == 0) {
+			return true;
+		}
+		if (*string++ != *test++) {
+			return false;
+		}
+	}
+	return false;
+}
+
 int32_t azaSignExtend24Bit(uint32_t value) {
 	uint32_t signBit = 1 << 23;
 	return (int32_t)(((value & 0xffffff) ^ signBit) - signBit);
