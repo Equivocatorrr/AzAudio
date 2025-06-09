@@ -51,6 +51,7 @@ static void azaRaylibTraceLogCallback(int logLevel, const char *text, va_list ar
 
 
 
+static int currentDPIScale = 1;
 static azaMixer *currentMixer = NULL;
 static azaDSP *selectedDSP = NULL;
 static bool isWindowOpen = false;
@@ -167,17 +168,36 @@ static int TextCountLines(const char *text) {
 	return result;
 }
 
-// TODO: Figure out how to deal with DPI since the behavior in raylib doesn't seem consistent between Windows and Linux. Probably do it manually ourselves instead of asking raylib to do anything for us?
-//       Also, for raylib on glfw, wayland support appears incredibly broken, so I guess we can't have nice things for now. Check back later for updates to raylib that might address this (even if that just means they updated the version of glfw they ship.)
+// TODO: For raylib on glfw, wayland support appears incredibly broken, so I guess we can't have nice things for now. Check back later for updates to raylib that might address this (even if that just means they updated the version of glfw they ship.) In the meantime, just using X11 (current default for raylib) seems to work fine.
+
+static int azaGetDPIScale() {
+	int rounded = roundf(GetWindowScaleDPI().x);
+	return AZA_MAX(rounded, 1);
+}
+
+static void azaHandleDPIChanges() {
+	int newDPI = azaGetDPIScale();
+	if (newDPI != currentDPIScale) {
+		// TODO: Handle any pixel-position-based state
+		SetWindowSize(GetScreenWidth() * newDPI / currentDPIScale, GetScreenHeight() * newDPI / currentDPIScale);
+		currentDPIScale = newDPI;
+	}
+}
 
 static int GetLogicalWidth() {
-	return GetRenderWidth();
-	// return (int)((float)GetRenderWidth() / GetWindowScaleDPI().x);
+	return GetRenderWidth() / currentDPIScale;
 }
 
 static int GetLogicalHeight() {
-	return GetRenderHeight();
-	// return (int)((float)GetRenderHeight() / GetWindowScaleDPI().y);
+	return GetRenderHeight() / currentDPIScale;
+}
+
+static void azaDrawText(const char *text, int posX, int posY, int fontSize, Color color) {
+	DrawText(text, posX * currentDPIScale, posY * currentDPIScale, fontSize * currentDPIScale, color);
+}
+
+static void azaDrawLine(int startPosX, int startPosY, int endPosX, int endPosY, Color color) {
+	DrawLine(startPosX * currentDPIScale, startPosY * currentDPIScale, endPosX * currentDPIScale, endPosY * currentDPIScale, color);
 }
 
 typedef struct azaPoint {
@@ -199,20 +219,20 @@ typedef struct azaRect {
 	};
 } azaRect;
 
-static inline void DrawRect(azaRect rect, Color color) {
-	DrawRectangle(rect.x, rect.y, rect.w, rect.h, color);
+static inline void azaDrawRect(azaRect rect, Color color) {
+	DrawRectangle(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale, color);
 }
 
-static inline void DrawRectLines(azaRect rect, Color color) {
-	DrawRectangleLines(rect.x, rect.y, rect.w, rect.h, color);
+static inline void azaDrawRectLines(azaRect rect, Color color) {
+	DrawRectangleLines(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale, color);
 }
 
-static inline void DrawRectGradientV(azaRect rect, Color top, Color bottom) {
-	DrawRectangleGradientV(rect.x, rect.y, rect.w, rect.h, top, bottom);
+static inline void azaDrawRectGradientV(azaRect rect, Color top, Color bottom) {
+	DrawRectangleGradientV(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale, top, bottom);
 }
 
-static inline void DrawRectGradientH(azaRect rect, Color left, Color right) {
-	DrawRectangleGradientH(rect.x, rect.y, rect.w, rect.h, left, right);
+static inline void azaDrawRectGradientH(azaRect rect, Color left, Color right) {
+	DrawRectangleGradientH(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale, left, right);
 }
 
 static void azaRectShrinkMargin(azaRect *rect, int m) {
@@ -259,10 +279,7 @@ static azaPoint mousePrev = {0};
 
 static azaPoint azaMousePosition() {
 	Vector2 mouse = GetMousePosition();
-	// Vector2 dpi = GetWindowScaleDPI();
-	// mouse.x /= dpi.x;
-	// mouse.y /= dpi.y;
-	return (azaPoint) { (int)mouse.x, (int)mouse.y };
+	return (azaPoint) { (int)mouse.x / currentDPIScale, (int)mouse.y / currentDPIScale };
 }
 
 static bool azaPointInRect(azaRect rect, azaPoint point) {
@@ -381,7 +398,7 @@ static void PushScissor(azaRect rect) {
 		rect.w = right - rect.x;
 		rect.h = bottom - rect.y;
 	}
-	BeginScissorMode(rect.x, rect.y, rect.w, rect.h);
+	BeginScissorMode(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale);
 	scissorStack.scissors[scissorStack.count] = rect;
 	scissorStack.count++;
 }
@@ -391,7 +408,7 @@ static void PopScissor() {
 	scissorStack.count--;
 	if (scissorStack.count > 0) {
 		azaRect up = scissorStack.scissors[scissorStack.count-1];
-		BeginScissorMode(up.x, up.y, up.w, up.h);
+		BeginScissorMode(up.x * currentDPIScale, up.y * currentDPIScale, up.w * currentDPIScale, up.h * currentDPIScale);
 	} else {
 		EndScissorMode();
 	}
@@ -449,21 +466,21 @@ static void azaDrawTooltips() {
 			height + textMargin*2,
 		};
 		azaRectFitOnScreen(&rect);
-		DrawRect((azaRect) {
+		azaDrawRect((azaRect) {
 			rect.x + 2,
 			rect.y + 2,
 			rect.w,
 			rect.h,
 		}, Fade(BLACK, 0.5f));
 		if (tooltips.isError[i]) {
-			DrawRectGradientH(rect, colorTooltipErrorBGLeft, colorTooltipErrorBGRight);
-			DrawRectLines(rect, colorTooltipErrorBorder);
+			azaDrawRectGradientH(rect, colorTooltipErrorBGLeft, colorTooltipErrorBGRight);
+			azaDrawRectLines(rect, colorTooltipErrorBorder);
 		} else {
-			DrawRectGradientH(rect, colorTooltipBGLeft, colorTooltipBGRight);
-			DrawRectLines(rect, colorTooltipBorder);
+			azaDrawRectGradientH(rect, colorTooltipBGLeft, colorTooltipBGRight);
+			azaDrawRectLines(rect, colorTooltipBorder);
 		}
-		DrawText(text, rect.x + textMargin + 1, rect.y + textMargin + 1, 10, BLACK);
-		DrawText(text, rect.x + textMargin, rect.y + textMargin, 10, WHITE);
+		azaDrawText(text, rect.x + textMargin + 1, rect.y + textMargin + 1, 10, BLACK);
+		azaDrawText(text, rect.x + textMargin, rect.y + textMargin, 10, WHITE);
 		text += strlen(text) + 1;
 	}
 	// We'll reset them here because whatever man, we already drew them
@@ -493,12 +510,12 @@ static void azaDrawDBTicks(azaRect bounds, int dbRange, int dbOffset, Color colo
 		Color myColor = i == dbOffset ? colorUnity : color;
 		myColor.a = 64 + (db%6==0)*128 + (db%3==0)*63;
 		int yOffset = i * bounds.h / dbRange;
-		DrawLine(bounds.x, bounds.y+yOffset, bounds.x+bounds.w, bounds.y+yOffset, myColor);
+		azaDrawLine(bounds.x, bounds.y+yOffset, bounds.x+bounds.w, bounds.y+yOffset, myColor);
 	}
 }
 
 static inline void azaDrawMeterBackground(azaRect bounds, int dbRange, int dbHeadroom) {
-	DrawRectGradientV(bounds, colorMeterBGTop, colorMeterBGBot);
+	azaDrawRectGradientV(bounds, colorMeterBGTop, colorMeterBGBot);
 	azaRectShrinkMarginV(&bounds, margin);
 	azaDrawDBTicks(bounds, dbRange, dbHeadroom, colorMeterDBTick, colorMeterDBTickUnity);
 }
@@ -513,15 +530,15 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 	if (mute) {
 		azaRect muteRect = bounds;
 		muteRect.h = muteRect.w;
-		DrawRect(muteRect, colorMeterBGTop);
+		azaDrawRect(muteRect, colorMeterBGTop);
 		azaRectShrinkMargin(&muteRect, margin);
 		if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, muteRect)) {
 			*mute = !*mute;
 		}
 		if (*mute) {
-			DrawRectangle(muteRect.x, muteRect.y, muteRect.w, muteRect.h, colorFaderMuteButton);
+			azaDrawRect(muteRect, colorFaderMuteButton);
 		} else {
-			DrawRectangleLines(muteRect.x, muteRect.y, muteRect.w, muteRect.h, colorFaderMuteButton);
+			azaDrawRectLines(muteRect, colorFaderMuteButton);
 		}
 		azaRectShrinkTop(&bounds, muteRect.h + margin);
 	}
@@ -529,7 +546,7 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 	azaRectShrinkMargin(&bounds, margin);
 	int yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, bounds.h, 0, dbRange);
 	if (mouseover) {
-		DrawRect(bounds, colorFaderHighlight);
+		azaDrawRect(bounds, colorFaderHighlight);
 		azaTooltipAdd(TextFormat("%+.1fdb", *gain), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
@@ -539,8 +556,13 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 		}
 	}
 	PushScissor(bounds);
-	DrawRectangleGradientV(bounds.x, bounds.y + yOffset - 6, bounds.w, 12, colorFaderKnobTop, colorFaderKnobBot);
-	DrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
+	azaDrawRectGradientV((azaRect) {
+		bounds.x,
+		bounds.y + yOffset - 6,
+		bounds.w,
+		12
+	}, colorFaderKnobTop, colorFaderKnobBot);
+	azaDrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
 	PopScissor();
 	return faderDrawWidth;
 }
@@ -563,22 +585,42 @@ static int azaDrawMeters(azaMeters *meters, azaRect bounds, int dbRange) {
 		} else if (meters->peaks[c] > 1.0f) {
 			peakColor = colorMeterPeakOver;
 		}
-		DrawLine(bounds.x, bounds.y + yOffset, bounds.x+bounds.w, bounds.y + yOffset, peakColor);
+		azaDrawLine(bounds.x, bounds.y + yOffset, bounds.x+bounds.w, bounds.y + yOffset, peakColor);
 		if (true /* meters->processed */) {
 			float rmsDB = aza_amp_to_dbf(sqrtf(meters->rmsSquaredAvg[c]));
 			float peakShortTermDB = aza_amp_to_dbf(meters->peaksShortTerm[c]);
 			yOffset = azaDBToYOffsetClamped(-peakShortTermDB, bounds.h, 0, dbRange);
-			DrawRectangle(bounds.x+bounds.w/4, bounds.y + yOffset, bounds.w/2, bounds.h - yOffset, colorMeterPeak);
+			azaDrawRect((azaRect){
+				bounds.x+bounds.w/4,
+				bounds.y + yOffset,
+				bounds.w/2,
+				bounds.h - yOffset
+			}, colorMeterPeak);
 
 			yOffset = azaDBToYOffsetClamped(-rmsDB, bounds.h, 0, dbRange);
-			DrawRectangle(bounds.x, bounds.y + yOffset, bounds.w, bounds.h - yOffset, colorMeterRMS);
+			azaDrawRect((azaRect){
+				bounds.x,
+				bounds.y + yOffset,
+				bounds.w,
+				bounds.h - yOffset
+			}, colorMeterRMS);
 			if (rmsDB > 0.0f) {
 				yOffset = azaDBToYOffsetClamped(rmsDB, bounds.h, 0, dbRange);
-				DrawRectangle(bounds.x, bounds.y, bounds.w, yOffset, colorMeterRMSOver);
+				azaDrawRect((azaRect){
+					bounds.x,
+					bounds.y,
+					bounds.w,
+					yOffset
+				}, colorMeterRMSOver);
 			}
 			if (peakShortTermDB > 0.0f) {
 				yOffset = azaDBToYOffsetClamped(peakShortTermDB, bounds.h, 0, dbRange);
-				DrawRectangle(bounds.x+bounds.w/4, bounds.y, bounds.w/2, yOffset, colorMeterPeakOver);
+				azaDrawRect((azaRect){
+					bounds.x+bounds.w/4,
+					bounds.y,
+					bounds.w/2,
+					yOffset
+				}, colorMeterPeakOver);
 			}
 		}
 		bounds.x += bounds.w + margin;
@@ -604,14 +646,14 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 	if (mouseover) {
 		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
 	}
-	DrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
+	azaDrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
 	azaRectShrinkMargin(&bounds, margin);
 	float logValue = logf(*value);
 	float logMin = logf(min);
 	float logMax = logf(max);
 	int yOffset = (int)((float)bounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
 	if (mouseover) {
-		DrawRect(bounds, colorFaderHighlight);
+		azaDrawRect(bounds, colorFaderHighlight);
 		if (!valueUnit) {
 			valueUnit = "";
 		}
@@ -629,8 +671,13 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 		*value = azaClampf(*value, min, max);
 	}
 	PushScissor(bounds);
-	DrawRectangleGradientV(bounds.x, bounds.y + yOffset - 6, bounds.w, 12, colorFaderKnobTop, colorFaderKnobBot);
-	DrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
+	azaDrawRectGradientV((azaRect) {
+		bounds.x,
+		bounds.y + yOffset - 6,
+		bounds.w,
+		12
+	}, colorFaderKnobTop, colorFaderKnobBot);
+	azaDrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
 	PopScissor();
 	return sliderDrawWidth;
 }
@@ -647,11 +694,11 @@ static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max
 	if (mouseover) {
 		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
 	}
-	DrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
+	azaDrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
 	azaRectShrinkMargin(&bounds, margin);
 	int yOffset = (int)((float)bounds.h * (1.0f - (*value - min) / (max - min)));
 	if (mouseover) {
-		DrawRect(bounds, colorFaderHighlight);
+		azaDrawRect(bounds, colorFaderHighlight);
 		if (!valueUnit) {
 			valueUnit = "";
 		}
@@ -665,8 +712,13 @@ static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max
 		*value = azaClampf(*value, min, max);
 	}
 	PushScissor(bounds);
-	DrawRectangleGradientV(bounds.x, bounds.y + yOffset - 6, bounds.w, 12, colorFaderKnobTop, colorFaderKnobBot);
-	DrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
+	azaDrawRectGradientV((azaRect) {
+		bounds.x,
+		bounds.y + yOffset - 6,
+		bounds.w,
+		12
+	}, colorFaderKnobTop, colorFaderKnobBot);
+	azaDrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
 	PopScissor();
 	return sliderDrawWidth;
 }
@@ -798,7 +850,7 @@ static void azaDrawTextBox(azaRect bounds, char *text, uint32_t textCapacity) {
 			azaTooltipAdd(text, bounds.x, bounds.y, false);
 		}
 		PushScissor(bounds);
-		DrawText(text, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
+		azaDrawText(text, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
 		PopScissor();
 	}
 }
@@ -811,17 +863,17 @@ static void azaDrawTextboxBeingEdited() {
 	int cursorX = MeasureText(text, 10) + textboxBounds.x + textMargin;
 	text[textboxCursor] = holdover;
 	int cursorY = textboxBounds.y + textMargin;
-	DrawRect(textboxBounds, BLACK);
-	DrawRectLines(textboxBounds, WHITE);
+	azaDrawRect(textboxBounds, BLACK);
+	azaDrawRectLines(textboxBounds, WHITE);
 	azaRectShrinkMargin(&textboxBounds, textMargin);
 	if (textboxSelected) {
 		azaRect selectionRect = textboxBounds;
 		selectionRect.w = MeasureText(text, 10);
-		DrawRect(selectionRect, DARKGRAY);
+		azaDrawRect(selectionRect, DARKGRAY);
 	} else {
-		DrawLine(cursorX, cursorY, cursorX, cursorY + 10, LIGHTGRAY);
+		azaDrawLine(cursorX, cursorY, cursorX, cursorY + 10, LIGHTGRAY);
 	}
-	DrawText(text, textboxBounds.x, textboxBounds.y, 10, WHITE);
+	azaDrawText(text, textboxBounds.x, textboxBounds.y, 10, WHITE);
 }
 
 // needs an id for mouse capture
@@ -831,7 +883,7 @@ static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int 
 	int scrollbarWidth = bounds.w / 4;
 	int useableWidth = bounds.w - scrollbarWidth;
 	int mouseX = (int)azaMousePosition().x - bounds.x;
-	DrawRect(bounds, colorScrollbarBG);
+	azaDrawRect(bounds, colorScrollbarBG);
 	if (mouseover) {
 		int scroll = (int)GetMouseWheelMoveV().y;
 		int click = (int)azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) * ((int)(mouseX >= bounds.w/2) * 2 - 1);
@@ -851,10 +903,10 @@ static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int 
 	} else {
 		knobRect.x += (bounds.w - scrollbarWidth) - offset;
 	}
-	DrawRect(knobRect, colorScrollbarFG);
+	azaDrawRect(knobRect, colorScrollbarFG);
 	azaPoint delta;
 	if (azaCaptureMouseDelta(knobRect, &delta, id)) {
-// asdf
+		// TODO: Dragging the knob
 	}
 }
 
@@ -1024,13 +1076,13 @@ static void azaContextMenuClose() {
 static bool azaDrawContextMenuButton(azaRect bounds, const char *label) {
 	bool result = false;
 	if (azaMouseInRect(bounds)) {
-		DrawRectGradientH(bounds, colorTooltipBGLeft, colorTooltipBGRight);
+		azaDrawRectGradientH(bounds, colorTooltipBGLeft, colorTooltipBGRight);
 		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
 			result = true;
 		}
 	}
 	if (label) {
-		DrawText(label, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
+		azaDrawText(label, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
 	}
 	return result;
 }
@@ -1051,7 +1103,7 @@ static void azaDrawContextMenu() {
 			}
 			contextMenuRect.h = count * contextMenuItemHeight;
 			azaRectFitOnScreen(&contextMenuRect);
-			DrawRect(contextMenuRect, BLACK);
+			azaDrawRect(contextMenuRect, BLACK);
 			PushScissor(contextMenuRect);
 			azaTrack *target = &currentMixer->master;
 			azaTrack *track = azaContextMenuTrackFromIndex();
@@ -1075,7 +1127,7 @@ static void azaDrawContextMenu() {
 			}
 			contextMenuRect.h = count * contextMenuItemHeight;
 			azaRectFitOnScreen(&contextMenuRect);
-			DrawRect(contextMenuRect, BLACK);
+			azaDrawRect(contextMenuRect, BLACK);
 			PushScissor(contextMenuRect);
 			azaTrack *target = &currentMixer->master;
 			for (int32_t i = 0; i < (int32_t)currentMixer->tracks.count+1; target = currentMixer->tracks.data[i++]) {
@@ -1091,7 +1143,7 @@ static void azaDrawContextMenu() {
 			uint32_t count = 1 + (contextMenuTrackFXDSP != NULL);
 			contextMenuRect.h = count * contextMenuItemHeight;
 			azaRectFitOnScreen(&contextMenuRect);
-			DrawRect(contextMenuRect, BLACK);
+			azaDrawRect(contextMenuRect, BLACK);
 			PushScissor(contextMenuRect);
 			if (contextMenuTrackFXDSP) {
 				if (azaDrawContextMenuButton(choiceRect, TextFormat("Remove %s", azaGetDSPName(contextMenuTrackFXDSP)))) {
@@ -1119,7 +1171,7 @@ static void azaDrawContextMenu() {
 			}
 			contextMenuRect.h = count * contextMenuItemHeight;
 			azaRectFitOnScreen(&contextMenuRect);
-			DrawRect(contextMenuRect, BLACK);
+			azaDrawRect(contextMenuRect, BLACK);
 			PushScissor(contextMenuRect);
 			for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
 				if (azaDSPRegistry.data[i].fp_makeDSP == NULL) continue;
@@ -1132,7 +1184,7 @@ static void azaDrawContextMenu() {
 			}
 		} break;
 		default: { // Simple non-dynamic
-			DrawRect(contextMenuRect, BLACK);
+			azaDrawRect(contextMenuRect, BLACK);
 			PushScissor(contextMenuRect);
 			uint32_t count = contextMenuActionCounts[(uint32_t)contextMenuKind];
 			const char **labels = contextMenuLabels[(uint32_t)contextMenuKind];
@@ -1146,7 +1198,7 @@ static void azaDrawContextMenu() {
 			}
 		} break;
 	}
-	DrawRectLines(contextMenuRect, WHITE);
+	azaDrawRectLines(contextMenuRect, WHITE);
 	PopScissor();
 }
 
@@ -1159,7 +1211,7 @@ static void azaDrawContextMenu() {
 
 
 static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect bounds) {
-	DrawRectGradientV(bounds, colorTrackFXTop, colorTrackFXBot);
+	azaDrawRectGradientV(bounds, colorTrackFXTop, colorTrackFXBot);
 	azaRectShrinkMargin(&bounds, margin);
 	PushScissor(bounds);
 	azaTrackGUIMetadata *metadata = &azaTrackGUIMetadatas.data[metadataIndex];
@@ -1171,14 +1223,14 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 	while (dsp) {
 		bool mouseover = azaMouseInRect(pluginRect);
 		if (mouseover) {
-			DrawRectGradientV(pluginRect, colorPluginBorderSelected, colorPluginBorder);
+			azaDrawRectGradientV(pluginRect, colorPluginBorderSelected, colorPluginBorder);
 			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
 				selectedDSP = dsp;
 			}
 			mouseoverDSP = dsp;
 		}
-		DrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
-		DrawText(azaGetDSPName(dsp), pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
+		azaDrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
+		azaDrawText(azaGetDSPName(dsp), pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
 		dsp = dsp->pNext;
 		pluginRect.y += pluginRect.h + margin;
 	}
@@ -1203,7 +1255,7 @@ static void azaDrawTrackControls(azaTrack *track, uint32_t metadataIndex, azaRec
 		azaContextMenuSetIndexFromTrack(track);
 		azaContextMenuOpen(AZA_CONTEXT_MENU_TRACK);
 	}
-	DrawRectangleGradientV(bounds.x, bounds.y, bounds.w, bounds.h, colorTrackControlsTop, colorTrackControlsBot);
+	azaDrawRectGradientV(bounds, colorTrackControlsTop, colorTrackControlsBot);
 	azaRectShrinkMargin(&bounds, margin);
 	// Fader
 	azaDrawFader(bounds, &track->gain, &track->mute, "Track Gain", meterDBRange, faderDBHeadroom);
@@ -1319,13 +1371,18 @@ static void azaDrawLookaheadLimiter(azaLookaheadLimiter *data, azaRect bounds) {
 	azaRectShrinkMargin(&attenuationRect, margin);
 	int yOffset;
 	yOffset = azaDBToYOffsetClamped(-aza_amp_to_dbf(data->minAmpShort), attenuationRect.h, 0, lookaheadLimiterAttenuationMeterDBRange);
-	DrawRectangle(attenuationRect.x, attenuationRect.y, attenuationRect.w, yOffset, colorLookaheadLimiterAttenuation);
+	azaDrawRect((azaRect) {
+		attenuationRect.x,
+		attenuationRect.y,
+		attenuationRect.w,
+		yOffset
+	}, colorLookaheadLimiterAttenuation);
 	float attenuationPeakDB = aza_amp_to_dbf(data->minAmp);
 	yOffset = azaDBToYOffsetClamped(-attenuationPeakDB, attenuationRect.h, 0, lookaheadLimiterAttenuationMeterDBRange);
 	if (attenuationMouseover) {
 		azaTooltipAdd(TextFormat("%+.1fdb", attenuationPeakDB), attenuationRect.x + attenuationRect.w + margin, attenuationRect.y + yOffset - (textMargin + 5), false);
 	}
-	DrawLine(attenuationRect.x, attenuationRect.y + yOffset, attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset, colorLookaheadLimiterAttenuation);
+	azaDrawLine(attenuationRect.x, attenuationRect.y + yOffset, attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset, colorLookaheadLimiterAttenuation);
 	if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, attenuationRect)) {
 		data->minAmp = 1.0f;
 	}
@@ -1346,11 +1403,11 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 			data->config.kind = (azaFilterKind)i;
 		}
 		bool selected = ((int)data->config.kind == i);
-		DrawRect(rectKind, colorMeterBGBot);
+		azaDrawRect(rectKind, colorMeterBGBot);
 		if (selected) {
-			DrawRectLines(rectKind, colorPluginBorderSelected);
+			azaDrawRectLines(rectKind, colorPluginBorderSelected);
 		}
-		DrawText(azaFilterKindString[i], rectKind.x + textMargin, rectKind.y + textMargin, 10, WHITE);
+		azaDrawText(azaFilterKindString[i], rectKind.x + textMargin, rectKind.y + textMargin, 10, WHITE);
 		rectKind.y += rectKind.h + margin;
 	}
 	azaRectShrinkTop(&rectKind, (rectKind.h + margin) * AZA_FILTER_KIND_COUNT);
@@ -1388,12 +1445,12 @@ static void azaDrawSelectedDSP() {
 		GetLogicalWidth() - margin*4,
 		pluginDrawHeight - margin*4,
 	};
-	DrawRectGradientV(bounds, colorPluginSettingsTop, colorPluginSettingsBot);
-	DrawRectLines(bounds, selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
+	azaDrawRectGradientV(bounds, colorPluginSettingsTop, colorPluginSettingsBot);
+	azaDrawRectLines(bounds, selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
 	if (!selectedDSP) return;
 
 	azaRectShrinkMargin(&bounds, margin*2);
-	DrawText(azaGetDSPName(selectedDSP), bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
+	azaDrawText(azaGetDSPName(selectedDSP), bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
 	azaRectShrinkTop(&bounds, textMargin * 2 + 20);
 	switch (selectedDSP->kind) {
 		case AZA_DSP_NONE:
@@ -1434,7 +1491,7 @@ static void azaDrawSelectedDSP() {
 
 
 static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
-	unsigned int configFlags = FLAG_VSYNC_HINT /*| FLAG_WINDOW_HIGHDPI*/ | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT;
+	unsigned int configFlags = FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE;
 	if (isWindowTopmost) {
 		configFlags |= FLAG_WINDOW_TOPMOST;
 	}
@@ -1463,6 +1520,7 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 			configFlags &= ~FLAG_WINDOW_TOPMOST;
 			ClearWindowState(FLAG_WINDOW_TOPMOST);
 		}
+		azaHandleDPIChanges();
 		azaMouseCaptureStartFrame();
 		BeginDrawing();
 			ClearBackground(colorBG);
