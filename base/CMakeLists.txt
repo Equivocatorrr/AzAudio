@@ -80,6 +80,7 @@ target_link_libraries(AzAudio PRIVATE raylib)
 
 if (CMAKE_SYSTEM MATCHES Windows)
 	target_link_libraries(AzAudio INTERFACE ksuser Winmm)
+	target_compile_definitions(AzAudio PRIVATE _CRT_SECURE_NO_WARNINGS)
 	set_property(TARGET AzAudio PROPERTY C_STANDARD 11)
 elseif (CMAKE_SYSTEM MATCHES Linux)
 	target_link_libraries(AzAudio INTERFACE pthread)

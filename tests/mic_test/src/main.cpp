@@ -6,6 +6,7 @@
 
 #if defined(_MSC_VER)
 	#define _CRT_USE_CONFORMING_ANNEX_K_TIME 1
+	#define _CRT_SECURE_NO_WARNINGS
 #endif
 #include <ctime>
 

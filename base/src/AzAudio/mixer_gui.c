@@ -171,7 +171,7 @@ static int TextCountLines(const char *text) {
 // TODO: For raylib on glfw, wayland support appears incredibly broken, so I guess we can't have nice things for now. Check back later for updates to raylib that might address this (even if that just means they updated the version of glfw they ship.) In the meantime, just using X11 (current default for raylib) seems to work fine.
 
 static int azaGetDPIScale() {
-	int rounded = roundf(GetWindowScaleDPI().x);
+	int rounded = (int)roundf(GetWindowScaleDPI().x);
 	return AZA_MAX(rounded, 1);
 }
 

@@ -17,7 +17,6 @@
 #if defined(_MSC_VER)
 	// Michaelsoft will not be spared my wrath at the end of days
 	#define _CRT_USE_CONFORMING_ANNEX_K_TIME 1
-	#define _CRT_SECURE_NO_WARNINGS
 #endif
 #include <time.h>
 
