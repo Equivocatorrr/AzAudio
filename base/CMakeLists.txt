@@ -45,6 +45,8 @@ add_library(AzAudio STATIC
 	src/AzAudio/AzAudio.h
 	src/AzAudio/AzAudio.c
 	src/AzAudio/channel_layout.h
+	src/AzAudio/cpuid.h
+	src/AzAudio/cpuid.c
 	src/AzAudio/version.c
 	src/AzAudio/dsp.h
 	src/AzAudio/dsp.c
@@ -64,6 +66,8 @@ add_library(AzAudio STATIC
 	src/AzAudio/backend/threads.h
 	src/AzAudio/backend/timer.h
 	${BACKEND_SOURCES}
+	# specialized implementations
+	src/AzAudio/specialized/azaBufferDeinterlace.c
 )
 
 set_target_properties(AzAudio PROPERTIES

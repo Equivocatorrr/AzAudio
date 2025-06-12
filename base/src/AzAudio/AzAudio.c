@@ -8,6 +8,7 @@
 #include "error.h"
 #include "helpers.h"
 #include "backend/interface.h"
+#include "cpuid.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -40,6 +41,7 @@ void azaInitOscillators() {
 }
 
 int azaInit() {
+	azaCPUIDInit();
 	char levelStr[64];
 	char *envStr = getenv("AZAUDIO_LOG_LEVEL");
 	if (envStr) {

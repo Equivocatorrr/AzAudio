@@ -2,10 +2,16 @@
 	File: simd.h
 	Author: Philip Haynes
 	Provides some utility on top of simd primitives
+	BIG TODO: When ARM testing becomes feasible, handle NEON stuff as well.
+
+	Some useful facts:
+	- x86_64 has SSE and SSE2 as core feature sets (guaranteed to be available)
 */
 
 #ifndef AZAUDIO_SIMD_H
 #define AZAUDIO_SIMD_H
+
+#include "cpuid.h"
 
 // Deal with Michaelsoft's ineptitude yet again.
 #if __AVX2__ && defined(_MSC_VER)
@@ -53,9 +59,51 @@
 
 #include "header_utils.h"
 
+#define _MM_SHUFFLER(w, x, y, z) _MM_SHUFFLE(z, y, x, w)
+
+#define _MM_INSERT(dst, src, clear) (((src) << 6) | ((dst) << 4) | (clear))
+
+#define _MM256_PERMUTE2F128(src0, src1) (((src1) << 4) | (src0))
+
+#if defined(_MSC_VER)
+	// MSVC lets you use intrinsics for any SIMD level regardless of compiler flags, so this doesn't have to do anything
+	#define AZA_SIMD_FEATURES(...)
+	// MSVC doesn't support target clones or ifunc
+	#define AZA_SIMD_TARGET_CLONES(...)
+
+	#define AZA_TARGET_SUPPORTS_IFUNC 0
+
+	#define AZA_SIMD_HAS_AVX2 azaCPUID.avx2
+	#define AZA_SIMD_HAS_FMA azaCPUID.fma
+	#define AZA_SIMD_HAS_AVX azaCPUID.avx
+	#define AZA_SIMD_HAS_SSE4_2 azaCPUID.sse4_2
+	#define AZA_SIMD_HAS_SSE4_1 azaCPUID.sse4_1
+	#define AZA_SIMD_HAS_SSSE3 azaCPUID.ssse3
+	#define AZA_SIMD_HAS_SSE3 azaCPUID.sse3
+	#define AZA_SIMD_HAS_SSE2 azaCPUID.sse2
+	#define AZA_SIMD_HAS_SSE azaCPUID.sse
+#elif defined(__GNUG__) || defined(__clang__)
+	#define AZA_SIMD_FEATURES(...) __attribute__((target(__VA_ARGS__)))
+	// TODO: handle compile targets that don't support ifunc
+	#define AZA_SIMD_TARGET_CLONES(...) __attribute__((target_clones(__VA_ARGS__)))
+
+	#define AZA_TARGET_SUPPORTS_IFUNC 1
+
+	#define AZA_SIMD_HAS_AVX2 __AVX2__
+	#define AZA_SIMD_HAS_FMA __FMA__
+	#define AZA_SIMD_HAS_AVX __AVX__
+	#define AZA_SIMD_HAS_SSE4_2 __SSE4_2__
+	#define AZA_SIMD_HAS_SSE4_1 __SSE4_1__
+	#define AZA_SIMD_HAS_SSSE3 __SSSE3__
+	#define AZA_SIMD_HAS_SSE3 __SSE3__
+	#define AZA_SIMD_HAS_SSE2 __SSE2__
+	#define AZA_SIMD_HAS_SSE __SSE__
+#endif
+
 #if __AVX__
 
 // Union for accessing specific scalars in a float vector
+// NOTE: If you have to use this, you're probably not really gaining any performance by using SIMD
 typedef union float_x8 {
 	__m256 v;
 	float f[8];

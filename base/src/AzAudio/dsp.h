@@ -50,6 +50,14 @@ void azaBufferDeinit(azaBuffer *data);
 // Zeroes out an entire buffer
 void azaBufferZero(azaBuffer buffer);
 
+// buffers are defined to be interlaced (where channels come one after the other in memory for a single frame)
+// But some operations are MUCH faster on deinterlaced data, so this will modify the buffer in-place to shuffle the data around such that all the samples of a single channel are adjacent to each other.
+
+// This operation is MUCH simpler with a sidebuffer to copy to, and a Deinterlace will pretty much always be paired with an Interlace, so if you hold on to the sidebuffer and use that for processing, you'll effectively eliminate 2 full buffer copies. This also means that if there's only 1 channel, you might consider handling that specially and eliminating the sidebuffer (because otherwise we're just doing an unnecessary buffer copy).
+// NOTE: asserts that dst and src have the same frame count, and that the stride, channel counts all match (stride must be the same as channel count)
+void azaBufferDeinterlace(azaBuffer dst, azaBuffer src);
+void azaBufferReinterlace(azaBuffer dst, azaBuffer src);
+
 // Mixes src into the existing contents of dst
 // NOTE: This will not respect channel positions. The buffers will be mixed as though the channel layouts are the same.
 // NOTE: asserts that dst and src have the same frame count and channel count. If that's a problem, then handle these conditions before calling this. Alternatively, use azaBufferMixMatrix.

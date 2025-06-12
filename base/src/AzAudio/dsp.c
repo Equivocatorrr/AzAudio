@@ -28,10 +28,6 @@
 #include <assert.h>
 #include <stdalign.h>
 
-
-#include "simd.h"
-
-
 // TODO: Maybe make this dynamic, and also deal with the thread_local memory leak snafu (possibly by making it not a stack, and therefore no longer thread_local)
 #define AZA_MAX_SIDE_BUFFERS 64
 thread_local azaBuffer sideBufferPool[AZA_MAX_SIDE_BUFFERS] = {{0}};
@@ -237,6 +233,16 @@ void azaBufferZero(azaBuffer buffer) {
 					buffer.samples[i + c] = 0.0f;
 				}
 			}
+		}
+	}
+}
+
+// azaBufferDeinterlace implementation is in specialized/bufferDeinterlace.c
+
+static void azaBufferReinterlace_scalar(azaBuffer dst, azaBuffer src) {
+	for (uint32_t i = 0; i < dst.frames; i++) {
+		for (uint32_t c = 0; c < dst.channelLayout.count; c++) {
+			src.samples[i * src.stride + c] = dst.samples[c * dst.frames + i];
 		}
 	}
 }
