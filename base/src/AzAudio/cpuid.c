@@ -27,19 +27,25 @@ static inline bool azaIsBitSet(uint32_t num, uint32_t bit) {
 
 #if defined(_MSC_VER)
 
-static azaCPUIDLeaf azaGetCPUIDLeaf(uint32_t eax, uint32_t ecx) {
+static azaCPUIDLeaf azaGetCPUIDLeaf(uint32_t leaf, uint32_t subleaf) {
 	azaCPUIDLeaf result;
-	__cpuidex((int*)result.data, eax, ecx);
+	__cpuidex((int*)result.data, leaf, subleaf);
 	return result;
 }
 
-#elif defined(__GNUG__)
+#elif defined(__GNUC__) || defined(__clang__)
 
-#define azaGetCPUIDLeaf #error "Write my code, boy"
+#include <cpuid.h>
 
-#elif defined(__clang__)
+static azaCPUIDLeaf azaGetCPUIDLeaf(uint32_t leaf, uint32_t subleaf) {
+	azaCPUIDLeaf result;
+	__get_cpuid_count(leaf, subleaf, &result.eax, &result.ebx, &result.ecx, &result.edx);
+	return result;
+}
 
-#define azaGetCPUIDLeaf #error "Write my code, boy"
+#else
+
+#warning "platform not supported"
 
 #endif
 

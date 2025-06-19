@@ -237,7 +237,7 @@ void azaBufferZero(azaBuffer buffer) {
 	}
 }
 
-// azaBufferDeinterlace implementation is in specialized/bufferDeinterlace.c
+// azaBufferDeinterlace implementation is in specialized/azaBufferDeinterlace.c
 
 static void azaBufferReinterlace_scalar(azaBuffer dst, azaBuffer src) {
 	for (uint32_t i = 0; i < dst.frames; i++) {

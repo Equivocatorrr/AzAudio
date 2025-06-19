@@ -68,37 +68,26 @@
 #if defined(_MSC_VER)
 	// MSVC lets you use intrinsics for any SIMD level regardless of compiler flags, so this doesn't have to do anything
 	#define AZA_SIMD_FEATURES(...)
-	// MSVC doesn't support target clones or ifunc
-	#define AZA_SIMD_TARGET_CLONES(...)
-
-	#define AZA_TARGET_SUPPORTS_IFUNC 0
-
-	#define AZA_SIMD_HAS_AVX2 azaCPUID.avx2
-	#define AZA_SIMD_HAS_FMA azaCPUID.fma
-	#define AZA_SIMD_HAS_AVX azaCPUID.avx
-	#define AZA_SIMD_HAS_SSE4_2 azaCPUID.sse4_2
-	#define AZA_SIMD_HAS_SSE4_1 azaCPUID.sse4_1
-	#define AZA_SIMD_HAS_SSSE3 azaCPUID.ssse3
-	#define AZA_SIMD_HAS_SSE3 azaCPUID.sse3
-	#define AZA_SIMD_HAS_SSE2 azaCPUID.sse2
-	#define AZA_SIMD_HAS_SSE azaCPUID.sse
-#elif defined(__GNUG__) || defined(__clang__)
+#elif defined(__GNUC__) || defined(__clang__)
 	#define AZA_SIMD_FEATURES(...) __attribute__((target(__VA_ARGS__)))
-	// TODO: handle compile targets that don't support ifunc
-	#define AZA_SIMD_TARGET_CLONES(...) __attribute__((target_clones(__VA_ARGS__)))
 
-	#define AZA_TARGET_SUPPORTS_IFUNC 1
+	// I would love to take advantage of ifunc with gcc but for whatever reason, it's impossible to use hand-rolled specialized functions with it in C mode. C++ only feature apparently :/
+	// At the very least this slightly simplifies the code, so we don't have to directly support 2 different dispatch models. We're doing almost the same thing as ifunc manually anyway, just slightly worse (probably).
+#else
 
-	#define AZA_SIMD_HAS_AVX2 __AVX2__
-	#define AZA_SIMD_HAS_FMA __FMA__
-	#define AZA_SIMD_HAS_AVX __AVX__
-	#define AZA_SIMD_HAS_SSE4_2 __SSE4_2__
-	#define AZA_SIMD_HAS_SSE4_1 __SSE4_1__
-	#define AZA_SIMD_HAS_SSSE3 __SSSE3__
-	#define AZA_SIMD_HAS_SSE3 __SSE3__
-	#define AZA_SIMD_HAS_SSE2 __SSE2__
-	#define AZA_SIMD_HAS_SSE __SSE__
+#warning "platform not supported"
+
 #endif
+
+#define AZA_AVX2 azaCPUID.avx2
+#define AZA_FMA azaCPUID.fma
+#define AZA_AVX azaCPUID.avx
+#define AZA_SSE4_2 azaCPUID.sse4_2
+#define AZA_SSE4_1 azaCPUID.sse4_1
+#define AZA_SSSE3 azaCPUID.ssse3
+#define AZA_SSE3 azaCPUID.sse3
+#define AZA_SSE2 azaCPUID.sse2
+#define AZA_SSE azaCPUID.sse
 
 #if __AVX__
 

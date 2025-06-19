@@ -115,36 +115,19 @@ void azaBufferDeinterlace2Ch_avx2(azaBuffer dst, azaBuffer src) {
 	}
 }
 
-#if AZA_TARGET_SUPPORTS_IFUNC
-
-AZA_SIMD_TARGET_CLONES("avx2", "sse", "default")
-void azaBufferDeinterlace2Ch(azaBuffer dst, azaBuffer src) {
-	if (AZA_SIMD_HAS_AVX2) {
-		azaBufferDeinterlace2Ch_avx2(dst, src);
-	} else if (AZA_SIMD_HAS_SSE) {
-		azaBufferDeinterlace2Ch_sse(dst, src);
-	} else {
-		azaBufferDeinterlace2Ch_scalar(dst, src);
-	}
-}
-
-#else
-
 void azaBufferDeinterlace2Ch_dispatch(azaBuffer, azaBuffer);
 void (*azaBufferDeinterlace2Ch)(azaBuffer dst, azaBuffer src) = azaBufferDeinterlace2Ch_dispatch;
 void azaBufferDeinterlace2Ch_dispatch(azaBuffer dst, azaBuffer src) {
 	assert(azaCPUID.initted);
-	if (AZA_SIMD_HAS_AVX2) {
+	if (AZA_AVX2) {
 		azaBufferDeinterlace2Ch = azaBufferDeinterlace2Ch_avx2;
-	} else if (AZA_SIMD_HAS_SSE) {
+	} else if (AZA_SSE) {
 		azaBufferDeinterlace2Ch = azaBufferDeinterlace2Ch_sse;
 	} else {
 		azaBufferDeinterlace2Ch = azaBufferDeinterlace2Ch_scalar;
 	}
 	azaBufferDeinterlace2Ch(dst, src);
 }
-
-#endif
 
 // 3 channel specialized deinterlace
 
@@ -378,40 +361,21 @@ void azaBufferDeinterlace3Ch_avx2(azaBuffer dst, azaBuffer src) {
 	}
 }
 
-#if AZA_TARGET_SUPPORTS_IFUNC
-
-AZA_SIMD_TARGET_CLONES("avx2", "sse4.1", "sse", "default")
-void azaBufferDeinterlace3Ch(azaBuffer dst, azaBuffer src) {
-	if (AZA_SIMD_HAS_AVX2) {
-		azaBufferDeinterlace3Ch_avx2(dst, src);
-	} else if (AZA_SIMD_HAS_SSE4_1) {
-		azaBufferDeinterlace3Ch_sse4_1(dst, src);
-	} else if (AZA_SIMD_HAS_SSE) {
-		azaBufferDeinterlace3Ch_sse(dst, src);
-	} else {
-		azaBufferDeinterlace3Ch_scalar(dst, src);
-	}
-}
-
-#else
-
 void azaBufferDeinterlace3Ch_dispatch(azaBuffer, azaBuffer);
 void (*azaBufferDeinterlace3Ch)(azaBuffer dst, azaBuffer src) = azaBufferDeinterlace3Ch_dispatch;
 void azaBufferDeinterlace3Ch_dispatch(azaBuffer dst, azaBuffer src) {
 	assert(azaCPUID.initted);
-	if (AZA_SIMD_HAS_AVX2) {
+	if (AZA_AVX2) {
 		azaBufferDeinterlace3Ch = azaBufferDeinterlace3Ch_avx2;
-	} else if (AZA_SIMD_HAS_SSE4_1) {
+	} else if (AZA_SSE4_1) {
 		azaBufferDeinterlace3Ch = azaBufferDeinterlace3Ch_sse4_1;
-	} else if (AZA_SIMD_HAS_SSE) {
+	} else if (AZA_SSE) {
 		azaBufferDeinterlace3Ch = azaBufferDeinterlace3Ch_sse;
 	} else {
 		azaBufferDeinterlace3Ch = azaBufferDeinterlace3Ch_scalar;
 	}
 	azaBufferDeinterlace3Ch(dst, src);
 }
-
-#endif
 
 // 4 channel specialized deinterlace
 
@@ -603,36 +567,19 @@ void azaBufferDeinterlace4Ch_avx2(azaBuffer dst, azaBuffer src) {
 	}
 }
 
-#if AZA_TARGET_SUPPORTS_IFUNC
-
-AZA_SIMD_TARGET_CLONES("avx2", "sse", "default")
-void azaBufferDeinterlace4Ch(azaBuffer dst, azaBuffer src) {
-	if (AZA_SIMD_HAS_AVX2) {
-		azaBufferDeinterlace4Ch_avx2(dst, src);
-	} else if (AZA_SIMD_HAS_SSE) {
-		azaBufferDeinterlace4Ch_sse(dst, src);
-	} else {
-		azaBufferDeinterlace4Ch_scalar(dst, src);
-	}
-}
-
-#else
-
 void azaBufferDeinterlace4Ch_dispatch(azaBuffer, azaBuffer);
 void (*azaBufferDeinterlace4Ch)(azaBuffer dst, azaBuffer src) = azaBufferDeinterlace4Ch_dispatch;
 void azaBufferDeinterlace4Ch_dispatch(azaBuffer dst, azaBuffer src) {
 	assert(azaCPUID.initted);
-	if (AZA_SIMD_HAS_AVX2) {
+	if (AZA_AVX2) {
 		azaBufferDeinterlace4Ch = azaBufferDeinterlace4Ch_avx2;
-	} else if (AZA_SIMD_HAS_SSE) {
+	} else if (AZA_SSE) {
 		azaBufferDeinterlace4Ch = azaBufferDeinterlace4Ch_sse;
 	} else {
 		azaBufferDeinterlace4Ch = azaBufferDeinterlace4Ch_scalar;
 	}
 	azaBufferDeinterlace4Ch(dst, src);
 }
-
-#endif
 
 void azaBufferDeinterlace(azaBuffer dst, azaBuffer src) {
 	assert(dst.frames == src.frames);
