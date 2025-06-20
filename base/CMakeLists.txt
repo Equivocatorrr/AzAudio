@@ -68,6 +68,7 @@ add_library(AzAudio STATIC
 	${BACKEND_SOURCES}
 	# specialized implementations
 	src/AzAudio/specialized/azaBufferDeinterlace.c
+	src/AzAudio/specialized/azaBufferReinterlace.c
 )
 
 set_target_properties(AzAudio PROPERTIES
