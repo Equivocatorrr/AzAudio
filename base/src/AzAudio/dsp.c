@@ -239,14 +239,7 @@ void azaBufferZero(azaBuffer buffer) {
 
 // azaBufferDeinterlace implementation is in specialized/azaBufferDeinterlace.c
 
-static void azaBufferReinterlace_scalar(azaBuffer dst, azaBuffer src) {
-	for (uint32_t i = 0; i < dst.frames; i++) {
-		for (uint32_t c = 0; c < dst.channelLayout.count; c++) {
-			src.samples[i * src.stride + c] = dst.samples[c * dst.frames + i];
-		}
-	}
-}
-
+// azaBufferReinterlace implementation is in specialized/azaBufferReinterlace.c
 
 void azaBufferMix(azaBuffer dst, float volumeDst, azaBuffer src, float volumeSrc) {
 	assert(dst.frames == src.frames);
