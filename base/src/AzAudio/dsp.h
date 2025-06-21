@@ -743,12 +743,11 @@ void azaKernelDeinit(azaKernel *kernel);
 
 float azaKernelSample(azaKernel *kernel, int i, float pos);
 
+float azaSampleWithKernel(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos);
+
 // Makes a lanczos kernel. resolution is the number of samples between zero crossings
 // May return AZA_ERROR_OUT_OF_MEMORY
 int azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius);
-
-
-float azaSampleWithKernel(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos);
 
 // Performs resampling of src into dst with the given scaling factor and kernel.
 // srcFrames is not actually needed here because the sampleable extent is provided by srcFrameMin and srcFrameMax, but for this description it refers to how many samples within src are considered the "meat" of the signal (excluding padding carried over from the last iteration of resampling a stream).

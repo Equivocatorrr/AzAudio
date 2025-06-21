@@ -64,13 +64,15 @@ azaLinstepf(float a, float min, float max) {
 	return azaClampf((a - min) / (max - min), 0.0f, 1.0f);
 }
 
+AZA_SIMD_FEATURES("sse,fma")
+static AZA_FORCE_INLINE(float)
+azaLerpf_sse_fma(float a, float b, float t) {
+	return aza_fmadd_f32(b - a, t, a);
+}
+
 static AZA_FORCE_INLINE(float)
 azaLerpf(float a, float b, float t) {
-#if __SSE__
-	return aza_fmadd_f32(b - a, t, a);
-#else
 	return (b - a) * t + a;
-#endif
 }
 
 static AZA_FORCE_INLINE(float)

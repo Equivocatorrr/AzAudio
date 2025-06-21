@@ -69,6 +69,8 @@ add_library(AzAudio STATIC
 	# specialized implementations
 	src/AzAudio/specialized/azaBufferDeinterlace.c
 	src/AzAudio/specialized/azaBufferReinterlace.c
+	src/AzAudio/specialized/azaBufferMixMatrix.c
+	src/AzAudio/specialized/azaKernel.c
 )
 
 set_target_properties(AzAudio PROPERTIES
