@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 BuildReleaseL=0
 BuildDebugL=0
@@ -10,7 +10,7 @@ run_arg=0
 run=0
 run_debug=0
 run_target=""
-run_args=""
+run_args=()
 clean=0
 install=0
 trace=""
@@ -22,13 +22,13 @@ usage()
 	exit 1
 }
 
-for arg in "$@"; do
+for arg; do
 	has_args=1
 	if [ $run_arg -eq 1 ]; then
 		run_target="$arg"
 		run_arg=2
 	elif [ $run_arg -eq 2 ]; then
-		run_args="$run_args $arg"
+		run_args+=("\"$arg\"")
 	else
 		if [ "$arg" = "All" ]
 		then
@@ -176,9 +176,9 @@ echo "All builds complete!"
 if [ $run -ne 0 ]; then
 	echo "Running \"$ $run_target $run_args\""
 	cd "tests/$run_target"
-	bin/$run_target $run_args
+	eval "bin/$run_target $run_args"
 elif [ $run_debug -ne 0 ]; then
 	echo "Running \"\$ $run_target $run_args\" in debug mode"
 	cd "tests/$run_target"
-	bin/${run_target}_debug $run_args
+	eval "bin/${run_target}_debug $run_args"
 fi
