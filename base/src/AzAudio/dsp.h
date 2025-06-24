@@ -722,24 +722,33 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 
 
 typedef struct azaKernel {
-	// if this is 1, we only store half of the actual table
-	int isSymmetrical;
-	// length of the kernel, which is half of the actual length if we're symmetrical
-	float length;
-	// How many samples there are between an interval of length 1
-	float scale;
+	// length of the kernel (in samples)
+	uint32_t length;
+	// which sample along our length represents a time offset of zero
+	uint32_t sampleZero;
+	// How many sub-samples there are between each sample
+	uint32_t scale;
 	// total size of table, which is length * scale
 	uint32_t size;
+	// Standard layout where kernel samples are in order. This is where you write the kernel before calling azaKernelPack.
 	float *table;
+	// An alternate layout of the table optimized for sampling
+	// The following is a semantic representation of the layout:
+	// struct {
+	// 	float samples[length];
+	// } subsamples[scale];
+	float *packed;
 } azaKernel;
 
 extern azaKernel azaKernelDefaultLanczos;
 
 // Creates a blank kernel
 // Will allocate memory for the table (may return AZA_ERROR_OUT_OF_MEMORY)
-// NOTE: asserts that length and scale are > 0.0f.
-int azaKernelInit(azaKernel *kernel, int isSymmetrical, float length, float scale);
+int azaKernelInit(azaKernel *kernel, uint32_t length, uint32_t sampleZero, uint32_t scale);
 void azaKernelDeinit(azaKernel *kernel);
+
+// Must be called after kernel->table is populated, and before using the kernel for any sampling.
+void azaKernelPack(azaKernel *kernel);
 
 float azaKernelSample(azaKernel *kernel, int i, float pos);
 
@@ -747,7 +756,7 @@ float azaSampleWithKernel(float *src, int stride, int minFrame, int maxFrame, az
 
 // Makes a lanczos kernel. resolution is the number of samples between zero crossings
 // May return AZA_ERROR_OUT_OF_MEMORY
-int azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius);
+int azaKernelMakeLanczos(azaKernel *kernel, uint32_t resolution, uint32_t radius);
 
 // Performs resampling of src into dst with the given scaling factor and kernel.
 // srcFrames is not actually needed here because the sampleable extent is provided by srcFrameMin and srcFrameMax, but for this description it refers to how many samples within src are considered the "meat" of the signal (excluding padding carried over from the last iteration of resampling a stream).

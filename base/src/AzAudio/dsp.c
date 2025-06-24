@@ -831,6 +831,7 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 	if (updateMeters) {
 		azaMetersUpdate(&data->metersInput, buffer, amountInput);
 	}
+	// TODO: There's some odd behavior where CPU usage jumps the instant there's any attenuation and never drops again. Pls investigate!
 	azaBuffer gainBuffer;
 	gainBuffer = azaPushSideBuffer(buffer.frames, 1, buffer.samplerate);
 	memset(gainBuffer.samples, 0, sizeof(float) * gainBuffer.frames);
@@ -1639,10 +1640,8 @@ static int azaDelayDynamicHandleBufferResizes(azaDelayDynamic *data, azaBuffer s
 	int err = AZA_SUCCESS;
 	err = azaEnsureChannels(&data->channelData, src.channelLayout.count);
 	if AZA_UNLIKELY(err) return err;
-	uint32_t kernelSamples;
 	azaKernel *kernel = azaDelayDynamicGetKernel(data);
-	kernelSamples = (uint32_t)ceilf(kernel->isSymmetrical ? (kernel->length - 1.0f) * 2.0f : (kernel->length-1.0f));
-	// kernelSamples = 0;
+	uint32_t kernelSamples = kernel->length;
 	uint32_t delaySamplesMax = (uint32_t)ceilf(aza_ms_to_samples(data->config.delayMax, (float)src.samplerate)) + kernelSamples;
 	uint32_t totalSamplesNeeded = delaySamplesMax + src.frames;
 	uint32_t perChannelBufferCap = data->bufferCap / src.channelLayout.count;
@@ -1671,10 +1670,8 @@ static int azaDelayDynamicHandleBufferResizes(azaDelayDynamic *data, azaBuffer s
 
 // Puts new audio data into the buffer for immediate sampling. Assumes azaDelayDynamicHandleBufferResizes was called already.
 static void azaDelayDynamicPrimeBuffer(azaDelayDynamic *data, azaBuffer src) {
-	uint32_t kernelSamples;
 	azaKernel *kernel = azaDelayDynamicGetKernel(data);
-	kernelSamples = (uint32_t)ceilf(kernel->isSymmetrical ? (kernel->length - 1.0f) * 2.0f : (kernel->length-1.0f));
-	// kernelSamples = 0;
+	uint32_t kernelSamples = kernel->length;
 	uint32_t delaySamplesMax = (uint32_t)ceilf(aza_ms_to_samples(data->config.delayMax, (float)src.samplerate)) + kernelSamples;
 	for (uint8_t c = 0; c < src.channelLayout.count; c++) {
 		azaDelayDynamicChannelData *channelData = azaGetChannelData(&data->channelData, c);
@@ -1773,16 +1770,8 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 	err = azaDelayDynamicHandleBufferResizes(data, inputBuffer);
 	if (err) goto error;
 	// TODO: Verify whether this matters. It was difficult to tell whether there was any problem with not factoring in the kernel (which I suppose would only matter for very close to 0 delay).
-	int kernelSamplesLeft, kernelSamplesRight;
-	if (kernel->isSymmetrical) {
-		kernelSamplesLeft = (int)ceilf(kernel->length - 1.0f);
-		kernelSamplesRight = (int)ceilf(kernel->length - 1.0f);
-	} else {
-		kernelSamplesLeft = 0;
-		kernelSamplesRight = (int)ceilf(kernel->length - 1.0f);
-	}
-	// kernelSamplesLeft = 0;
-	// kernelSamplesRight = 0;
+	int kernelSamplesLeft = kernel->sampleZero;
+	int kernelSamplesRight = kernel->length - kernel->sampleZero;
 	uint32_t delaySamplesMax = (uint32_t)ceilf(aza_ms_to_samples(data->config.delayMax, (float)buffer.samplerate));
 	for (uint8_t c = 0; c < inputBuffer.channelLayout.count; c++) {
 		azaDelayDynamicChannelData *channelData = azaGetChannelData(&data->channelData, c);
@@ -1837,31 +1826,52 @@ error:
 
 
 
-int azaKernelInit(azaKernel *kernel, int isSymmetrical, float length, float scale) {
-	assert(length > 0.0f);
-	assert(scale > 0.0f);
-	kernel->isSymmetrical = isSymmetrical;
+int azaKernelInit(azaKernel *kernel, uint32_t length, uint32_t sampleZero, uint32_t scale) {
 	kernel->length = length;
+	kernel->sampleZero = sampleZero;
 	kernel->scale = scale;
-	kernel->size = (uint32_t)ceilf(length * scale);
+	kernel->size = length * scale;
 	kernel->table = aza_calloc(kernel->size, sizeof(float));
 	if (!kernel->table) return AZA_ERROR_OUT_OF_MEMORY;
+	uint32_t packedSize = length * (scale+1);
+	kernel->packed = aza_calloc(packedSize, sizeof(float));
+	if (!kernel->packed) {
+		aza_free(kernel->table);
+		return AZA_ERROR_OUT_OF_MEMORY;
+	}
 	return AZA_SUCCESS;
 }
 
 void azaKernelDeinit(azaKernel *kernel) {
 	aza_free(kernel->table);
+	aza_free(kernel->packed);
+}
+
+void azaKernelPack(azaKernel *kernel) {
+	assert(kernel->table);
+	assert(kernel->packed);
+	for (uint32_t subsample = 0; subsample <= kernel->scale; subsample++) {
+		float *dst = kernel->packed + (subsample * kernel->length);
+		float *src = kernel->table + subsample;
+		for (uint32_t i = 0; i < kernel->length; i++) {
+			dst[i] = src[i*kernel->scale];
+		}
+	}
 }
 
 // azaKernelSample and azaSampleWithKernel are implemented in specialized/azaKernel.c
 
-int azaKernelMakeLanczos(azaKernel *kernel, float resolution, float radius) {
-	int err = azaKernelInit(kernel, 1, 1+radius, resolution);
+int azaKernelMakeLanczos(azaKernel *kernel, uint32_t resolution, uint32_t radius) {
+	int err = azaKernelInit(kernel, 1+radius*2, 1+radius, resolution);
 	if (err) return err;
-	for (uint32_t i = 0; i < kernel->size-1; i++) {
-		kernel->table[i] = azaLanczosf((float)i / resolution, radius);
+	kernel->table[0] = 0.0f;
+	for (uint32_t i = 0; i < radius * resolution; i++) {
+		float value = azaLanczosf((float)i / (float)resolution, radius);
+		kernel->table[kernel->sampleZero*resolution - i] = value;
+		kernel->table[kernel->sampleZero*resolution + i] = value;
 	}
 	kernel->table[kernel->size-1] = 0.0f;
+	azaKernelPack(kernel);
 	return AZA_SUCCESS;
 }
 
@@ -2143,6 +2153,7 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 	float delayEnd = azaVec3Norm(srcPosEnd) / world->speedOfSound * 1000.0f;
 	if (dstBuffer.channelLayout.count == 1) {
 		// Nothing to do but put it in there I guess
+		azaBufferMixFade(sideBuffer, 1.0f, 1.0f, srcBuffer, srcAmpStart, srcAmpEnd);
 		if (data->config.mode == AZA_SPATIALIZE_ADVANCED) {
 			// Gotta do the doppler
 			azaDelayDynamic *delay = azaSpatializeGetDelayDynamic(data);
@@ -2159,7 +2170,7 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 			err = azaFilterProcess(&channelData->filter, sideBuffer);
 			if AZA_UNLIKELY(err) return err;
 		}
-		azaBufferMixFade(dstBuffer, 1.0f, 1.0f, sideBuffer, srcAmpStart, srcAmpEnd);
+		azaBufferMix(dstBuffer, 1.0f, sideBuffer, 1.0f);
 		azaPopSideBuffer();
 		return AZA_SUCCESS;
 	}

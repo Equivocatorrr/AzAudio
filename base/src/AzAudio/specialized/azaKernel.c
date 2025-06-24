@@ -11,95 +11,92 @@
 #include "../dsp.h"
 #include "../simd.h"
 #include "../helpers.h"
+#include "../AzAudio.h"
 
 float azaKernelSample(azaKernel *kernel, int i, float pos) {
-	float x = (float)i - pos;
-	if (kernel->isSymmetrical) {
-		if (x < 0.0f) x = -x;
-	} else {
-		if (x < 0.0f) return 0.0f;
-	}
-	x *= kernel->scale;
-	uint32_t index = (uint32_t)x;
-	if (index >= kernel->size-1) return 0.0f;
+	float x = (float)(i + kernel->sampleZero) - pos;
+	int32_t index = (int32_t)x;
+	if (index >= kernel->length-1 || index < 0) return 0.0f;
 	x -= (float)index;
-	float result = azaLerpf(kernel->table[index], kernel->table[index+1], x);
+	x *= kernel->scale;
+	assert(x >= 0.0f);
+	int32_t subsample = (int32_t)x;
+	x -= (float)subsample;
+	assert(subsample < kernel->scale);
+	float *srcSubsample0 = kernel->packed + ((subsample+0) * kernel->length);
+	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
+	float result = azaLerpf(srcSubsample0[index], srcSubsample1[index], x);
+	// index = index * kernel->scale + subsample;
+	// float result = azaLerpf(kernel->table[index], kernel->table[index+1], x);
+	return result;
+}
+
+AZA_SIMD_FEATURES("sse,fma")
+float azaKernelSample_sse_fma(azaKernel *kernel, int i, float pos) {
+	float x = (float)(i + kernel->sampleZero) - pos;
+	int32_t index = (int32_t)x;
+	if (index >= kernel->length-1 || index < 0) return 0.0f;
+	x -= (float)index;
+	x *= kernel->scale;
+	assert(x >= 0.0f);
+	int32_t subsample = (int32_t)x;
+	x -= (float)subsample;
+	assert(subsample < kernel->scale);
+	float *srcSubsample0 = kernel->packed + ((subsample+0) * kernel->length);
+	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
+	float result = azaLerpf_sse_fma(srcSubsample0[index], srcSubsample1[index], x);
+	// index = index * kernel->scale + subsample;
+	// float result = azaLerpf(kernel->table[index], kernel->table[index+1], x);
+	return result;
+}
+
+AZA_SIMD_FEATURES("sse,fma")
+static __m128 azaKernelSample_x4_sse_fma(azaKernel *kernel, int i, float pos) {
+	float x = (float)(i + kernel->sampleZero) - pos;
+	int32_t index = (int32_t)x;
+	// We won't be doing any masking, so don't be calling this if you don't handle tails as scalars!
+	assert(index <= kernel->length-4);
+	assert(index >= 0);
+	x -= (float)index;
+	x *= kernel->scale;
+	assert(x >= 0.0f);
+	int32_t subsample = (int32_t)x;
+	x -= (float)subsample;
+	assert(subsample < kernel->scale);
+	float *srcSubsample0 = kernel->packed + ((subsample+0) * kernel->length);
+	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
+	__m128 samples0 = _mm_loadu_ps(srcSubsample0 + index);
+	__m128 samples1 = _mm_loadu_ps(srcSubsample1 + index);
+	__m128 result = azaLerp_x4_sse_fma(samples0, samples1, _mm_set1_ps(x));
 	return result;
 }
 
 AZA_SIMD_FEATURES("avx,fma")
 static __m256 azaKernelSample_x8_avx_fma(azaKernel *kernel, int i, float pos) {
-	int step;
-	float x = (float)i - pos;
-	if (kernel->isSymmetrical) {
-		if (x < 0.0f) {
-			if (x > -8.0f) {
-				// Have to handle the pivot point
-				x = -x * kernel->scale;
-				int32_t index = (int32_t)x;
-				x -= (float)index;
-				float_x8 a = {0};
-				float_x8 b = {0};
-				float_x8 t = {0};
-				step = -(int)kernel->scale;
-				for (uint32_t j = 0; j < 8; j++) {
-					if ((uint32_t)index < kernel->size-1) {
-						a.f[j] = kernel->table[index];
-						b.f[j] = kernel->table[index+1];
-						t.f[j] = x;
-					}
-					index += step;
-					if (index < 0) {
-						step = -step;
-						// Gotta do it like this to get the last ULP of error out.
-						x = (float)(i+j+1) - pos;
-						x *= kernel->scale;
-						index = (int32_t)x;
-						x -= (float)index;
-					}
-				}
-				return azaLerp_x8_avx_fma(a.v, b.v, t.v);
-			} else {
-				// Send it in reverse
-				x = -x;
-				step = -(int)kernel->scale;
-			}
-		} else {
-			step = (int)kernel->scale;
-		}
-	} else {
-		if (x <= -8.0f) return _mm256_setzero_ps();
-		step = (int)kernel->scale;
-	}
-	// Send it forward
-	x *= kernel->scale;
-	uint32_t index = (uint32_t)x;
-	if (index >= kernel->size-1 && step > 0) return _mm256_setzero_ps();
+	float x = (float)(i + kernel->sampleZero) - pos;
+	int32_t index = (int32_t)x;
+	// We won't be doing any masking, so don't be calling this if you don't handle tails as scalars!
+	assert(index <= kernel->length-8);
+	assert(index >= 0);
 	x -= (float)index;
-	float_x8 a = {0};
-	float_x8 b = {0};
-	for (uint32_t j = 0; j < 8; j++) {
-		if (index < kernel->size-1) {
-			a.f[j] = kernel->table[index];
-			b.f[j] = kernel->table[index+1];
-		}
-		index += step;
-	}
-	float_x8 result;
-	result.v = azaLerp_x8_avx_fma(a.v, b.v, _mm256_set1_ps(x));
-	return result.v;
+	x *= kernel->scale;
+	assert(x >= 0.0f);
+	int32_t subsample = (int32_t)x;
+	x -= (float)subsample;
+	assert(subsample < kernel->scale);
+	float *srcSubsample0 = kernel->packed + ((subsample+0) * kernel->length);
+	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
+	__m256 samples0 = _mm256_loadu_ps(srcSubsample0 + index);
+	__m256 samples1 = _mm256_loadu_ps(srcSubsample1 + index);
+	__m256 result = azaLerp_x8_avx_fma(samples0, samples1, _mm256_set1_ps(x));
+	return result;
 }
 
 float azaSampleWithKernel_scalar(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos) {
 	float result = 0.0f;
 	int start, end;
-	if (kernel->isSymmetrical) {
-		start = (int)pos - (int)kernel->length + 1;
-		end = (int)pos + (int)kernel->length;
-	} else {
-		start = (int)pos;
-		end = (int)pos + (int)kernel->length;
-	}
+	start = (int)pos - kernel->sampleZero + 1;
+	end = start + kernel->length;
 	int i = start;
 	// TODO: I've noticed from some null testing between Lanczos kernel sizes (radius 64 and 32, both resolution 128) that the peak output difference was on the order of -33db. I believe this is probably too high, possibly indicating a bug in this kernel sampling code (off-by-one error?). We need to develop some rigorous testing and diagnostics tools to streamline and quantify these barely-audible issues. Probably do some math to figure out what the expected difference between kernels should be too, since I'm basically just guessing it's high.
 	for (; i < end; i++) {
@@ -110,26 +107,46 @@ float azaSampleWithKernel_scalar(float *src, int stride, int minFrame, int maxFr
 	return result;
 }
 
+AZA_SIMD_FEATURES("sse,fma")
+float azaSampleWithKernel_sse_fma(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos) {
+	float result = 0.0f;
+	int start, end;
+	start = (int)pos - kernel->sampleZero + 1;
+	end = start + kernel->length;
+	int i = start;
+	if (stride == 1 && i >= minFrame && i+4 < maxFrame) {
+		__m128 result_x4 = _mm_setzero_ps();
+		for (; i <= end-4; i += 4) {
+			__m128 kernelSamples = azaKernelSample_x4_sse_fma(kernel, i, pos);
+			__m128 srcSamples = _mm_loadu_ps(src + i);
+			result_x4 = _mm_fmadd_ps(srcSamples, kernelSamples, result_x4);
+		}
+		float hsum = aza_mm_hsum_ps_sse(result_x4);
+		result = hsum;
+	}
+	for (; i < end; i++) {
+		int index = AZA_CLAMP(i, minFrame, maxFrame-1);
+		float s = src[index * stride];
+		result = aza_fmadd_f32(s, azaKernelSample_sse_fma(kernel, i, pos), result);
+	}
+	return result;
+}
+
 AZA_SIMD_FEATURES("avx,fma")
 float azaSampleWithKernel_avx_fma(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos) {
 	float result = 0.0f;
 	int start, end;
-	if (kernel->isSymmetrical) {
-		start = (int)pos - (int)kernel->length + 1;
-		end = (int)pos + (int)kernel->length;
-	} else {
-		start = (int)pos;
-		end = (int)pos + (int)kernel->length;
-	}
+	start = (int)pos - kernel->sampleZero + 1;
+	end = start + kernel->length;
 	int i = start;
 	// TODO: I've noticed from some null testing between Lanczos kernel sizes (radius 64 and 32, both resolution 128) that the peak output difference was on the order of -33db. I believe this is probably too high, possibly indicating a bug in this kernel sampling code (off-by-one error?). We need to develop some rigorous testing and diagnostics tools to streamline and quantify these barely-audible issues. Probably do some math to figure out what the expected difference between kernels should be too, since I'm basically just guessing it's high.
 	// This AVX implementation produces the exact same results as the scalar version down to the last ULP.
 	if (stride == 1 && i >= minFrame && i+8 < maxFrame) {
 		// We actually lose performance here if both sets of samples are randomly fetched, because azaKernelSample_x8 has additional logic.
+		__m256 result_x8 = _mm256_setzero_ps();
 		for (; i <= end-8; i += 8) {
-			__m256 srcSamples;
-			srcSamples = _mm256_loadu_ps(src + i);
 			__m256 kernelSamples = azaKernelSample_x8_avx_fma(kernel, i, pos);
+			__m256 srcSamples = _mm256_loadu_ps(src + i);
 #if 0 // For debugging purposes only
 			float_x8 kernelSamples2;
 			for (int j = 0; j < 8; j++) {
@@ -153,14 +170,15 @@ float azaSampleWithKernel_avx_fma(float *src, int stride, int minFrame, int maxF
 				}
 			}
 #endif
-			float hsum = aza_mm256_hsum_ps(_mm256_mul_ps(srcSamples, kernelSamples));
-			result += hsum;
+			result_x8 = _mm256_fmadd_ps(srcSamples, kernelSamples, result_x8);
 		}
+		float hsum = aza_mm256_hsum_ps(result_x8);
+		result = hsum;
 	}
 	for (; i < end; i++) {
 		int index = AZA_CLAMP(i, minFrame, maxFrame-1);
 		float s = src[index * stride];
-		result += s * azaKernelSample(kernel, i, pos);
+		result = aza_fmadd_f32(s, azaKernelSample_sse_fma(kernel, i, pos), result);
 	}
 	return result;
 }
@@ -170,10 +188,13 @@ float (*azaSampleWithKernel_specialized)(float *src, int stride, int minFrame, i
 float azaSampleWithKernel_dispatch(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos) {
 	assert(azaCPUID.initted);
 	if (AZA_AVX && AZA_FMA) {
+		AZA_LOG_TRACE("choosing azaSampleWithKernel_avx_fma\n");
 		azaSampleWithKernel_specialized = azaSampleWithKernel_avx_fma;
-	// } else if (AZA_SSE) {
-	// 	azaSampleWithKernel_specialized = azaSampleWithKernel_sse;
+	} else if (AZA_SSE && AZA_FMA) {
+		AZA_LOG_TRACE("choosing azaSampleWithKernel_sse_fma\n");
+		azaSampleWithKernel_specialized = azaSampleWithKernel_sse_fma;
 	} else {
+		AZA_LOG_TRACE("choosing azaSampleWithKernel_scalar\n");
 		azaSampleWithKernel_specialized = azaSampleWithKernel_scalar;
 	}
 	return azaSampleWithKernel_specialized(src, stride, minFrame, maxFrame, kernel, pos);

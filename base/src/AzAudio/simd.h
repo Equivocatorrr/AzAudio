@@ -108,24 +108,22 @@ AZA_SIMD_FEATURES("sse3")
 static inline float
 aza_mm_hsum_ps_sse3(__m128 a) {
 	// Using _mm_movehdup_ps instead of _mm_shuffle_ps gets rid of a vmovaps, and is why this section is SSE3
-	//                                      a = 0, 1, 2, 3
-	__m128 shuf = _mm_movehdup_ps(a); // shuf = 1,   1,   3,   3
-	__m128 sums = _mm_add_ps(a, shuf);// sums = 0+1, 1+1, 2+3, 3+3
-	shuf = _mm_movehl_ps(shuf, sums); // shuf = 2+3, 3+3, 3,   3
-	sums = _mm_add_ss(sums, shuf);    // sums = 0+1+2+3, 1+1, 2+3, 3+3
-	return _mm_cvtss_f32(sums);       // return 0+1+2+3
+	__m128 B_B_D_D = _mm_movehdup_ps(a);
+	__m128 AB_BB_CD_DD = _mm_add_ps(a, B_B_D_D);
+	__m128 CD_DD______ = _mm_movehl_ps(AB_BB_CD_DD, AB_BB_CD_DD);
+	__m128 ABCD_______ = _mm_add_ss(AB_BB_CD_DD, CD_DD______);
+	return _mm_cvtss_f32(ABCD_______);
 }
 
 // returns the scalar sum of all lanes
 AZA_SIMD_FEATURES("sse")
 static inline float
 aza_mm_hsum_ps_sse(__m128 a) {
-	//                                                                a = 0, 1, 2, 3
-	__m128 shuf = _mm_shuffle_ps(a, a, _MM_SHUFFLE(2, 3, 0, 1));// shuf = 1, 0, 3, 2
-	__m128 sums = _mm_add_ps(shuf, a);                          // sums = 0+1, 0+1, 2+3, 2+3
-	shuf = _mm_movehl_ps(shuf, sums);                           // shuf = 2+3, 2+3, 3, 2
-	sums = _mm_add_ss(sums, shuf);                              // shuf = 0+1+2+3, 0+1, 2+3, 2+3
-	return _mm_cvtss_f32(shuf);                                 // return 0+1+2+3
+	__m128 B_B_D_D = _mm_shuffle_ps(a, a, _MM_SHUFFLER(1, 1, 3, 3));
+	__m128 AB_BB_CD_DD = _mm_add_ps(a, B_B_D_D);
+	__m128 CD_DD______ = _mm_movehl_ps(AB_BB_CD_DD, AB_BB_CD_DD);
+	__m128 ABCD_______ = _mm_add_ss(AB_BB_CD_DD, CD_DD______);
+	return _mm_cvtss_f32(ABCD_______);
 }
 
 // returns the scalar sum of all lanes
@@ -136,6 +134,20 @@ aza_mm256_hsum_ps(__m256 a) {
 	lo = _mm256_extractf128_ps(a, 0);
 	hi = _mm256_extractf128_ps(a, 1);
 	return aza_mm_hsum_ps_sse3(_mm_add_ps(lo, hi));
+}
+
+AZA_SIMD_FEATURES("sse")
+static AZA_FORCE_INLINE(__m128)
+azaLerp_x4_sse(__m128 a, __m128 b, __m128 t) {
+	__m128 result = _mm_add_ps(_mm_mul_ps(_mm_sub_ps(b, a), t), a);
+	return result;
+}
+
+AZA_SIMD_FEATURES("sse,fma")
+static AZA_FORCE_INLINE(__m128)
+azaLerp_x4_sse_fma(__m128 a, __m128 b, __m128 t) {
+	__m128 result = _mm_fmadd_ps(_mm_sub_ps(b, a), t, a);
+	return result;
 }
 
 AZA_SIMD_FEATURES("avx,fma")
