@@ -17,7 +17,6 @@
 // Master
 
 azaMixer mixer;
-azaLookaheadLimiter *limiter = NULL;
 
 // Track 0
 
@@ -28,7 +27,6 @@ typedef struct Synth {
 	float lfo;
 	int32_t impulseFrame;
 } Synth;
-azaDSP *dspSynth = NULL;
 
 int synthProcess(void *userdata, azaBuffer buffer) {
 	Synth *synth = userdata;
@@ -195,11 +193,6 @@ done:
 	return err;
 }
 
-// Track 2
-
-azaReverb *reverb = NULL;
-azaFilter *reverbHighpass = NULL;
-
 void usage(const char *executableName) {
 	printf(
 		"Usage:\n"
@@ -248,10 +241,7 @@ int main(int argumentCount, char** argumentValues) {
 	// Track 0
 
 	azaTrack *track0;
-	azaChannelLayout track0Layout = {
-		.count = 1,
-		.positions = { AZA_POS_CENTER_FRONT },
-	};
+	azaChannelLayout track0Layout = azaChannelLayoutMono();
 	if ((err = azaMixerAddTrack(&mixer, -1, &track0, track0Layout, true))) {
 		char buffer[64];
 		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
@@ -259,7 +249,7 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	azaTrackSetName(track0, "Synth");
 
-	dspSynth = MakeDefaultSynth(track0->buffer.channelLayout.count);
+	azaDSP *dspSynth = MakeDefaultSynth(track0->buffer.channelLayout.count);
 	azaTrackAppendDSP(track0, dspSynth);
 
 	// We can use this to change the gain on an existing connection
@@ -270,7 +260,10 @@ int main(int argumentCount, char** argumentValues) {
 	// Track 1
 
 	azaTrack *track1;
-	if ((err = azaMixerAddTrack(&mixer, -1, &track1, mixer.master.buffer.channelLayout, true))) {
+	// azaChannelLayout track1Layout = azaChannelLayoutMono();
+	// azaChannelLayout track1Layout = azaChannelLayout_9_1();
+	azaChannelLayout track1Layout = mixer.master.buffer.channelLayout;
+	if ((err = azaMixerAddTrack(&mixer, -1, &track1, track1Layout, true))) {
 		char buffer[64];
 		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
@@ -308,7 +301,9 @@ int main(int argumentCount, char** argumentValues) {
 	// Track 2
 
 	azaTrack *track2;
-	if ((err = azaMixerAddTrack(&mixer, -1, &track2, mixer.master.buffer.channelLayout, true))) {
+	// azaChannelLayout track2Layout = azaChannelLayout_9_0();
+	azaChannelLayout track2Layout = mixer.master.buffer.channelLayout;
+	if ((err = azaMixerAddTrack(&mixer, -1, &track2, track2Layout, true))) {
 		char buffer[64];
 		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
@@ -318,14 +313,14 @@ int main(int argumentCount, char** argumentValues) {
 	azaTrackConnect(track0, track2, -6.0f, NULL, 0);
 	azaTrackConnect(track1, track2, -6.0f, NULL, 0);
 
-	reverbHighpass = azaMakeFilter((azaFilterConfig) {
+	azaFilter *reverbHighpass = azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_HIGH_PASS,
 		.frequency = 50.0f,
 		.dryMix = 0.0f,
 	}, track2->buffer.channelLayout.count);
 	azaTrackAppendDSP(track2, (azaDSP*)reverbHighpass);
 
-	reverb = azaMakeReverb((azaReverbConfig) {
+	azaReverb *reverb = azaMakeReverb((azaReverbConfig) {
 		.gain = 0.0f,
 		.muteDry = true,
 		.roomsize = 5.0f,
@@ -338,7 +333,17 @@ int main(int argumentCount, char** argumentValues) {
 
 	// Master
 
-	limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
+	azaCompressor *compressor = azaMakeCompressor((azaCompressorConfig) {
+		.threshold = -24.0f,
+		.ratio = 4.0f,
+		.attack = 10.0f,
+		.decay = 500.0f,
+		.gain = 12.0f,
+	}, outputChannelCount);
+
+	azaTrackAppendDSP(&mixer.master, (azaDSP*)compressor);
+
+	azaLookaheadLimiter *limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
 		.gainInput  =  0.0f,
 		.gainOutput = -0.1f,
 	}, outputChannelCount);
@@ -373,13 +378,7 @@ int main(int argumentCount, char** argumentValues) {
 		azaFreeSpatialize(spatializeCat[c]);
 	}
 	free(spatializeCat);
-	azaFreeLookaheadLimiter(limiter);
 	azaBufferDeinit(&bufferCat);
-
-	azaFreeReverb(reverb);
-	azaFreeFilter(reverbHighpass);
-
-	FreeSynth((Synth*)dspSynth);
 
 	azaDeinit();
 	return 0;

@@ -442,13 +442,19 @@ typedef struct azaCompressorConfig {
 	float attack;
 	// decay time in ms
 	float decay;
+	// output gain in dB
+	float gain;
 } azaCompressorConfig;
 
 typedef struct azaCompressor {
 	azaDSP header;
 	azaCompressorConfig config;
+
+	azaMeters metersInput;
+	azaMeters metersOutput;
+
 	float attenuation;
-	float gain; // For monitoring/debugging
+	float minGain, minGainShort;
 	azaRMS rms;
 } azaCompressor;
 

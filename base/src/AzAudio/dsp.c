@@ -1039,6 +1039,12 @@ int azaCompressorProcess(azaCompressor *data, azaBuffer buffer) {
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
+
+	bool updateMeters = azaMixerGUIHasDSPOpen(&data->header);
+	if (updateMeters) {
+		azaMetersUpdate(&data->metersInput, buffer, 1.0f);
+	}
+
 	azaBuffer rmsBuffer = azaPushSideBuffer(buffer.frames, 1, buffer.samplerate);
 	err = azaRMSProcessDual(&data->rms, rmsBuffer, buffer);
 	if AZA_UNLIKELY(err) return err;
@@ -1053,6 +1059,7 @@ int azaCompressorProcess(azaCompressor *data, azaBuffer buffer) {
 	} else {
 		overgainFactor = 0.0f;
 	}
+	data->minGainShort = 0.0f;
 	for (size_t i = 0; i < buffer.frames; i++) {
 		float rms = aza_amp_to_dbf(rmsBuffer.samples[i]);
 		if (rms < -120.0f) rms = -120.0f;
@@ -1067,14 +1074,20 @@ int azaCompressorProcess(azaCompressor *data, azaBuffer buffer) {
 		} else {
 			gain = 0.0f;
 		}
-		data->gain = gain;
-		float amp = aza_db_to_ampf(gain);
+		data->minGainShort = azaMinf(data->minGainShort, gain);
+		float amp = aza_db_to_ampf(gain + data->config.gain);
 		for (size_t c = 0; c < buffer.channelLayout.count; c++) {
 			size_t s = i * buffer.stride + c;
 			buffer.samples[s] *= amp;
 		}
 	}
+	data->minGain = azaMinf(data->minGain, data->minGainShort);
 	azaPopSideBuffer();
+
+	if (updateMeters) {
+		azaMetersUpdate(&data->metersOutput, buffer, 1.0f);
+	}
+
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}

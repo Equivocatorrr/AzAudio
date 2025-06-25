@@ -147,8 +147,12 @@ static const Color colorScrollbarBG = {  30,  40,  60, 255 };
 static const Color colorScrollbarFG = {  60,  80, 120, 255 };
 
 static const int lookaheadLimiterMeterDBRange = 48;
-static const int lookaheadLimiterAttenuationMeterDBRange = 18;
+static const int lookaheadLimiterAttenuationMeterDBRange = 12;
 static const Color colorLookaheadLimiterAttenuation = {   0, 128, 255, 255 };
+
+static const int compressorMeterDBRange = 48;
+static const int compressorAttenuationMeterDBRange = 24;
+static const Color colorCompressorAttenuation = {   0, 128, 255, 255 };
 
 
 
@@ -542,7 +546,7 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 		}
 		azaRectShrinkTop(&bounds, muteRect.h + margin);
 	}
-	azaDrawMeterBackground(bounds, dbRange, faderDBHeadroom);
+	azaDrawMeterBackground(bounds, dbRange, dbHeadroom);
 	azaRectShrinkMargin(&bounds, margin);
 	int yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, bounds.h, 0, dbRange);
 	if (mouseover) {
@@ -1419,7 +1423,53 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 }
 
 static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
+	int usedWidth = azaDrawMeters(&data->metersInput, bounds, compressorMeterDBRange);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
+	usedWidth = azaDrawFader(bounds, &data->config.threshold, NULL, "Threshold", 72.0f, 0.0f);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.ratio, 1.0f, 10.0f, 0.2f, 10.0f, "Ratio", NULL);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.attack, 1.0f, 1000.0f, 0.2f, 50.0f, "Attack", "ms");
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.decay, 1.0f, 1000.0f, 0.2f, 200.0f, "Release", "ms");
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	azaRect attenuationRect = {
+		bounds.x,
+		bounds.y,
+		meterDrawWidth*2 + margin*3,
+		bounds.h,
+	};
+	azaRectShrinkLeft(&bounds, attenuationRect.w + margin);
+	bool attenuationMouseover = azaMouseInRect(attenuationRect);
+	if (attenuationMouseover) {
+		azaTooltipAdd("Attenuation", attenuationRect.x, attenuationRect.y - (textMargin*2 + 10), false);
+	}
+	azaDrawMeterBackground(attenuationRect, compressorAttenuationMeterDBRange, 0);
+	azaRectShrinkMargin(&attenuationRect, margin);
+	int yOffset;
+	yOffset = azaDBToYOffsetClamped(-data->minGainShort, attenuationRect.h, 0, compressorAttenuationMeterDBRange);
+	azaDrawRect((azaRect) {
+		attenuationRect.x,
+		attenuationRect.y,
+		attenuationRect.w,
+		yOffset
+	}, colorCompressorAttenuation);
+	yOffset = azaDBToYOffsetClamped(-data->minGain, attenuationRect.h, 0, compressorAttenuationMeterDBRange);
+	if (attenuationMouseover) {
+		azaTooltipAdd(TextFormat("%+.1fdb", data->minGain), attenuationRect.x + attenuationRect.w + margin, attenuationRect.y + yOffset - (textMargin + 5), false);
+	}
+	azaDrawLine(attenuationRect.x, attenuationRect.y + yOffset, attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset, colorCompressorAttenuation);
+	if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, attenuationRect)) {
+		data->minGain = 1.0f;
+	}
+
+	usedWidth = azaDrawFader(bounds, &data->config.gain, NULL, "Output Gain", 72.0f, 36.0f);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	usedWidth = azaDrawMeters(&data->metersOutput, bounds, compressorMeterDBRange);
+	// azaRectShrinkLeft(&bounds, usedWidth + margin);
 }
 
 static void azaDrawDelay(azaDelay *data, azaRect bounds) {
