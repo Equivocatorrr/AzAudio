@@ -82,9 +82,9 @@ static struct {
 
 
 static const int pluginDrawHeight = 200;
-static const int trackDrawWidth = 110;
+static const int trackDrawWidth = 120;
 static const int trackDrawHeight = 300;
-static const int trackFXDrawHeight = 60;
+static const int trackFXDrawHeight = 80;
 static const int trackLabelDrawHeight = 20;
 static const int margin = 2;
 static const int textMargin = 5;
@@ -263,6 +263,10 @@ static void azaRectShrinkTop(azaRect *rect, int h) {
 
 static void azaRectShrinkLeft(azaRect *rect, int w) {
 	rect->x += w;
+	rect->w -= w;
+}
+
+static void azaRectShrinkRight(azaRect *rect, int w) {
 	rect->w -= w;
 }
 
@@ -536,8 +540,11 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 		muteRect.h = muteRect.w;
 		azaDrawRect(muteRect, colorMeterBGTop);
 		azaRectShrinkMargin(&muteRect, margin);
-		if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, muteRect)) {
-			*mute = !*mute;
+		if (azaMouseInRect(muteRect)) {
+			azaTooltipAdd("Mute", muteRect.x + muteRect.w, muteRect.y, false);
+			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
+				*mute = !*mute;
+			}
 		}
 		if (*mute) {
 			azaDrawRect(muteRect, colorFaderMuteButton);
@@ -1220,6 +1227,9 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 	azaRect pluginRect = bounds;
 	pluginRect.y += metadata->scrollFXY;
 	pluginRect.h = 10 + margin * 2;
+	azaRect muteRect = pluginRect;
+	azaRectShrinkRight(&pluginRect, pluginRect.h + margin);
+	azaRectShrinkLeft(&muteRect, pluginRect.w + margin);
 	azaDSP *mouseoverDSP = NULL;
 	azaDSP *dsp = track->dsp;
 	while (dsp) {
@@ -1230,11 +1240,22 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 				selectedDSP = dsp;
 			}
 			mouseoverDSP = dsp;
+		} else if (azaMouseInRect(muteRect)) {
+			azaTooltipAdd("Bypass", muteRect.x + muteRect.w, muteRect.y, false);
+			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
+				azaDSPMetadataToggleBypass(&dsp->metadata);
+			}
 		}
 		azaDrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
 		azaDrawText(azaGetDSPName(dsp), pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
+		if (azaDSPMetadataGetBypass(dsp->metadata)) {
+			azaDrawRect(muteRect, colorFaderMuteButton);
+		} else {
+			azaDrawRectLines(muteRect, colorFaderMuteButton);
+		}
 		dsp = dsp->pNext;
 		pluginRect.y += pluginRect.h + margin;
+		muteRect.y += pluginRect.h + margin;
 	}
 	if (azaMouseInRect(bounds)) {
 		bool trackFXCanScrollDown = (pluginRect.y + pluginRect.h > bounds.y + bounds.h);

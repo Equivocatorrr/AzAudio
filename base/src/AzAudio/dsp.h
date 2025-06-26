@@ -187,8 +187,9 @@ extern const char *azaDSPKindString[];
 typedef struct azaDSP {
 	azaDSPKind kind;
 	/* struct {
-		uint32_t structSize : 31;
+		uint32_t structSize : 30;
 		// This bit will be set if we were created with any of the azaMake... functions. As such, removal from a dsp chain will imply calling azaFree... on us as well.
+		bool bypass : 1;
 		bool owned : 1;
 	} metadata;
 	We do manual bit packing because god forbid our language spec gives us any guarantees or control over anything. */
@@ -197,13 +198,24 @@ typedef struct azaDSP {
 } azaDSP;
 int azaDSPProcessSingle(azaDSP *data, azaBuffer buffer);
 int azaDSPProcessDual(azaDSP *data, azaBuffer dst, azaBuffer src);
-static inline uint32_t azaDSPPackMetadata(uint32_t structSize, bool owned) {
-	assert(structSize < ((uint32_t)1 << 31));
-	uint32_t result = structSize | ((uint32_t)owned << 31);
+static inline uint32_t azaDSPPackMetadata(uint32_t structSize, bool bypass, bool owned) {
+	assert(structSize < ((uint32_t)1 << 30));
+	uint32_t result = structSize | ((uint32_t)bypass << 30) | ((uint32_t)owned << 31);
 	return result;
 }
 static inline uint32_t azaDSPMetadataGetStructSize(uint32_t metadata) {
 	return metadata & (((uint32_t)1 << 31) - 1);
+}
+static inline bool azaDSPMetadataGetBypass(uint32_t metadata) {
+	return (metadata >> 30) & 1;
+}
+static inline void azaDSPMetadataSetBypass(uint32_t *metadata, bool bypass) {
+	uint32_t bit = 1u << 30;
+	*metadata = (*metadata & ~bit) | ((uint32_t)(!!bypass) << 30);
+}
+static inline void azaDSPMetadataToggleBypass(uint32_t *metadata) {
+	uint32_t bit = 1u << 30;
+	*metadata ^= bit;
 }
 static inline bool azaDSPMetadataGetOwned(uint32_t metadata) {
 	return metadata >> 31;

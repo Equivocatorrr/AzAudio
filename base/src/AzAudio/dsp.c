@@ -476,7 +476,7 @@ int azaDSPProcessDual(azaDSP *data, azaBuffer dst, azaBuffer src) {
 
 void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, const char *name, void *userdata, fp_azaProcessCallback processCallback) {
 	data->header.kind = AZA_DSP_USER_SINGLE;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	if (name) {
 		aza_strcpy(data->name, name, sizeof(data->name));
 	} else {
@@ -488,7 +488,7 @@ void azaDSPUserInitSingle(azaDSPUser *data, uint32_t allocSize, const char *name
 
 void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, const char *name, void *userdata, fp_azaProcessDualCallback processCallback) {
 	data->header.kind = AZA_DSP_USER_DUAL;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	if (name) {
 		aza_strcpy(data->name, name, sizeof(data->name));
 	} else {
@@ -499,8 +499,10 @@ void azaDSPUserInitDual(azaDSPUser *data, uint32_t allocSize, const char *name, 
 }
 
 int azaDSPUserProcessSingle(azaDSPUser *data, azaBuffer buffer) {
-	int err = data->processSingle(data->userdata, buffer);
-	if AZA_UNLIKELY(err) return err;
+	if (!azaDSPMetadataGetBypass(data->header.metadata)) {
+		int err = data->processSingle(data->userdata, buffer);
+		if AZA_UNLIKELY(err) return err;
+	}
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -508,8 +510,10 @@ int azaDSPUserProcessSingle(azaDSPUser *data, azaBuffer buffer) {
 }
 
 int azaDSPUserProcessDual(azaDSPUser *data, azaBuffer dst, azaBuffer src) {
-	int err = data->processDual(data->userdata, dst, src);
-	if AZA_UNLIKELY(err) return err;
+	if (!azaDSPMetadataGetBypass(data->header.metadata)) {
+		int err = data->processDual(data->userdata, dst, src);
+		if AZA_UNLIKELY(err) return err;
+	}
 	if (data->header.pNext) {
 		return azaDSPProcessDual(data->header.pNext, dst, src);
 	}
@@ -596,7 +600,7 @@ uint32_t azaRMSGetAllocSize(azaRMSConfig config, uint8_t channelCapInline) {
 
 void azaRMSInit(azaRMS *data, uint32_t allocSize, azaRMSConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_RMS;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaRMSChannelData), alignof(azaRMSChannelData));
 
@@ -656,6 +660,9 @@ static int azaHandleRMSBuffer(azaRMS *data, uint8_t channels) {
 int azaRMSProcessDual(azaRMS *data, azaBuffer dst, azaBuffer src) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(dst);
 	if AZA_UNLIKELY(err) return err;
 	err = azaCheckBuffer(src);
@@ -680,6 +687,7 @@ int azaRMSProcessDual(azaRMS *data, azaBuffer dst, azaBuffer src) {
 		if (++data->index >= data->config.windowSamples)
 			data->index = 0;
 	}
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, dst);
 	}
@@ -689,6 +697,9 @@ int azaRMSProcessDual(azaRMS *data, azaBuffer dst, azaBuffer src) {
 int azaRMSProcessSingle(azaRMS *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	err = azaHandleRMSBuffer(data, buffer.channelLayout.count);
@@ -713,6 +724,7 @@ int azaRMSProcessSingle(azaRMS *data, azaBuffer buffer) {
 			buffer.samples[s] = sqrtf(channelData->squaredSum/data->config.windowSamples);
 		}
 	}
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -732,7 +744,7 @@ static float azaCubicLimiterSample(float sample) {
 
 void azaCubicLimiterInit(azaCubicLimiter *data, uint32_t allocSize) {
 	data->kind = AZA_DSP_CUBIC_LIMITER;
-	data->metadata = azaDSPPackMetadata(allocSize, false);
+	data->metadata = azaDSPPackMetadata(allocSize, false, false);
 }
 
 azaCubicLimiter* azaMakeCubicLimiter() {
@@ -754,6 +766,9 @@ azaDSP* azaMakeDefaultCubicLimiter(uint8_t channelCapInline) {
 }
 
 int azaCubicLimiterProcess(azaCubicLimiter *data, azaBuffer buffer) {
+	if (azaDSPMetadataGetBypass(data->metadata)) {
+		goto bypassed;
+	}
 	int err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	if (buffer.stride == buffer.channelLayout.count) {
@@ -768,6 +783,7 @@ int azaCubicLimiterProcess(azaCubicLimiter *data, azaBuffer buffer) {
 			}
 		}
 	}
+bypassed:
 	if (data->pNext) {
 		return azaDSPProcessSingle(data->pNext, buffer);
 	}
@@ -784,7 +800,7 @@ uint32_t azaLookaheadLimiterGetAllocSize(uint8_t channelCapInline) {
 
 void azaLookaheadLimiterInit(azaLookaheadLimiter *data, uint32_t allocSize, azaLookaheadLimiterConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_LOOKAHEAD_LIMITER;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	data->sum = 1.0f;
 	data->minAmp = 1.0f;
@@ -821,6 +837,9 @@ azaDSP* azaMakeDefaultLookaheadLimiter(uint8_t channelCapInline) {
 int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	err = azaEnsureChannels(&data->channelData, buffer.channelLayout.count);
@@ -891,6 +910,7 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer) {
 	data->index = index;
 	data->channelData.countActive = buffer.channelLayout.count;
 	azaPopSideBuffer();
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -907,7 +927,7 @@ uint32_t azaFilterGetAllocSize(uint8_t channelCapInline) {
 
 void azaFilterInit(azaFilter *data, uint32_t allocSize, azaFilterConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_FILTER;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaFilterChannelData), alignof(azaFilterChannelData));
 }
@@ -942,6 +962,9 @@ azaDSP* azaMakeDefaultFilter(uint8_t channelCapInline) {
 int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	err = azaEnsureChannels(&data->channelData, buffer.channelLayout.count);
@@ -981,6 +1004,7 @@ int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 		}
 	}
 	data->channelData.countActive = buffer.channelLayout.count;
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -997,7 +1021,7 @@ uint32_t azaCompressorGetAllocSize(uint8_t channelCapInline) {
 
 void azaCompressorInit(azaCompressor *data, uint32_t allocSize, azaCompressorConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_COMPRESSOR;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	azaRMSConfig rmsConfig = (azaRMSConfig) {
 		.windowSamples = 128,
@@ -1037,6 +1061,9 @@ azaDSP* azaMakeDefaultCompressor(uint8_t channelCapInline) {
 int azaCompressorProcess(azaCompressor *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 
@@ -1087,7 +1114,7 @@ int azaCompressorProcess(azaCompressor *data, azaBuffer buffer) {
 	if (updateMeters) {
 		azaMetersUpdate(&data->metersOutput, buffer, 1.0f);
 	}
-
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -1104,7 +1131,7 @@ uint32_t azaDelayGetAllocSize(uint8_t channelCapInline) {
 
 void azaDelayInit(azaDelay *data, uint32_t allocSize, azaDelayConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_DELAY;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaDelayChannelData), alignof(azaDelayChannelData));
 }
@@ -1194,6 +1221,9 @@ static int azaDelayHandleBufferResizes(azaDelay *data, uint32_t samplerate, uint
 int azaDelayProcess(azaDelay *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	err = azaDelayHandleBufferResizes(data, buffer.samplerate, buffer.channelLayout.count);
@@ -1239,6 +1269,7 @@ int azaDelayProcess(azaDelay *data, azaBuffer buffer) {
 		azaMetersUpdate(&data->metersOutput, buffer, 1.0f);
 	}
 	azaPopSideBuffer();
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -1257,7 +1288,7 @@ uint32_t azaReverbGetAllocSize(uint8_t channelCapInline) {
 
 void azaReverbInit(azaReverb *data, uint32_t allocSize, azaReverbConfig config, uint8_t channelCapInline) {
 	data->header.kind = AZA_DSP_REVERB;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 
 	uint32_t delayAllocSize = azaDelayGetAllocSize(channelCapInline);
@@ -1382,6 +1413,9 @@ azaDSP* azaMakeDefaultReverb(uint8_t channelCapInline) {
 int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	azaBuffer inputBuffer = azaPushSideBufferCopy(buffer);
@@ -1425,6 +1459,7 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 	}
 	azaBufferMix(buffer, amountDry, sideBufferCombined, amount);
 	azaPopSideBuffers(4);
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -1435,7 +1470,7 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer) {
 
 void azaSamplerInit(azaSampler *data, uint32_t allocSize, azaSamplerConfig config) {
 	data->header.kind = AZA_DSP_SAMPLER;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	data->pos.frame = 0;
 	data->pos.fraction = 0.0f;
@@ -1475,6 +1510,9 @@ azaDSP* azaMakeDefaultSampler(uint8_t channelCapInline) {
 int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	if (!data->config.buffer) return AZA_SUCCESS;
@@ -1537,6 +1575,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 			data->pos.frame -= data->config.buffer->frames;
 		}
 	}
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -1553,7 +1592,7 @@ uint32_t azaGateGetAllocSize() {
 
 void azaGateInit(azaGate *data, uint32_t allocSize, azaGateConfig config) {
 	data->header.kind = AZA_DSP_GATE;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	azaRMSConfig rmsConfig = (azaRMSConfig) {
 		.windowSamples = 128,
@@ -1593,6 +1632,9 @@ azaDSP* azaMakeDefaultGate(uint8_t channelCapInline) {
 int azaGateProcess(azaGate *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	azaBuffer rmsBuffer = azaPushSideBuffer(buffer.frames, 1, buffer.samplerate);
@@ -1636,6 +1678,7 @@ int azaGateProcess(azaGate *data, azaBuffer buffer) {
 		}
 	}
 	azaPopSideBuffers(sideBuffersInUse);
+bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -1720,7 +1763,7 @@ uint32_t azaDelayDynamicGetAllocSize(uint8_t channelCapInline) {
 
 int azaDelayDynamicInit(azaDelayDynamic *data, uint32_t allocSize, azaDelayDynamicConfig config, uint8_t channelCapInline, uint8_t channelCount, azaDelayDynamicChannelConfig *channelConfigs) {
 	data->header.kind = AZA_DSP_DELAY_DYNAMIC;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaDelayDynamicChannelData), alignof(azaDelayDynamicChannelData));
 	int err = azaEnsureChannels(&data->channelData, channelCount);
@@ -1777,6 +1820,9 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 	int err = AZA_SUCCESS;
 	uint8_t numSideBuffers = 0;
 	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
 	azaKernel *kernel = azaDelayDynamicGetKernel(data);
@@ -1838,6 +1884,7 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 			buffer.samples[s] = wet * amount + buffer.samples[s] * amountDry;
 		}
 	}
+bypassed:
 	if (data->header.pNext) {
 		err = azaDSPProcessSingle(data->header.pNext, buffer);
 	}
@@ -2092,7 +2139,7 @@ uint32_t azaSpatializeGetAllocSize(uint8_t channelCapInline) {
 void azaSpatializeInit(azaSpatialize *data, uint32_t allocSize, azaSpatializeConfig config, uint8_t channelCapInline) {
 	uint32_t filterAllocSize = azaFilterGetAllocSize(1);
 	data->header.kind = AZA_DSP_SPATIALIZE;
-	data->header.metadata = azaDSPPackMetadata(allocSize, false);
+	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, filterAllocSize, alignof(azaSpatializeChannelData));
 	for (uint8_t c = 0; c < channelCapInline; c++) {
@@ -2151,6 +2198,9 @@ static float azaSpatializeGetFilterCutoff(float delay, float dot) {
 
 int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer srcBuffer, azaVec3 srcPosStart, float srcAmpStart, azaVec3 srcPosEnd, float srcAmpEnd) {
 	int err = AZA_SUCCESS;
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
 	err = azaCheckBuffer(dstBuffer);
 	if AZA_UNLIKELY(err) return err;
 	err = azaCheckBuffer(srcBuffer);
@@ -2339,5 +2389,6 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 	repeatCount = (repeatCount + 1) % 10;
 #endif
 	azaPopSideBuffer();
+bypassed:
 	return err;
 }
