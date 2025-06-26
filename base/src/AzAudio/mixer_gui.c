@@ -628,11 +628,9 @@ static int azaDrawMeters(azaMeters *meters, azaRect bounds, int dbRange) {
 			}
 		}
 		bounds.x += bounds.w + margin;
-		meters->rmsFrames = meters->rmsFrames * 7 / 8;
 		if (resetPeaks) {
 			meters->peaks[c] = 0.0f;
 		}
-		meters->peaksShortTerm[c] = 0.0f;
 	}
 	return usedWidth;
 }

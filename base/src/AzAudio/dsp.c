@@ -169,10 +169,10 @@ void azaMetersUpdate(azaMeters *data, azaBuffer buffer, float inputAmp) {
 	for (uint8_t c = data->activeMeters; c < channels; c++) {
 		data->rmsSquaredAvg[c] = 0.0f;
 		data->peaks[c] = 0.0f;
-		data->peaksShortTerm[c] = 0.0f;
 	}
 	data->activeMeters = channels;
 	for (uint8_t c = 0; c < channels; c++) {
+		data->peaksShortTerm[c] = 0.0f;
 		float rmsSquaredAvg = 0.0f;
 		float peak = 0.0f;
 		for (uint32_t i = 0; i < buffer.frames; i++) {
@@ -188,7 +188,7 @@ void azaMetersUpdate(azaMeters *data, azaBuffer buffer, float inputAmp) {
 		data->peaks[c] = azaMaxf(data->peaks[c], peak);
 		data->peaksShortTerm[c] = azaMaxf(data->peaksShortTerm[c], peak);
 	}
-	data->rmsFrames += buffer.frames;
+	data->rmsFrames = AZA_MIN(data->rmsFrames + buffer.frames, 512);
 }
 
 
