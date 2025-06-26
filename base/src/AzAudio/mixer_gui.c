@@ -640,9 +640,9 @@ static int azaDrawMeters(azaMeters *meters, azaRect bounds, int dbRange) {
 // Logarithmic slider allowing values between min and max.
 // Scrolling up multiplies the value by (1.0f + step) and scrolling down divides it by the same value.
 // Double clicking will set value to def.
-// valueUnit will be appended to the end of the string showing the value.
+// valueFormat is a printf-style format string, used for formatting the tooltip string, where the argument is *value. If NULL, defaults to "%+.1f"
 // returns used width
-static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueUnit) {
+static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat) {
 	assert(min > 0.0f);
 	assert(max > min);
 	bounds.w = sliderDrawWidth;
@@ -658,10 +658,10 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 	int yOffset = (int)((float)bounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
 	if (mouseover) {
 		azaDrawRect(bounds, colorFaderHighlight);
-		if (!valueUnit) {
-			valueUnit = "";
+		if (!valueFormat) {
+			valueFormat = "%+.1f";
 		}
-		azaTooltipAdd(TextFormat("%+.1f%s", *value, valueUnit), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
+		azaTooltipAdd(TextFormat(valueFormat, *value), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		if (delta > 0.0f) {
@@ -689,9 +689,9 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 // Linear slider allowing values between min and max.
 // Scrolling up adds step and scrolling down subtracts step.
 // Double clicking will set value to def.
-// valueUnit will be appended to the end of the string showing the value.
+// valueFormat is a printf-style format string, used for formatting the tooltip string, where the argument is *value. If NULL, defaults to "%+.1f"
 // returns used width
-static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueUnit) {
+static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat) {
 	assert(max > min);
 	bounds.w = sliderDrawWidth;
 	bool mouseover = azaMouseInRect(bounds);
@@ -703,10 +703,10 @@ static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max
 	int yOffset = (int)((float)bounds.h * (1.0f - (*value - min) / (max - min)));
 	if (mouseover) {
 		azaDrawRect(bounds, colorFaderHighlight);
-		if (!valueUnit) {
-			valueUnit = "";
+		if (!valueFormat) {
+			valueFormat = "%+.1f";
 		}
-		azaTooltipAdd(TextFormat("%+.1f%s", *value, valueUnit), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
+		azaTooltipAdd(TextFormat(valueFormat, *value), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		*value += delta*step;
@@ -1416,9 +1416,9 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 	}
 	azaRectShrinkTop(&rectKind, (rectKind.h + margin) * AZA_FILTER_KIND_COUNT);
 	azaRectShrinkLeft(&bounds, rectKind.w + margin);
-	int usedWidth = azaDrawSliderFloatLog(bounds, &data->config.frequency, 5.0f, 24000.0f, 0.1f, 500.0f, "Cutoff Frequency", "Hz");
+	int usedWidth = azaDrawSliderFloatLog(bounds, &data->config.frequency, 5.0f, 24000.0f, 0.1f, 500.0f, "Cutoff Frequency", "%.1fHz");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloat(bounds, &data->config.dryMix, 0.0f, 1.0f, 0.1f, 0.0f, "Dry Mix", NULL);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.dryMix, 0.0f, 1.0f, 0.1f, 0.0f, "Dry Mix", "%.2f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 }
 
@@ -1428,11 +1428,11 @@ static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
 
 	usedWidth = azaDrawFader(bounds, &data->config.threshold, NULL, "Threshold", 72.0f, 0.0f);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloat(bounds, &data->config.ratio, 1.0f, 10.0f, 0.2f, 10.0f, "Ratio", NULL);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.ratio, 1.0f, 10.0f, 0.2f, 10.0f, "Ratio", "%.2f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.attack, 1.0f, 1000.0f, 0.2f, 50.0f, "Attack", "ms");
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.attack, 1.0f, 1000.0f, 0.2f, 50.0f, "Attack", "%.1fms");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.decay, 1.0f, 1000.0f, 0.2f, 200.0f, "Release", "ms");
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.decay, 1.0f, 1000.0f, 0.2f, 200.0f, "Release", "%.1fms");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
 	azaRect attenuationRect = {
@@ -1473,7 +1473,33 @@ static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
 }
 
 static void azaDrawDelay(azaDelay *data, azaRect bounds) {
+	int usedWidth = azaDrawMeters(&data->metersInput, bounds, meterDBRange);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
+	usedWidth = azaDrawFader(bounds, &data->config.gain, &data->config.muteWet, "Wet Gain", meterDBRange, faderDBHeadroom);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+	usedWidth = azaDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, "Dry Gain", meterDBRange, faderDBHeadroom);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.delay, 0.1f, 10000.0f, 0.1f, 300.0f, "Delay", "%.1fms");
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.feedback, 0.0f, 1.0f, 0.02f, 0.5f, "Feedback", "%.3f");
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.pingpong, 0.0f, 1.0f, 0.02f, 0.0f, "PingPong", "%.3f");
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	for (uint32_t c = 0; c < data->channelData.capInline + data->channelData.capAdditional; c++) {
+		azaDelayChannelConfig *channel = azaDelayGetChannelConfig(data, c);
+		usedWidth = azaDrawSliderFloatLog(bounds, &channel->delay, 0.1f, 10000.0f, 0.1f, 0.0f, TextFormat("Ch %d Delay", (int)c), "%.1fms");
+		azaRectShrinkLeft(&bounds, usedWidth + margin);
+	}
+
+	// TODO: wet effects list (I guess with some kinda navigation?)
+
+	usedWidth = azaDrawMeters(&data->metersOutput, bounds, meterDBRange);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
 }
 
 static void azaDrawReverb(azaReverb *data, azaRect bounds) {
@@ -1481,11 +1507,11 @@ static void azaDrawReverb(azaReverb *data, azaRect bounds) {
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 	usedWidth = azaDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, "Dry Gain", 36, 6);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloat(bounds, &data->config.roomsize, 1.0f, 100.0f, 1.0f, 10.0f, "Room Size", NULL);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.roomsize, 1.0f, 100.0f, 1.0f, 10.0f, "Room Size", "%.0f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloat(bounds, &data->config.color, 1.0f, 5.0f, 0.25f, 2.0f, "Color", NULL);
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.color, 1.0f, 5.0f, 0.25f, 2.0f, "Color", "%.2f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloat(bounds, &data->config.delay, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "ms");
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.delay, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "%.1fms");
 }
 
 static void azaDrawSelectedDSP() {

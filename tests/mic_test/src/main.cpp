@@ -266,6 +266,8 @@ int main(int argumentCount, char** argumentValues) {
 		delay = azaMakeDelay(azaDelayConfig{
 			/* .gain       = */-15.0f,
 			/* .gainDry    = */ 0.0f,
+			/* .muteDry    = */ false,
+			/* .muteWet    = */ false,
 			/* .delay      = */ 1234.5f,
 			/* .feedback   = */ 0.5f,
 			/* .pingpong   = */ 0.9f,
@@ -275,6 +277,8 @@ int main(int argumentCount, char** argumentValues) {
 		delay2 = azaMakeDelay(azaDelayConfig{
 			/* .gain       = */-15.0f,
 			/* .gainDry    = */ 0.0f,
+			/* .muteDry    = */ false,
+			/* .muteWet    = */ false,
 			/* .delay      = */ 2345.6f,
 			/* .feedback   = */ 0.5f,
 			/* .pingpong   = */ 0.2f,
@@ -290,6 +294,8 @@ int main(int argumentCount, char** argumentValues) {
 		delay3 = azaMakeDelay(azaDelayConfig{
 			/* .gain       = */-15.0f,
 			/* .gainDry    = */ 0.0f,
+			/* .muteDry    = */ false,
+			/* .muteWet    = */ false,
 			/* .delay      = */ 1000.0f / 3.0f,
 			/* .feedback   = */ 0.98f,
 			/* .pingpong   = */ 0.0f,

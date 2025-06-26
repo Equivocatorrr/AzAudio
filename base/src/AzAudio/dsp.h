@@ -482,6 +482,7 @@ typedef struct azaDelayConfig {
 	float gain;
 	// dry gain in dB
 	float gainDry;
+	bool muteWet, muteDry;
 	// delay time in ms
 	float delay;
 	// 0 to 1 multiple of output feeding back into input
@@ -507,6 +508,10 @@ typedef struct azaDelayChannelData {
 typedef struct azaDelay {
 	azaDSP header;
 	azaDelayConfig config;
+
+	azaMeters metersInput;
+	azaMeters metersOutput;
+
 	// Combined big buffer that gets split for each channel
 	float *buffer;
 	uint32_t bufferCap;

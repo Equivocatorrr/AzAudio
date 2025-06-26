@@ -1198,6 +1198,12 @@ int azaDelayProcess(azaDelay *data, azaBuffer buffer) {
 	if AZA_UNLIKELY(err) return err;
 	err = azaDelayHandleBufferResizes(data, buffer.samplerate, buffer.channelLayout.count);
 	if AZA_UNLIKELY(err) return err;
+
+	bool updateMeters = azaMixerGUIHasDSPOpen(&data->header);
+	if (updateMeters) {
+		azaMetersUpdate(&data->metersInput, buffer, 1.0f);
+	}
+
 	azaBuffer sideBuffer = azaPushSideBuffer(buffer.frames, buffer.channelLayout.count, buffer.samplerate);
 	memset(sideBuffer.samples, 0, sizeof(float) * sideBuffer.frames * sideBuffer.channelLayout.count);
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
@@ -1216,18 +1222,21 @@ int azaDelayProcess(azaDelay *data, azaBuffer buffer) {
 		err = azaDSPProcessSingle(data->config.wetEffects, sideBuffer);
 		if AZA_UNLIKELY(err) return err;
 	}
+	float amountWet = data->config.muteWet ? 0.0f : aza_db_to_ampf(data->config.gain);
+	float amountDry = data->config.muteDry ? 0.0f : aza_db_to_ampf(data->config.gainDry);
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 		azaDelayChannelData *channelData = azaGetChannelData(&data->channelData, c);
 		uint32_t index = channelData->index;
-		float amount = aza_db_to_ampf(data->config.gain);
-		float amountDry = aza_db_to_ampf(data->config.gainDry);
 		for (uint32_t i = 0; i < buffer.frames; i++) {
 			uint32_t s = i * buffer.stride + c;
 			channelData->buffer[index] = sideBuffer.samples[i * sideBuffer.stride + c];
 			index = (index+1) % channelData->delaySamples;
-			buffer.samples[s] = channelData->buffer[index] * amount + buffer.samples[s] * amountDry;
+			buffer.samples[s] = channelData->buffer[index] * amountWet + buffer.samples[s] * amountDry;
 		}
 		channelData->index = index;
+	}
+	if (updateMeters) {
+		azaMetersUpdate(&data->metersOutput, buffer, 1.0f);
 	}
 	azaPopSideBuffer();
 	if (data->header.pNext) {
