@@ -715,6 +715,7 @@ typedef struct azaDelayDynamic {
 	// Combined big buffer that gets split for each channel
 	float *buffer;
 	uint32_t bufferCap;
+	uint32_t lastSrcBufferFrames;
 	azaDSPChannelData channelData;
 } azaDelayDynamic;
 

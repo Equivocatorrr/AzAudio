@@ -1742,8 +1742,11 @@ static void azaDelayDynamicPrimeBuffer(azaDelayDynamic *data, azaBuffer src) {
 		azaDelayDynamicChannelData *channelData = azaGetChannelData(&data->channelData, c);
 		// Move existing buffer back to make room for new buffer data
 		// This should work because we're expecting each buffer to be at least delaySamplesMax+src.frames in size
-		for (uint32_t i = 0; i < delaySamplesMax; i++) {
-			channelData->buffer[i] = channelData->buffer[i+src.frames];
+		if AZA_LIKELY(data->lastSrcBufferFrames) {
+			// for (uint32_t i = 0; i < delaySamplesMax; i++) {
+			// 	channelData->buffer[i] = channelData->buffer[i+data->lastSrcBufferFrames];
+			// }
+			memmove(channelData->buffer, channelData->buffer + data->lastSrcBufferFrames, sizeof(*channelData->buffer) * delaySamplesMax);
 		}
 		azaBufferCopyChannel((azaBuffer) {
 			.samples = channelData->buffer + delaySamplesMax,
@@ -1753,6 +1756,7 @@ static void azaDelayDynamicPrimeBuffer(azaDelayDynamic *data, azaBuffer src) {
 			.channelLayout = (azaChannelLayout) { .count = 1 },
 		}, 0, src, c);
 	}
+	data->lastSrcBufferFrames = src.frames;
 }
 
 uint32_t azaDelayDynamicGetAllocSize(uint8_t channelCapInline) {
@@ -1765,6 +1769,7 @@ int azaDelayDynamicInit(azaDelayDynamic *data, uint32_t allocSize, azaDelayDynam
 	data->header.kind = AZA_DSP_DELAY_DYNAMIC;
 	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
+	data->lastSrcBufferFrames = 0;
 	azaDSPChannelDataInit(&data->channelData, channelCapInline, sizeof(azaDelayDynamicChannelData), alignof(azaDelayDynamicChannelData));
 	int err = azaEnsureChannels(&data->channelData, channelCount);
 	if AZA_UNLIKELY(err) return err;
