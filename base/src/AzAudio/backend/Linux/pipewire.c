@@ -395,15 +395,20 @@ static void azaStreamProcess(void *userdata) {
 	if (pcm == NULL) return;
 	int stride = sizeof(*pcm) * stream->config.channelLayout.count;
 	int numFrames = buffer->datas[0].chunk->size / stride;
-	if (pw_buffer->requested) numFrames = SPA_MAX(pw_buffer->requested, numFrames);
-
-	stream->processCallback(stream->userdata, (azaBuffer){
-		.samples = pcm,
-		.samplerate = data->samplerate,
-		.frames = numFrames,
-		.stride = data->channelLayout.count,
-		.channelLayout = data->channelLayout,
-	});
+	if (pw_buffer->requested) numFrames = pw_buffer->requested;
+	// if (pw_buffer->requested) numFrames = SPA_MAX(pw_buffer->requested, numFrames);
+	// We don't have to do this, but doing so can help with SIMD slightly
+	numFrames = aza_align(numFrames, 16);
+	// AZA_LOG_TRACE("requested %ull numFrames %i\n", pw_buffer->requested, numFrames);
+	if (numFrames) {
+		stream->processCallback(stream->userdata, (azaBuffer){
+			.samples = pcm,
+			.samplerate = data->samplerate,
+			.frames = numFrames,
+			.stride = data->channelLayout.count,
+			.channelLayout = data->channelLayout,
+		});
+	}
 
 	buffer->datas[0].chunk->offset = 0;
 	buffer->datas[0].chunk->stride = stride;
@@ -600,6 +605,8 @@ static int azaStreamInitPipewire(azaStream *stream, azaStreamConfig config, azaD
 	}
 
 	size_t channelsDefault = AZA_CHANNELS_DEFAULT;
+	// size_t samplerateDefault = 44100;
+	// size_t samplerateDefault = 96000;
 	size_t samplerateDefault = AZA_SAMPLERATE_DEFAULT;
 
 	struct azaNodeInfo *deviceNodeInfo = NULL;
@@ -658,6 +665,7 @@ static int azaStreamInitPipewire(azaStream *stream, azaStreamConfig config, azaD
 
 	data->channelLayout.count = stream->config.channelLayout.count ? stream->config.channelLayout.count : channelsDefault;
 	data->samplerate = stream->config.samplerate ? stream->config.samplerate : samplerateDefault;
+	AZA_LOG_INFO("Channels: %u, Samplerate: %u\n", (uint32_t)data->channelLayout.count, (uint32_t)data->samplerate);
 
 	azaSpaPod formatPod;
 	azaMakeSpaPodFormat(&formatPod, SPA_AUDIO_FORMAT_F32, data->channelLayout.count, data->samplerate);
