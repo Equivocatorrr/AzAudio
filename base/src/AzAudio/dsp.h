@@ -51,7 +51,7 @@ void azaBufferDeinit(azaBuffer *data);
 void azaBufferZero(azaBuffer buffer);
 
 // buffers are defined to be interlaced (where channels come one after the other in memory for a single frame)
-// But some operations are MUCH faster on deinterlaced data, so this will modify the buffer in-place to shuffle the data around such that all the samples of a single channel are adjacent to each other.
+// But some operations are MUCH faster on deinterlaced data, so this will copy the buffer to a secondary buffer to shuffle the data around such that all the samples of a single channel are adjacent to each other.
 
 // This operation is MUCH simpler with a sidebuffer to copy to, and a Deinterlace will pretty much always be paired with an Interlace, so if you hold on to the sidebuffer and use that for processing, you'll effectively eliminate 2 full buffer copies. This also means that if there's only 1 channel, you might consider handling that specially and eliminating the sidebuffer (because otherwise we're just doing an unnecessary buffer copy).
 // NOTE: asserts that dst and src have the same frame count, and that the stride, channel counts all match (stride must be the same as channel count)

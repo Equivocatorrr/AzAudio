@@ -3,7 +3,7 @@
 	Author: Philip Haynes
 	Specialized implementations of azaKernel procedures and dispatch.
 	Non-specialized code still lives in dsp.c
-	Implements the following (declared in dps.h):
+	Implements the following (declared in dsp.h):
 		- azaKernelSample(3)
 		- azaSampleWithKernel(6)
 */

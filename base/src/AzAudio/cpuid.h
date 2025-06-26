@@ -12,7 +12,6 @@
 extern "C" {
 #endif
 
-// We manually do this for MSVC and any other platforms that don't support ifunc (and maybe just want it anyway)
 typedef struct azaCPUID_t {
 	bool initted;
 
