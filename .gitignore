@@ -3,6 +3,7 @@ build*/
 .vscode
 *.log
 *compile_commands.json*
+switchto*
 
 # don't include generated binaries
 bin/
