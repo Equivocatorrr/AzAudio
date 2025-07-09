@@ -50,8 +50,8 @@ float azaKernelSample_sse_fma(azaKernel *kernel, int i, float pos) {
 	return result;
 }
 
-AZA_SIMD_FEATURES("sse,fma")
-static __m128 azaKernelSample_x4_sse_fma(azaKernel *kernel, int i, float pos) {
+AZA_SIMD_FEATURES("sse")
+static __m128 azaKernelSample_x4_sse(azaKernel *kernel, int i, float pos) {
 	float x = (float)(i + kernel->sampleZero) - pos;
 	int32_t index = (int32_t)x;
 	// We won't be doing any masking, so don't be calling this if you don't handle tails as scalars!
@@ -67,7 +67,7 @@ static __m128 azaKernelSample_x4_sse_fma(azaKernel *kernel, int i, float pos) {
 	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
 	__m128 samples0 = _mm_loadu_ps(srcSubsample0 + index);
 	__m128 samples1 = _mm_loadu_ps(srcSubsample1 + index);
-	__m128 result = azaLerp_x4_sse_fma(samples0, samples1, _mm_set1_ps(x));
+	__m128 result = azaLerp_x4_sse(samples0, samples1, _mm_set1_ps(x));
 	return result;
 }
 
@@ -107,8 +107,8 @@ float azaSampleWithKernel_scalar(float *src, int stride, int minFrame, int maxFr
 	return result;
 }
 
-AZA_SIMD_FEATURES("sse,fma")
-float azaSampleWithKernel_sse_fma(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos) {
+AZA_SIMD_FEATURES("sse")
+float azaSampleWithKernel_sse(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos) {
 	float result = 0.0f;
 	int start, end;
 	start = (int)pos - kernel->sampleZero + 1;
@@ -117,9 +117,9 @@ float azaSampleWithKernel_sse_fma(float *src, int stride, int minFrame, int maxF
 	if (stride == 1 && i >= minFrame && i+4 < maxFrame) {
 		__m128 result_x4 = _mm_setzero_ps();
 		for (; i <= end-4; i += 4) {
-			__m128 kernelSamples = azaKernelSample_x4_sse_fma(kernel, i, pos);
+			__m128 kernelSamples = azaKernelSample_x4_sse(kernel, i, pos);
 			__m128 srcSamples = _mm_loadu_ps(src + i);
-			result_x4 = _mm_fmadd_ps(srcSamples, kernelSamples, result_x4);
+			result_x4 = _mm_add_ps(_mm_mul_ps(srcSamples, kernelSamples), result_x4);
 		}
 		float hsum = aza_mm_hsum_ps_sse(result_x4);
 		result = hsum;
@@ -127,7 +127,7 @@ float azaSampleWithKernel_sse_fma(float *src, int stride, int minFrame, int maxF
 	for (; i < end; i++) {
 		int index = AZA_CLAMP(i, minFrame, maxFrame-1);
 		float s = src[index * stride];
-		result = aza_fmadd_f32(s, azaKernelSample_sse_fma(kernel, i, pos), result);
+		result += s * azaKernelSample(kernel, i, pos);
 	}
 	return result;
 }
@@ -190,9 +190,9 @@ float azaSampleWithKernel_dispatch(float *src, int stride, int minFrame, int max
 	if (AZA_AVX && AZA_FMA) {
 		AZA_LOG_TRACE("choosing azaSampleWithKernel_avx_fma\n");
 		azaSampleWithKernel_specialized = azaSampleWithKernel_avx_fma;
-	} else if (AZA_SSE && AZA_FMA) {
-		AZA_LOG_TRACE("choosing azaSampleWithKernel_sse_fma\n");
-		azaSampleWithKernel_specialized = azaSampleWithKernel_sse_fma;
+	} else if (AZA_SSE) {
+		AZA_LOG_TRACE("choosing azaSampleWithKernel_sse\n");
+		azaSampleWithKernel_specialized = azaSampleWithKernel_sse;
 	} else {
 		AZA_LOG_TRACE("choosing azaSampleWithKernel_scalar\n");
 		azaSampleWithKernel_specialized = azaSampleWithKernel_scalar;
