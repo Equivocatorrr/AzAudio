@@ -173,11 +173,21 @@ int catProcess(void *userdata, azaBuffer buffer) {
 	azaBufferZero(buffer);
 	azaBuffer sampledBuffer = azaPushSideBufferZero(buffer.frames, samplerCat->config.buffer->channelLayout.count, buffer.samplerate);
 
+#if 1
 	if ((err = azaSamplerProcess(samplerCat, sampledBuffer))) {
 		char buffer[64];
 		AZA_LOG_ERR("azaSamplerProcess returned %s\n", azaErrorString(err, buffer, sizeof(buffer)));
 		goto done;
 	}
+#else
+	// Just a nyquist frequency to test aliasing
+	for (uint32_t i = 0; i < sampledBuffer.frames; i+=2) {
+		for (uint8_t c = 0; c < sampledBuffer.channelLayout.count; c++) {
+			sampledBuffer.samples[(i+0)*sampledBuffer.stride + c] =  1.0f;
+			sampledBuffer.samples[(i+1)*sampledBuffer.stride + c] = -1.0f;
+		}
+	}
+#endif
 
 	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
 		float volumeStart = azaClampf(3.0f / azaVec3Norm(objects[c].posPrev), 0.0f, 1.0f);

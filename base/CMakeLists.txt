@@ -51,6 +51,8 @@ add_library(AzAudio STATIC
 	src/AzAudio/dsp.h
 	src/AzAudio/dsp.c
 	src/AzAudio/error.h
+	src/AzAudio/fft.h
+	src/AzAudio/fft.c
 	src/AzAudio/helpers.h
 	src/AzAudio/helpers.c
 	src/AzAudio/math.h

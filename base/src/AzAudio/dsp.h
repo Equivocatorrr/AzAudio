@@ -179,9 +179,14 @@ typedef enum azaDSPKind {
 	AZA_DSP_GATE,
 	AZA_DSP_DELAY_DYNAMIC,
 	AZA_DSP_SPATIALIZE,
+
+	// The rest are passive monitors
+
+	AZA_DSP_MONITOR_SPECTRUM,
+
+	AZA_DSP_KIND_COUNT
 } azaDSPKind;
 extern const char *azaDSPKindString[];
-#define AZA_DSP_KIND_COUNT (AZA_DSP_SPATIALIZE+1)
 
 // Generic interface to all the DSP structures
 typedef struct azaDSP {
@@ -404,9 +409,10 @@ typedef enum azaFilterKind {
 	AZA_FILTER_HIGH_PASS,
 	AZA_FILTER_LOW_PASS,
 	AZA_FILTER_BAND_PASS,
+
+	AZA_FILTER_KIND_COUNT
 } azaFilterKind;
 extern const char *azaFilterKindString[];
-#define AZA_FILTER_KIND_COUNT (AZA_FILTER_BAND_PASS+1)
 
 typedef struct azaFilterConfig {
 	azaFilterKind kind;
@@ -857,6 +863,58 @@ void azaFreeSpatialize(azaSpatialize *data);
 // Doesn't attenuate the volume by distance. You must do that yourself and pass the result into srcAmp.
 int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer srcBuffer, azaVec3 srcPosStart, float srcAmpStart, azaVec3 srcPosEnd, float srcAmpEnd);
 
+
+
+typedef enum azaMonitorSpectrumMode {
+	// Reports the spectrum of a single chosen channel
+	AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL,
+	// Reports the average spectrum from all channels
+	AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS,
+} azaMonitorSpectrumMode;
+
+typedef struct azaMonitorSpectrumConfig {
+	azaMonitorSpectrumMode mode;
+	// In AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL mode, this is which channel gets analyzed
+	uint8_t channelChosen;
+	// FFT window size (must be a power of 2)
+	uint16_t window;
+	// How much of the existing signal is kept every time the output is updated.
+	// Ex: out = lerp(out, in, 1/(1+smoothing));
+	uint16_t smoothing;
+} azaMonitorSpectrumConfig;
+
+typedef struct azaMonitorSpectrum {
+	azaDSP header;
+	azaMonitorSpectrumConfig config;
+
+	uint32_t samplerate;
+
+	float *inputBuffer;
+	uint32_t inputBufferCapacity;
+	uint32_t inputBufferUsed;
+	uint8_t inputBufferChannelCount;
+
+	uint16_t numCounted;
+	uint32_t outputBufferCapacity;
+	float *outputBuffer;
+} azaMonitorSpectrum;
+
+inline uint32_t azaMonitorSpectrumGetAllocSize() {
+	return sizeof(azaMonitorSpectrum);
+}
+// initializes azaMonitorSpectrum in existing memory
+void azaMonitorSpectrumInit(azaMonitorSpectrum *data, azaMonitorSpectrumConfig config);
+// frees any additional memory that the azaMonitorSpectrum may have allocated
+void azaMonitorSpectrumDeinit(azaMonitorSpectrum *data);
+// Convenience function that allocates and inits an azaMonitorSpectrum for you
+// May return NULL indicating an out-of-memory error
+azaMonitorSpectrum* azaMakeMonitorSpectrum(azaMonitorSpectrumConfig config);
+// Frees an azaMonitorSpectrum that was created with azaMakeMonitorSpectrum
+void azaFreeMonitorSpectrum(azaMonitorSpectrum *data);
+
+azaDSP* azaMakeDefaultMonitorSpectrum(uint8_t channelCountInline);
+
+int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer);
 
 
 #ifdef __cplusplus

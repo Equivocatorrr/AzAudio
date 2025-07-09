@@ -9,6 +9,7 @@
 #include "error.h"
 #include "helpers.h"
 #include "mixer.h"
+#include "fft.h"
 
 // Good ol' MSVC causing problems like always. Never change, MSVC... never change.
 #ifdef _MSC_VER
@@ -49,6 +50,8 @@ const char *azaDSPKindString[] = {
 	"Gate",
 	"Dynamic Delay",
 	"Spatialize",
+
+	"Spectrum Monitor",
 };
 static_assert(sizeof(azaDSPKindString) / sizeof(const char*) == AZA_DSP_KIND_COUNT, "Pls update azaDSPKindString");
 
@@ -103,6 +106,7 @@ int azaDSPRegistryInit() {
 	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_SAMPLER], azaMakeDefaultSampler, (void(*)(azaDSP*))azaFreeSampler);
 	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_RMS], azaMakeDefaultRMS, (void(*)(azaDSP*))azaFreeRMS);
 	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_SPATIALIZE], NULL, (void(*)(azaDSP*))azaFreeSpatialize);
+	azaDSPAddRegEntry(azaDSPKindString[AZA_DSP_MONITOR_SPECTRUM], azaMakeDefaultMonitorSpectrum, (void(*)(azaDSP*))azaFreeMonitorSpectrum);
 	return AZA_SUCCESS;
 }
 
@@ -449,6 +453,8 @@ int azaDSPProcessSingle(azaDSP *data, azaBuffer buffer) {
 		case AZA_DSP_SAMPLER: return azaSamplerProcess((azaSampler*)data, buffer);
 		case AZA_DSP_GATE: return azaGateProcess((azaGate*)data, buffer);
 		case AZA_DSP_DELAY_DYNAMIC: return azaDelayDynamicProcess((azaDelayDynamic*)data, buffer, NULL);
+
+		case AZA_DSP_MONITOR_SPECTRUM: return azaMonitorSpectrumProcess((azaMonitorSpectrum*)data, buffer);
 
 		case AZA_DSP_SPATIALIZE:
 			return AZA_ERROR_DSP_INTERFACE_NOT_GENERIC;
@@ -1001,6 +1007,7 @@ int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 					buffer.samples[s] = (channelData->outputs[0] - channelData->outputs[1]) * 2.0f * amount + buffer.samples[s] * amountDry;
 				}
 			} break;
+			case AZA_FILTER_KIND_COUNT: break;
 		}
 	}
 	data->channelData.countActive = buffer.channelLayout.count;
@@ -2396,4 +2403,180 @@ int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer src
 	azaPopSideBuffer();
 bypassed:
 	return err;
+}
+
+
+
+void azaMonitorSpectrumInit(azaMonitorSpectrum *data, azaMonitorSpectrumConfig config) {
+	memset(data, 0, sizeof(*data));
+	data->header.kind = AZA_DSP_MONITOR_SPECTRUM;
+	data->header.metadata = azaDSPPackMetadata(sizeof(azaMonitorSpectrum), false, false);
+	data->config = config;
+}
+
+void azaMonitorSpectrumDeinit(azaMonitorSpectrum *data) {
+	if (data->inputBuffer) {
+		aza_free(data->inputBuffer);
+	}
+	if (data->outputBuffer) {
+		aza_free(data->outputBuffer);
+	}
+}
+
+azaMonitorSpectrum* azaMakeMonitorSpectrum(azaMonitorSpectrumConfig config) {
+	azaMonitorSpectrum *result = aza_calloc(1, sizeof(azaMonitorSpectrum));
+	if (result) {
+		azaMonitorSpectrumInit(result, config);
+		azaDSPMetadataSetOwned(&result->header.metadata);
+	}
+	return result;
+}
+
+void azaFreeMonitorSpectrum(azaMonitorSpectrum *data) {
+	azaMonitorSpectrumDeinit(data);
+	aza_free(data);
+}
+
+azaDSP* azaMakeDefaultMonitorSpectrum(uint8_t channelCountInline) {
+	azaMonitorSpectrum *result = azaMakeMonitorSpectrum((azaMonitorSpectrumConfig) {
+		.mode = AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL,
+		.window = 2048,
+		.smoothing = 1,
+	});
+	return (azaDSP*)result;
+}
+
+static int azaMonitorSpectrumHandleBufferResizes(azaMonitorSpectrum *data, azaBuffer buffer) {
+	size_t requiredInputCapacity = data->config.window * buffer.channelLayout.count;
+	if (requiredInputCapacity > data->inputBufferCapacity) {
+		// Don't bother carrying data over
+		if (data->inputBuffer) {
+			aza_free(data->inputBuffer);
+		}
+		data->inputBuffer = aza_calloc(1, sizeof(float) * requiredInputCapacity);
+		if (!data->inputBuffer) {
+			data->inputBufferCapacity = 0;
+			return AZA_ERROR_OUT_OF_MEMORY;
+		}
+		data->inputBufferCapacity = requiredInputCapacity;
+	}
+	if (data->inputBufferChannelCount != buffer.channelLayout.count) {
+		// Reset
+		data->inputBufferChannelCount = buffer.channelLayout.count;
+		data->inputBufferUsed = 0;
+	}
+	size_t requiredOutputCapacity = data->config.window * 2;
+	if (requiredOutputCapacity > data->outputBufferCapacity) {
+		if (data->outputBuffer) {
+			aza_free(data->outputBuffer);
+		}
+		data->outputBuffer = aza_calloc(1, sizeof(float) * requiredOutputCapacity);
+		if (!data->outputBuffer) {
+			data->outputBufferCapacity = 0;
+			return AZA_ERROR_OUT_OF_MEMORY;
+		}
+		data->outputBufferCapacity = requiredOutputCapacity;
+	}
+	return AZA_SUCCESS;
+}
+
+// offset is the frame offset into buffer to start from
+// returns how many frames were used from buffer
+static uint32_t azaMonitorSpectrumPrimeBuffer(azaMonitorSpectrum *data, azaBuffer buffer, uint32_t offset) {
+	assert(offset <= buffer.frames);
+	uint32_t used = AZA_MIN(data->config.window - data->inputBufferUsed, buffer.frames-offset);
+	if (used) {
+		azaBuffer dst = (azaBuffer) {
+			.samples = data->inputBuffer + data->inputBufferChannelCount * data->inputBufferUsed,
+			.samplerate = buffer.samplerate,
+			.frames = used,
+			.stride = data->inputBufferChannelCount,
+			.channelLayout = buffer.channelLayout,
+		};
+		azaBuffer src = azaBufferSlice(buffer, offset, used);
+		azaBufferCopy(dst, src);
+		// memcpy(data->inputBuffer + data->inputBufferChannelCount * data->inputBufferUsed, buffer.samples + data->inputBufferChannelCount * offset, sizeof(float) * used * data->inputBufferChannelCount);
+		data->inputBufferUsed += used;
+	}
+	return used;
+}
+
+static void azaMonitorSpectrumApplyWindow(azaBuffer buffer) {
+	for (uint32_t i = 0; i < buffer.frames; i++) {
+		float t = (float)i / (float)buffer.frames;
+		// divide by integral of this sine to keep unity gain
+		float mul = azaOscSine(t * 0.5f) / 0.636619772368f;
+		buffer.samples[i] *= mul;
+	}
+}
+
+int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer) {
+	if (azaDSPMetadataGetBypass(data->header.metadata)) {
+		goto bypassed;
+	}
+	int result = azaMonitorSpectrumHandleBufferResizes(data, buffer);
+	if (result) return result;
+	data->samplerate = buffer.samplerate;
+	for (uint32_t offset = 0, used = 0; offset < buffer.frames; offset += used) {
+		used = azaMonitorSpectrumPrimeBuffer(data, buffer, offset);
+		while (data->inputBufferUsed >= data->config.window) {
+			azaBuffer inputBuffer = (azaBuffer) {
+				.samples = data->inputBuffer,
+				.samplerate = data->samplerate,
+				.frames = data->inputBufferUsed,
+				.stride = data->inputBufferChannelCount,
+				.channelLayout = (azaChannelLayout) {
+					.count = data->inputBufferChannelCount,
+				}
+			};
+			azaBuffer full = azaPushSideBuffer(data->config.window*2, 1, buffer.samplerate);
+			azaBuffer dst = (azaBuffer) {
+				.samples = data->outputBuffer,
+				.samplerate = data->samplerate,
+				.frames = data->config.window*2,
+				.stride = 1,
+				.channelLayout = (azaChannelLayout) {
+					.count = 1,
+				}
+			};
+			azaBuffer real = full;
+			real.frames = data->config.window;
+			azaBuffer imag = full;
+			imag.frames = data->config.window;
+			imag.samples += data->config.window;
+			switch (data->config.mode) {
+				case AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL: {
+					uint8_t channelChosen = data->config.channelChosen;
+					if (channelChosen >= data->inputBufferChannelCount) {
+						channelChosen = 0;
+					}
+					azaBufferCopyChannel(real, 0, inputBuffer, channelChosen);
+					azaBufferZero(imag);
+					azaMonitorSpectrumApplyWindow(real);
+					azaFFT(real.samples, imag.samples, real.frames);
+					for (uint32_t i = 0; i < data->config.window>>1; i++) {
+						float x = real.samples[i];
+						float y = imag.samples[i];
+						float mag = sqrtf(x*x + y*y) / (float)((data->config.window>>1) - i);
+						float phase = atan2f(y, x);
+						real.samples[i] = mag;
+						imag.samples[i] = phase;
+					}
+					float mix = 1.0f / (float)(1 + data->numCounted);
+					azaBufferMix(dst, 1.0f - mix, full, mix);
+					data->numCounted = AZA_MIN(data->numCounted+1, data->config.smoothing);
+				} break;
+				case AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS: {
+					assert(false && "unimplemented");
+				} break;
+			}
+			azaPopSideBuffer();
+			data->inputBufferUsed -= data->config.window;
+		}
+	}
+bypassed:
+	if (data->header.pNext) {
+		return azaDSPProcessSingle(data->header.pNext, buffer);
+	}
+	return AZA_SUCCESS;
 }

@@ -10,7 +10,9 @@ As a bonus, we may try to document porting steps for users of this library that 
 
 ## [Unreleased]
 
-Nothing yet!
+### Added
+- Complex FFT
+- Spectrum Monitor plugin
 
 ## [v0.2.0](https://github.com/Equivocatorrr/AzAudio/releases/tag/v0.2.0)
 

@@ -81,7 +81,7 @@ static struct {
 
 
 
-static const int pluginDrawHeight = 200;
+static int pluginDrawHeight = 200;
 static const int trackDrawWidth = 120;
 static const int trackDrawHeight = 300;
 static const int trackFXDrawHeight = 80;
@@ -153,6 +153,11 @@ static const Color colorLookaheadLimiterAttenuation = {   0, 128, 255, 255 };
 static const int compressorMeterDBRange = 48;
 static const int compressorAttenuationMeterDBRange = 24;
 static const Color colorCompressorAttenuation = {   0, 128, 255, 255 };
+
+static const Color colorMoniterSpectrumBGTop       = {  20,  30,  40, 255 };
+static const Color colorMoniterSpectrumBGBot       = {  10,  15,  20, 255 };
+static const Color colorMoniterSpectrumFG          = { 100, 150, 200, 255 };
+static const Color colorMonitorSpectrumDBTick      = {  50,  70, 100,  96 };
 
 
 
@@ -258,6 +263,10 @@ static void azaRectShrinkMarginV(azaRect *rect, int m) {
 
 static void azaRectShrinkTop(azaRect *rect, int h) {
 	rect->y += h;
+	rect->h -= h;
+}
+
+static void azaRectShrinkBottom(azaRect *rect, int h) {
 	rect->h -= h;
 }
 
@@ -516,7 +525,7 @@ static void azaDrawDBTicks(azaRect bounds, int dbRange, int dbOffset, Color colo
 	for (int i = 0; i <= dbRange; i++) {
 		int db = i + dbOffset;
 		Color myColor = i == dbOffset ? colorUnity : color;
-		myColor.a = 64 + (db%6==0)*128 + (db%3==0)*63;
+		myColor.a = (int)myColor.a * (64 + (db%6==0)*128 + (db%3==0)*63) / 255;
 		int yOffset = i * bounds.h / dbRange;
 		azaDrawLine(bounds.x, bounds.y+yOffset, bounds.x+bounds.w, bounds.y+yOffset, myColor);
 	}
@@ -1533,7 +1542,70 @@ static void azaDrawReverb(azaReverb *data, azaRect bounds) {
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.delay, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "%.1fms");
 }
 
+static int azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, float width, uint32_t i) {
+	// float nyquist = (float)data->samplerate / 2.0f;
+	// float baseFreq = (float)data->samplerate / (float)data->config.window;
+	uint32_t window = data->config.window >> 1;
+	float baseLog = log2f((float)window);
+	if (i) {
+		return (int)roundf(width * (log2f((float)i / (float)window) + baseLog) / baseLog);
+	} else {
+		return 0;
+	}
+}
+
+static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
+	// TODO: Add controls
+	azaRect spectrumBounds = bounds;
+	azaRectShrinkMargin(&spectrumBounds, margin);
+	azaRectShrinkBottom(&spectrumBounds, textMargin*2 + 10);
+	float baseFreq = (float)data->samplerate / (float)data->config.window;
+	azaDrawRectGradientV(spectrumBounds, colorMoniterSpectrumBGTop, colorMoniterSpectrumBGBot);
+	if (!data->outputBuffer) return;
+	azaRect bar;
+	uint32_t window = data->config.window >> 1;
+	float lastFreq = 1.0f;
+	uint32_t lastX = 0, lastWidth = 0;
+	for (uint32_t i = 0; i <= window; i++) {
+		float magnitude = data->outputBuffer[i];
+		// float phase = data->outputBuffer[i + data->config.window];
+		float magDB = aza_amp_to_dbf(magnitude);
+		int yOffset = azaDBToYOffsetClamped(-magDB, spectrumBounds.h, 0, 96);
+		bar.x = azaMonitorSpectrumBarXFromIndex(data, spectrumBounds.w, i);
+		int right = azaMonitorSpectrumBarXFromIndex(data, spectrumBounds.w, i+1);
+		bar.w = right - bar.x;
+		bar.y = yOffset;
+		bar.h = spectrumBounds.h - bar.y;
+		bar.x += spectrumBounds.x;
+		bar.y += spectrumBounds.y;
+		azaDrawRect(bar, colorMoniterSpectrumFG);
+		float freq = baseFreq * i;
+		if (freq / lastFreq >= 2.0f) {
+			azaDrawLine(bar.x, spectrumBounds.y, bar.x, spectrumBounds.y + spectrumBounds.h + textMargin, (Color) {0,0,0,128});
+			if (bar.x - lastX >= lastWidth+10) {
+				int intFreq = (int)roundf(freq);
+				const char *str;
+				if (intFreq % 1000 == 0) {
+					str = TextFormat("%dk", intFreq/1000);
+				} else {
+					str = TextFormat("%d", intFreq);
+				}
+				int width = MeasureText(str, 10);
+				int x = bar.x-width/2;
+				x = AZA_MAX(spectrumBounds.x, x);
+				x = AZA_MIN(x, spectrumBounds.x + spectrumBounds.w - width);
+				azaDrawText(str, x, spectrumBounds.y + spectrumBounds.h + margin + textMargin, 10, WHITE);
+				lastWidth = width;
+				lastX = x;
+			}
+			lastFreq = freq;
+		}
+	}
+	azaDrawDBTicks(spectrumBounds, 90, 0, colorMonitorSpectrumDBTick, colorMonitorSpectrumDBTick);
+}
+
 static void azaDrawSelectedDSP() {
+	pluginDrawHeight = GetLogicalHeight() - (trackDrawHeight + scrollbarSize);
 	azaRect bounds = {
 		margin*2,
 		margin*2,
@@ -1574,6 +1646,10 @@ static void azaDrawSelectedDSP() {
 		case AZA_DSP_DELAY_DYNAMIC:
 		case AZA_DSP_SPATIALIZE:
 			break;
+		case AZA_DSP_MONITOR_SPECTRUM:
+			azaDrawMonitorSpectrum((azaMonitorSpectrum*)selectedDSP, bounds);
+			break;
+		case AZA_DSP_KIND_COUNT: break;
 	}
 }
 

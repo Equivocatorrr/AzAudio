@@ -14,10 +14,10 @@ Move fast and break things! I'm currently exploring this problem space, so expec
 - [ ] Mixer state serialization (saving and loading from disk, etc.)
 - [ ] DSP technical analysis tools
 	- [x] RMS/Peak Meters (struct azaMeters)
-	- [ ] Frequency response diagrams
+	- [x] Frequency response diagrams
 	- [ ] Phase response diagrams
 - [ ] Frequency-space
-	- [ ] Fast Fourier Transform
+	- [x] Fast Fourier Transform
 	- [ ] Frequency-space convolutions
 - [ ] MIDI support (for samplers, synths, etc.)
 - [ ] Fully dynamic control over effects, samplers, etc. (automation, probably with scheduling)

@@ -131,6 +131,9 @@ azaOscCosine(float t) {
 	return azaOscSine(t + 0.25f);
 }
 
+// NOTE: These oscillators alias like hell, because mathematically perfect means an infinite spectrum.
+// TODO: We prolly want to make some that DON'T alias at some point.
+
 static inline float
 azaOscSquare(float t) {
 	t = azaWrap01f(t);
