@@ -4,8 +4,6 @@
 	Main entry point to using the AzAudio library.
 */
 
-// #define SYS_AUDIO_NO_STDIO // to remove stdio dependency
-
 #ifndef AZAUDIO_H
 #define AZAUDIO_H
 

@@ -238,7 +238,7 @@ int main(int argumentCount, char** argumentValues) {
 	}
 
 	azaStreamConfig streamConfig = {
-		.samplerate = 44100
+		0 // .samplerate = 44100
 	};
 	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) {0} , streamConfig, false))) {
 		char buffer[64];

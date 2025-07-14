@@ -2439,9 +2439,9 @@ void azaFreeMonitorSpectrum(azaMonitorSpectrum *data) {
 
 azaDSP* azaMakeDefaultMonitorSpectrum(uint8_t channelCountInline) {
 	azaMonitorSpectrum *result = azaMakeMonitorSpectrum((azaMonitorSpectrumConfig) {
-		.mode = AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL,
-		.window = 2048,
-		.smoothing = 1,
+		.mode = AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS,
+		.window = 1024,
+		.smoothing = 3,
 	});
 	return (azaDSP*)result;
 }
@@ -2504,8 +2504,12 @@ static uint32_t azaMonitorSpectrumPrimeBuffer(azaMonitorSpectrum *data, azaBuffe
 static void azaMonitorSpectrumApplyWindow(azaBuffer buffer) {
 	for (uint32_t i = 0; i < buffer.frames; i++) {
 		float t = (float)i / (float)buffer.frames;
+		// Half-sine window (probably bad?)
 		// divide by integral of this sine to keep unity gain
-		float mul = azaOscSine(t * 0.5f) / 0.636619772368f;
+		// float mul = azaOscSine(t * 0.5f) / 0.636619772368f;
+		// Hann window (cos(t)*0.5+0.5)/0.5
+		// Implicitly dividing by the integral
+		float mul = azaOscCosine(t) + 1.0f;
 		buffer.samples[i] *= mul;
 	}
 }
@@ -2523,7 +2527,7 @@ int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer) {
 			azaBuffer inputBuffer = (azaBuffer) {
 				.samples = data->inputBuffer,
 				.samplerate = data->samplerate,
-				.frames = data->inputBufferUsed,
+				.frames = AZA_MIN(data->inputBufferUsed, data->config.window),
 				.stride = data->inputBufferChannelCount,
 				.channelLayout = (azaChannelLayout) {
 					.count = data->inputBufferChannelCount,
@@ -2558,7 +2562,7 @@ int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer) {
 					for (uint32_t i = 0; i < window; i++) {
 						float x = real.samples[i];
 						float y = imag.samples[i];
-						float mag = sqrtf(x*x + y*y) / (float)(window - i);
+						float mag = sqrtf(x*x + y*y) * (float)(i+1) / (float)data->config.window;
 						float phase = atan2f(y, x);
 						real.samples[i] = mag;
 						imag.samples[i] = phase;
@@ -2568,8 +2572,26 @@ int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer) {
 					data->numCounted = AZA_MIN(data->numCounted+1, data->config.smoothing);
 				} break;
 				case AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS: {
-					assert(false && "unimplemented");
+					uint32_t window = (data->config.window >> 1) + 1;
+					for (uint8_t c = 0; c < data->inputBufferChannelCount; c++) {
+						azaBufferCopyChannel(real, 0, inputBuffer, c);
+						azaBufferZero(imag);
+						azaMonitorSpectrumApplyWindow(real);
+						azaFFT(real.samples, imag.samples, real.frames);
+						for (uint32_t i = 0; i < window; i++) {
+							float x = real.samples[i];
+							float y = imag.samples[i];
+							float mag = sqrtf(x*x + y*y) * (float)(i+1) / (float)data->config.window;
+							float phase = atan2f(y, x);
+							real.samples[i] = mag;
+							imag.samples[i] = phase;
+						}
+						float mix = 1.0f / (float)(1 + c + data->numCounted*data->inputBufferChannelCount);
+						azaBufferMix(dst, 1.0f - mix, full, mix);
+						data->numCounted = AZA_MIN(data->numCounted+1, data->config.smoothing);
+					}
 				} break;
+				case AZA_MONITOR_SPECTRUM_MODE_COUNT: break;
 			}
 			azaPopSideBuffer();
 			data->inputBufferUsed -= data->config.window;

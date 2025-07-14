@@ -870,6 +870,7 @@ typedef enum azaMonitorSpectrumMode {
 	AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL,
 	// Reports the average spectrum from all channels
 	AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS,
+	AZA_MONITOR_SPECTRUM_MODE_COUNT,
 } azaMonitorSpectrumMode;
 
 typedef struct azaMonitorSpectrumConfig {

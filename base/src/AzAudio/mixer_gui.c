@@ -154,10 +154,7 @@ static const int compressorMeterDBRange = 48;
 static const int compressorAttenuationMeterDBRange = 24;
 static const Color colorCompressorAttenuation = {   0, 128, 255, 255 };
 
-static const Color colorMoniterSpectrumBGTop       = {  20,  30,  40, 255 };
-static const Color colorMoniterSpectrumBGBot       = {  10,  15,  20, 255 };
-static const Color colorMoniterSpectrumFG          = { 100, 150, 200, 255 };
-static const Color colorMonitorSpectrumDBTick      = {  50,  70, 100,  96 };
+
 
 
 
@@ -1427,23 +1424,23 @@ static void azaDrawLookaheadLimiter(azaLookaheadLimiter *data, azaRect bounds) {
 }
 
 static void azaDrawFilter(azaFilter *data, azaRect bounds) {
-	azaRect rectKind = bounds;
-	rectKind.w = 80;
-	rectKind.h = textMargin*2 + 10;
+	azaRect kindRect = bounds;
+	kindRect.w = 80;
+	kindRect.h = textMargin*2 + 10;
 	for (int i = 0; i < AZA_FILTER_KIND_COUNT; i++) {
-		if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, rectKind)) {
+		if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, kindRect)) {
 			data->config.kind = (azaFilterKind)i;
 		}
 		bool selected = ((int)data->config.kind == i);
-		azaDrawRect(rectKind, colorMeterBGBot);
+		azaDrawRect(kindRect, colorMeterBGBot);
 		if (selected) {
-			azaDrawRectLines(rectKind, colorPluginBorderSelected);
+			azaDrawRectLines(kindRect, colorPluginBorderSelected);
 		}
-		azaDrawText(azaFilterKindString[i], rectKind.x + textMargin, rectKind.y + textMargin, 10, WHITE);
-		rectKind.y += rectKind.h + margin;
+		azaDrawText(azaFilterKindString[i], kindRect.x + textMargin, kindRect.y + textMargin, 10, WHITE);
+		kindRect.y += kindRect.h + margin;
 	}
-	azaRectShrinkTop(&rectKind, (rectKind.h + margin) * AZA_FILTER_KIND_COUNT);
-	azaRectShrinkLeft(&bounds, rectKind.w + margin);
+	azaRectShrinkTop(&kindRect, (kindRect.h + margin) * AZA_FILTER_KIND_COUNT);
+	azaRectShrinkLeft(&bounds, kindRect.w + margin);
 	int usedWidth = azaDrawSliderFloatLog(bounds, &data->config.frequency, 5.0f, 24000.0f, 0.1f, 500.0f, "Cutoff Frequency", "%.1fHz");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.dryMix, 0.0f, 1.0f, 0.1f, 0.0f, "Dry Mix", "%.2f");
@@ -1530,6 +1527,22 @@ static void azaDrawDelay(azaDelay *data, azaRect bounds) {
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 }
 
+
+
+static const Color colorMonitorSpectrumBGTop       = {  20,  30,  40, 255 };
+static const Color colorMonitorSpectrumBGBot       = {  10,  15,  20, 255 };
+static const Color colorMonitorSpectrumFG          = { 100, 150, 200, 255 };
+static const Color colorMonitorSpectrumDBTick      = {  50,  70, 100,  96 };
+static const Color colorMonitorSpectrumDBTickUnity = { 100,  70,  50, 128 };
+
+static const Color colorMonitorSpectrumWindowControl = { 10, 15, 20, 255 };
+static const Color colorMonitorSpectrumWindowControlHighlight = { 50, 70, 100, 255 };
+static const int monitorSpectrumWindowControlWidth = 35;
+static const int monitorSpectrumMaxWindow = 8192;
+static const int monitorSpectrumMinWindow = 64;
+static const int monitorSpectrumMaxSmoothing = 63;
+static const int monitorSpectrumMinSmoothing = 0;
+
 static void azaDrawReverb(azaReverb *data, azaRect bounds) {
 	int usedWidth = azaDrawFader(bounds, &data->config.gain, &data->config.muteWet, "Wet Gain", 36, 6);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
@@ -1545,22 +1558,119 @@ static void azaDrawReverb(azaReverb *data, azaRect bounds) {
 static int azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, uint32_t width, uint32_t i) {
 	// float nyquist = (float)data->samplerate / 2.0f;
 	// float baseFreq = (float)data->samplerate / (float)data->config.window;
-	uint32_t window = data->config.window >> 1;
+	uint32_t window = (data->config.window >> 1)+1;
 	float baseLog = log2f((float)window);
 	if (i) {
-		return (int)roundf((float)width * (log2f((float)i / (float)window) + baseLog) / baseLog);
+		return (int)roundf((float)width * (log2f((float)(i+1) / (float)window) + baseLog) / baseLog);
 	} else {
 		return 0;
 	}
 }
 
 static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
-	// TODO: Add controls
-	azaRect spectrumBounds = bounds;
-	azaRectShrinkMargin(&spectrumBounds, margin);
-	azaRectShrinkBottom(&spectrumBounds, textMargin*2 + 10);
+	azaRect controlRect = bounds;
+	controlRect.x += margin;
+	controlRect.y += margin;
+	controlRect.w = monitorSpectrumWindowControlWidth;
+	controlRect.h = textMargin*2 + 10;
+	int vMove = (int)GetMouseWheelMoveV().y;
+
+	// Mode
+
+	Color colorWindowControlRect = colorMonitorSpectrumWindowControl;
+	bool hover = azaMouseInRect(controlRect);
+	if (hover) {
+		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
+		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
+			data->config.mode++;
+			if (data->config.mode >= AZA_MONITOR_SPECTRUM_MODE_COUNT) {
+				data->config.mode = 0;
+			}
+		}
+		if (data->config.mode == AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL) {
+			if (vMove > 0) {
+				if (data->config.channelChosen < data->inputBufferChannelCount-1) {
+					data->config.channelChosen++;
+				} else {
+					data->config.channelChosen = 0;
+				}
+			} else if (vMove < 0) {
+				if (data->config.channelChosen > 0) {
+					data->config.channelChosen--;
+				} else {
+					data->config.channelChosen = data->inputBufferChannelCount-1;
+				}
+			}
+		}
+	}
+	azaDrawRect(controlRect, colorWindowControlRect);
+	switch (data->config.mode) {
+		case AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL: {
+			if (hover) {
+				azaTooltipAdd("Single-Channel Mode", controlRect.x + controlRect.w, controlRect.y, false);
+			}
+			azaDrawText(TextFormat("Ch %d", (int)data->config.channelChosen), controlRect.x + textMargin, controlRect.y + textMargin, 10, WHITE);
+		} break;
+		case AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS: {
+			if (hover) {
+				azaTooltipAdd("Channel-Average Mode", controlRect.x + controlRect.w, controlRect.y, false);
+			}
+			azaDrawText("Avg", controlRect.x + textMargin, controlRect.y + textMargin, 10, WHITE);
+		} break;
+		case AZA_MONITOR_SPECTRUM_MODE_COUNT: break;
+	}
+
+	// FFT Window
+
+	controlRect.y += controlRect.h + margin*2;
+	colorWindowControlRect = colorMonitorSpectrumWindowControl;
+	hover = azaMouseInRect(controlRect);
+	if (hover) {
+		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
+		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+			if (data->config.window < monitorSpectrumMaxWindow) {
+				data->config.window <<= 1;
+			}
+		}
+		if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+			if (data->config.window > monitorSpectrumMinWindow) {
+				data->config.window >>= 1;
+			}
+		}
+		float ups = (float)data->samplerate / (float)data->config.window;
+		azaTooltipAdd(TextFormat("FFT Window (%d updates/s)", (int)roundf(ups)), controlRect.x + controlRect.w, controlRect.y, false);
+	}
+	azaDrawRect(controlRect, colorWindowControlRect);
+	azaDrawText(TextFormat("%d", data->config.window), controlRect.x + textMargin, controlRect.y + textMargin, 10, WHITE);
+
+	// Smoothing
+
+	controlRect.y += controlRect.h + margin*2;
+	colorWindowControlRect = colorMonitorSpectrumWindowControl;
+	hover = azaMouseInRect(controlRect);
+	if (hover) {
+		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
+		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+			if (data->config.smoothing < monitorSpectrumMaxSmoothing) {
+				data->config.smoothing += 1;
+			}
+		}
+		if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+			if (data->config.smoothing > monitorSpectrumMinSmoothing) {
+				data->config.smoothing -= 1;
+			}
+		}
+		azaTooltipAdd("Smoothing", controlRect.x + controlRect.w, controlRect.y, false);
+	}
+	azaDrawRect(controlRect, colorWindowControlRect);
+	azaDrawText(TextFormat("%d", data->config.smoothing), controlRect.x + textMargin, controlRect.y + textMargin, 10, WHITE);
+
+	azaRect spectrumRect = bounds;
+	azaRectShrinkLeft(&spectrumRect, monitorSpectrumWindowControlWidth + margin*2);
+	azaRectShrinkMargin(&spectrumRect, margin);
+	azaRectShrinkBottom(&spectrumRect, textMargin*2 + 10);
 	float baseFreq = (float)data->samplerate / (float)data->config.window;
-	azaDrawRectGradientV(spectrumBounds, colorMoniterSpectrumBGTop, colorMoniterSpectrumBGBot);
+	azaDrawRectGradientV(spectrumRect, colorMonitorSpectrumBGTop, colorMonitorSpectrumBGBot);
 	if (!data->outputBuffer) return;
 	azaRect bar;
 	uint32_t window = data->config.window >> 1;
@@ -1570,18 +1680,18 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 		float magnitude = data->outputBuffer[i];
 		// float phase = data->outputBuffer[i + data->config.window];
 		float magDB = aza_amp_to_dbf(magnitude);
-		int yOffset = azaDBToYOffsetClamped(-magDB, spectrumBounds.h, 0, 96);
-		bar.x = azaMonitorSpectrumBarXFromIndex(data, spectrumBounds.w, i);
-		int right = azaMonitorSpectrumBarXFromIndex(data, spectrumBounds.w, i+1);
+		int yOffset = azaDBToYOffsetClamped(12.0f-magDB, spectrumRect.h, 0, 96+12);
+		bar.x = azaMonitorSpectrumBarXFromIndex(data, spectrumRect.w-1, i);
+		int right = azaMonitorSpectrumBarXFromIndex(data, spectrumRect.w-1, i+1);
 		bar.w = AZA_MAX(right - bar.x, 1);
 		bar.y = yOffset;
-		bar.h = spectrumBounds.h - bar.y;
-		bar.x += spectrumBounds.x;
-		bar.y += spectrumBounds.y;
-		azaDrawRect(bar, colorMoniterSpectrumFG);
+		bar.h = spectrumRect.h - bar.y;
+		bar.x += spectrumRect.x;
+		bar.y += spectrumRect.y;
+		azaDrawRect(bar, colorMonitorSpectrumFG);
 		float freq = baseFreq * i;
 		if (freq / lastFreq >= 2.0f) {
-			azaDrawLine(bar.x, spectrumBounds.y, bar.x, spectrumBounds.y + spectrumBounds.h + textMargin, (Color) {0,0,0,128});
+			azaDrawLine(bar.x, spectrumRect.y, bar.x, spectrumRect.y + spectrumRect.h + textMargin, (Color) {0,0,0,128});
 			if (bar.x - lastX >= lastWidth+10) {
 				int intFreq = (int)roundf(freq);
 				const char *str;
@@ -1592,16 +1702,16 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 				}
 				int width = MeasureText(str, 10);
 				int x = bar.x-width/2;
-				x = AZA_MAX(spectrumBounds.x, x);
-				x = AZA_MIN(x, spectrumBounds.x + spectrumBounds.w - width);
-				azaDrawText(str, x, spectrumBounds.y + spectrumBounds.h + margin + textMargin, 10, WHITE);
+				x = AZA_MAX(spectrumRect.x, x);
+				x = AZA_MIN(x, spectrumRect.x + spectrumRect.w - width);
+				azaDrawText(str, x, spectrumRect.y + spectrumRect.h + margin + textMargin, 10, WHITE);
 				lastWidth = width;
 				lastX = x;
 			}
 			lastFreq = freq;
 		}
 	}
-	azaDrawDBTicks(spectrumBounds, 90, 0, colorMonitorSpectrumDBTick, colorMonitorSpectrumDBTick);
+	azaDrawDBTicks(spectrumRect, 96+12, 12, colorMonitorSpectrumDBTick, colorMonitorSpectrumDBTickUnity);
 }
 
 static void azaDrawSelectedDSP() {
