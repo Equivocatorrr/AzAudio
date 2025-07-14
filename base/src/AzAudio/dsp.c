@@ -1947,7 +1947,7 @@ int azaKernelMakeLanczos(azaKernel *kernel, uint32_t resolution, uint32_t radius
 	if (err) return err;
 	kernel->table[0] = 0.0f;
 	for (uint32_t i = 0; i < radius * resolution; i++) {
-		float value = azaLanczosf((float)i / (float)resolution, radius);
+		float value = azaLanczosf((float)i / (float)resolution, (float)radius);
 		kernel->table[kernel->sampleZero*resolution - i] = value;
 		kernel->table[kernel->sampleZero*resolution + i] = value;
 	}
@@ -2447,7 +2447,7 @@ azaDSP* azaMakeDefaultMonitorSpectrum(uint8_t channelCountInline) {
 }
 
 static int azaMonitorSpectrumHandleBufferResizes(azaMonitorSpectrum *data, azaBuffer buffer) {
-	size_t requiredInputCapacity = data->config.window * buffer.channelLayout.count;
+	uint32_t requiredInputCapacity = data->config.window * buffer.channelLayout.count;
 	if (requiredInputCapacity > data->inputBufferCapacity) {
 		// Don't bother carrying data over
 		if (data->inputBuffer) {
@@ -2465,7 +2465,7 @@ static int azaMonitorSpectrumHandleBufferResizes(azaMonitorSpectrum *data, azaBu
 		data->inputBufferChannelCount = buffer.channelLayout.count;
 		data->inputBufferUsed = 0;
 	}
-	size_t requiredOutputCapacity = data->config.window * 2;
+	uint32_t requiredOutputCapacity = data->config.window * 2;
 	if (requiredOutputCapacity > data->outputBufferCapacity) {
 		if (data->outputBuffer) {
 			aza_free(data->outputBuffer);
@@ -2554,10 +2554,11 @@ int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer) {
 					azaBufferZero(imag);
 					azaMonitorSpectrumApplyWindow(real);
 					azaFFT(real.samples, imag.samples, real.frames);
-					for (uint32_t i = 0; i < data->config.window>>1; i++) {
+					uint32_t window = (data->config.window >> 1) + 1;
+					for (uint32_t i = 0; i < window; i++) {
 						float x = real.samples[i];
 						float y = imag.samples[i];
-						float mag = sqrtf(x*x + y*y) / (float)((data->config.window>>1) - i);
+						float mag = sqrtf(x*x + y*y) / (float)(window - i);
 						float phase = atan2f(y, x);
 						real.samples[i] = mag;
 						imag.samples[i] = phase;

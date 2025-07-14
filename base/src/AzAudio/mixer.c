@@ -124,7 +124,7 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 	int err = AZA_SUCCESS;
 	for (uint32_t i = 0; i < data->receives.count; i++) {
 		azaTrackRoute *route = &data->receives.data[i];
-		if (route->mute) continue;
+		if (route->mute || route->track->mute) continue;
 		err = azaTrackProcess(frames, samplerate, route->track);
 		if (err) return err;
 		// TODO: Latency compensation

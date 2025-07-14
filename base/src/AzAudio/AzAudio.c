@@ -62,7 +62,7 @@ int azaInit() {
 	AZA_LOG_INFO("AzAudio Version: " AZA_VERSION_FORMAT_STR "\n", AZA_VERSION_ARGS);
 
 	int err;
-	err = azaKernelMakeLanczos(&azaKernelDefaultLanczos, 128.0f, 32.0f);
+	err = azaKernelMakeLanczos(&azaKernelDefaultLanczos, 128, 32);
 	if (err) return err;
 	err = azaDSPRegistryInit();
 	if (err) return err;

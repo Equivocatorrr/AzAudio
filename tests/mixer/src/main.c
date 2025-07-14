@@ -237,7 +237,10 @@ int main(int argumentCount, char** argumentValues) {
 		return 1;
 	}
 
-	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) {0} , (azaStreamConfig) {0}, false))) {
+	azaStreamConfig streamConfig = {
+		.samplerate = 44100
+	};
+	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) {0} , streamConfig, false))) {
 		char buffer[64];
 		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;

@@ -1454,7 +1454,7 @@ static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
 	int usedWidth = azaDrawMeters(&data->metersInput, bounds, compressorMeterDBRange);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
-	usedWidth = azaDrawFader(bounds, &data->config.threshold, NULL, "Threshold", 72.0f, 0.0f);
+	usedWidth = azaDrawFader(bounds, &data->config.threshold, NULL, "Threshold", 72, 0);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.ratio, 1.0f, 10.0f, 0.2f, 10.0f, "Ratio", "%.2f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
@@ -1493,7 +1493,7 @@ static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
 		data->minGain = 1.0f;
 	}
 
-	usedWidth = azaDrawFader(bounds, &data->config.gain, NULL, "Output Gain", 72.0f, 36.0f);
+	usedWidth = azaDrawFader(bounds, &data->config.gain, NULL, "Output Gain", 72, 36);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
 	usedWidth = azaDrawMeters(&data->metersOutput, bounds, compressorMeterDBRange);
@@ -1518,7 +1518,7 @@ static void azaDrawDelay(azaDelay *data, azaRect bounds) {
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.pingpong, 0.0f, 1.0f, 0.02f, 0.0f, "PingPong", "%.3f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
-	for (uint32_t c = 0; c < data->channelData.capInline + data->channelData.capAdditional; c++) {
+	for (uint32_t c = 0; c < (uint32_t)(data->channelData.capInline + data->channelData.capAdditional); c++) {
 		azaDelayChannelConfig *channel = azaDelayGetChannelConfig(data, c);
 		usedWidth = azaDrawSliderFloatLog(bounds, &channel->delay, 0.1f, 10000.0f, 0.1f, 0.0f, TextFormat("Ch %d Delay", (int)c), "%.1fms");
 		azaRectShrinkLeft(&bounds, usedWidth + margin);
@@ -1542,13 +1542,13 @@ static void azaDrawReverb(azaReverb *data, azaRect bounds) {
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.delay, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "%.1fms");
 }
 
-static int azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, float width, uint32_t i) {
+static int azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, uint32_t width, uint32_t i) {
 	// float nyquist = (float)data->samplerate / 2.0f;
 	// float baseFreq = (float)data->samplerate / (float)data->config.window;
 	uint32_t window = data->config.window >> 1;
 	float baseLog = log2f((float)window);
 	if (i) {
-		return (int)roundf(width * (log2f((float)i / (float)window) + baseLog) / baseLog);
+		return (int)roundf((float)width * (log2f((float)i / (float)window) + baseLog) / baseLog);
 	} else {
 		return 0;
 	}
@@ -1573,7 +1573,7 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 		int yOffset = azaDBToYOffsetClamped(-magDB, spectrumBounds.h, 0, 96);
 		bar.x = azaMonitorSpectrumBarXFromIndex(data, spectrumBounds.w, i);
 		int right = azaMonitorSpectrumBarXFromIndex(data, spectrumBounds.w, i+1);
-		bar.w = right - bar.x;
+		bar.w = AZA_MAX(right - bar.x, 1);
 		bar.y = yOffset;
 		bar.h = spectrumBounds.h - bar.y;
 		bar.x += spectrumBounds.x;
