@@ -1,6 +1,7 @@
 build*/
 .cache
 .vscode
+.clang-tidy
 *.log
 *compile_commands.json*
 switchto*
