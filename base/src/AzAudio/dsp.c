@@ -2509,7 +2509,7 @@ static void azaMonitorSpectrumApplyWindow(azaBuffer buffer) {
 		// float mul = azaOscSine(t * 0.5f) / 0.636619772368f;
 		// Hann window (cos(t)*0.5+0.5)/0.5
 		// Implicitly dividing by the integral
-		float mul = azaOscCosine(t) + 1.0f;
+		float mul = -azaOscCosine(t) + 1.0f;
 		buffer.samples[i] *= mul;
 	}
 }
