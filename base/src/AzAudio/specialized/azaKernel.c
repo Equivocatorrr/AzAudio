@@ -22,7 +22,7 @@ float azaKernelSample(azaKernel *kernel, int i, float pos) {
 	assert(x >= 0.0f);
 	int32_t subsample = (int32_t)x;
 	x -= (float)subsample;
-	assert(subsample < kernel->scale);
+	assert(subsample < (int32_t)kernel->scale);
 	float *srcSubsample0 = kernel->packed + ((subsample+0) * kernel->length);
 	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
 	float result = azaLerpf(srcSubsample0[index], srcSubsample1[index], x);
@@ -41,7 +41,7 @@ float azaKernelSample_sse_fma(azaKernel *kernel, int i, float pos) {
 	assert(x >= 0.0f);
 	int32_t subsample = (int32_t)x;
 	x -= (float)subsample;
-	assert(subsample < kernel->scale);
+	assert(subsample < (int32_t)kernel->scale);
 	float *srcSubsample0 = kernel->packed + ((subsample+0) * kernel->length);
 	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
 	float result = azaLerpf_sse_fma(srcSubsample0[index], srcSubsample1[index], x);
@@ -55,14 +55,14 @@ static __m128 azaKernelSample_x4_sse(azaKernel *kernel, int i, float pos) {
 	float x = (float)(i + kernel->sampleZero) - pos;
 	int32_t index = (int32_t)x;
 	// We won't be doing any masking, so don't be calling this if you don't handle tails as scalars!
-	assert(index <= kernel->length-4);
+	assert(index <= (int32_t)kernel->length-4);
 	assert(index >= 0);
 	x -= (float)index;
 	x *= kernel->scale;
 	assert(x >= 0.0f);
 	int32_t subsample = (int32_t)x;
 	x -= (float)subsample;
-	assert(subsample < kernel->scale);
+	assert(subsample < (int32_t)kernel->scale);
 	float *srcSubsample0 = kernel->packed + ((subsample+0) * kernel->length);
 	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
 	__m128 samples0 = _mm_loadu_ps(srcSubsample0 + index);
@@ -76,14 +76,14 @@ static __m256 azaKernelSample_x8_avx_fma(azaKernel *kernel, int i, float pos) {
 	float x = (float)(i + kernel->sampleZero) - pos;
 	int32_t index = (int32_t)x;
 	// We won't be doing any masking, so don't be calling this if you don't handle tails as scalars!
-	assert(index <= kernel->length-8);
+	assert(index <= (int32_t)kernel->length-8);
 	assert(index >= 0);
 	x -= (float)index;
 	x *= kernel->scale;
 	assert(x >= 0.0f);
 	int32_t subsample = (int32_t)x;
 	x -= (float)subsample;
-	assert(subsample < kernel->scale);
+	assert(subsample < (int32_t)kernel->scale);
 	float *srcSubsample0 = kernel->packed + ((subsample+0) * kernel->length);
 	float *srcSubsample1 = kernel->packed + ((subsample+1) * kernel->length);
 	__m256 samples0 = _mm256_loadu_ps(srcSubsample0 + index);
