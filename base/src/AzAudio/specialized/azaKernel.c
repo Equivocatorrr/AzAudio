@@ -16,7 +16,7 @@
 float azaKernelSample(azaKernel *kernel, int i, float pos) {
 	float x = (float)(i + kernel->sampleZero) - pos;
 	int32_t index = (int32_t)x;
-	if (index >= kernel->length-1 || index < 0) return 0.0f;
+	if (index >= (int32_t)kernel->length-1 || index < 0) return 0.0f;
 	x -= (float)index;
 	x *= kernel->scale;
 	assert(x >= 0.0f);
@@ -35,7 +35,7 @@ AZA_SIMD_FEATURES("sse,fma")
 float azaKernelSample_sse_fma(azaKernel *kernel, int i, float pos) {
 	float x = (float)(i + kernel->sampleZero) - pos;
 	int32_t index = (int32_t)x;
-	if (index >= kernel->length-1 || index < 0) return 0.0f;
+	if (index >= (int32_t)kernel->length-1 || index < 0) return 0.0f;
 	x -= (float)index;
 	x *= kernel->scale;
 	assert(x >= 0.0f);

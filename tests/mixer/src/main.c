@@ -168,7 +168,7 @@ void updateObjects(uint32_t count, float timeDelta) {
 
 int catProcess(void *userdata, azaBuffer buffer) {
 	float timeDelta = (float)buffer.frames / (float)buffer.samplerate;
-	int err;
+	int err = AZA_SUCCESS;
 	updateObjects(bufferCat.channelLayout.count, timeDelta);
 	azaBufferZero(buffer);
 	azaBuffer sampledBuffer = azaPushSideBufferZero(buffer.frames, samplerCat->config.buffer->channelLayout.count, buffer.samplerate);
@@ -189,6 +189,7 @@ int catProcess(void *userdata, azaBuffer buffer) {
 	}
 #endif
 
+#if 1
 	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
 		float volumeStart = azaClampf(3.0f / azaVec3Norm(objects[c].posPrev), 0.0f, 1.0f);
 		float volumeEnd = azaClampf(3.0f / azaVec3Norm(objects[c].pos), 0.0f, 1.0f);
@@ -198,6 +199,10 @@ int catProcess(void *userdata, azaBuffer buffer) {
 			goto done;
 		}
 	}
+#else
+	// TODO: Don't do this, only works if file has same number of channels as the output device
+	azaBufferCopy(buffer, sampledBuffer);
+#endif
 done:
 	azaPopSideBuffer();
 	return err;
@@ -229,6 +234,16 @@ int main(int argumentCount, char** argumentValues) {
 		fprintf(stderr, "Sound \"%s\" has no channels!\n", soundFilename);
 		return 1;
 	}
+
+#if 0
+	// Just a nyquist frequency to test aliasing
+	for (uint32_t i = 0; i < bufferCat.frames; i+=2) {
+		for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
+			bufferCat.samples[(i+0)*bufferCat.stride + c] =  1.0f;
+			bufferCat.samples[(i+1)*bufferCat.stride + c] = -1.0f;
+		}
+	}
+#endif
 
 	int err = azaInit();
 	if (err) {
@@ -342,7 +357,7 @@ int main(int argumentCount, char** argumentValues) {
 	}, track2->buffer.channelLayout.count);
 	azaTrackAppendDSP(track2, (azaDSP*)reverb);
 
-	// track2->mute = true;
+	track2->mute = true;
 
 	// Master
 
@@ -363,7 +378,9 @@ int main(int argumentCount, char** argumentValues) {
 
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)limiter);
 
-	mixer.master.gain = 0.0f;
+	azaTrackAppendDSP(&mixer.master, azaMakeDefaultMonitorSpectrum(2));
+
+	mixer.master.gain = -12.0f;
 
 	// Uncomment this to test if cyclic routing is detected
 	// azaTrackConnect(&mixer.master, &mixer.tracks[0], 0.0f, NULL, 0);

@@ -1534,17 +1534,34 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 		float speed = data->s * samplerateFactor;
 		float volume = aza_db_to_ampf(data->g);
 
+		// TODO: Refactor the entire sampler, because it's overly simple, and this solution is incredibly inefficient.
+		// Keeping it for now because it IS a solution to the aliasing problem, and we'll need that later, even after the redesign.
+		#define SAMPLER_LANCZOS_SAMPLE_COUNT 15
+		float lanczosSamples[SAMPLER_LANCZOS_SAMPLE_COUNT*2+1];
+		float total = 0.0f;
+		{ // Calculate lanczos kernel for our speed
+			// Keep our lowpass at the minimum nyquist frequency
+			float rate = azaMinf(1.0f / speed, 1.0f);
+			float x = rate*(-data->pos.fraction - (float)SAMPLER_LANCZOS_SAMPLE_COUNT);
+			for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
+				float amount = azaLanczosf(x, (float)(1+SAMPLER_LANCZOS_SAMPLE_COUNT)*rate);
+				lanczosSamples[i] = amount;
+				total += amount;
+				x += rate;
+			}
+		}
 		for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 			float sample = 0.0f;
+#if 1
 			// TODO: Maybe switch to using the lanczos kernel that we use to resample for the backend
-			/* Lanczos
-			int t = (int)datum->frame + (int)data->s;
-			for (int i = (int)datum->frame-2; i <= t+2; i++) {
-				float x = datum->frame - (float)(i);
-				sample += datum->buffer->samples[i % datum->buffer->frames] * sinc(x) * sinc(x/3);
+			// Lanczos
+			for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
+				int frame = azaWrapi(i + (int)data->pos.frame - SAMPLER_LANCZOS_SAMPLE_COUNT, data->config.buffer->frames);
+				float amount = lanczosSamples[i];
+				sample += data->config.buffer->samples[frame * data->config.buffer->stride + c] * amount;
 			}
-			*/
-
+			sample /= total;
+#elif 1
 			if (speed <= 1.0f) {
 				// Cubic
 				float abcd[4];
@@ -1563,14 +1580,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 				total += data->config.buffer->samples[((data->pos.frame + (int)speed) % data->config.buffer->frames) * data->config.buffer->stride + c] * data->pos.fraction;
 				sample = total / (float)((int)speed);
 			}
-
-			/* Linear
-			int t = (int)data->pos.frame + (int)data->s;
-			for (int i = (int)data->pos.frame; i <= t+1; i++) {
-				float x = data->pos.frame - (float)(i);
-				sample += data->config.buffer->samples[i % data->config.buffer->frames] * linc(x);
-			}
-			*/
+#endif
 
 			buffer.samples[i * buffer.stride + c] = sample * volume;
 		}

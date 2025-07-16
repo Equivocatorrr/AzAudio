@@ -1558,7 +1558,7 @@ static void azaDrawReverb(azaReverb *data, azaRect bounds) {
 static int azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, uint32_t width, uint32_t i) {
 	// float nyquist = (float)data->samplerate / 2.0f;
 	// float baseFreq = (float)data->samplerate / (float)data->config.window;
-	uint32_t window = (data->config.window >> 1)+1;
+	uint32_t window = (data->config.window >> 1)+2;
 	float baseLog = log2f((float)window);
 	if (i) {
 		return (int)roundf((float)width * (log2f((float)(i+1) / (float)window) + baseLog) / baseLog);
