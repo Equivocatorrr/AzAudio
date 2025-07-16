@@ -10,6 +10,8 @@
 #include "header_utils.h"
 #include "math.h"
 #include "channel_layout.h"
+#include "utility.h"
+#include "backend/threads.h"
 
 #include <assert.h>
 
@@ -603,26 +605,42 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer);
 
 
 
-typedef struct azaSamplerPos {
+#define AZAUDIO_SAMPLER_MAX_INSTANCES 32
+
+typedef struct azaSamplerInstance {
+	uint32_t id;
 	uint32_t frame;
 	float fraction;
-} azaSamplerPos;
+	azaADSRInstance envelope;
+	azaFollowerLinear speed;
+	azaFollowerLinear volume;
+} azaSamplerInstance;
 
 typedef struct azaSamplerConfig {
 	// buffer containing the sound we're sampling
 	azaBuffer *buffer;
-	// playback speed as a multiple where 1 is full speed
-	float speed;
-	// volume of effect in dB (0.0f indicates full volume)
-	float gain;
+	// If speed changes this is how long it takes to lerp to the new value in ms
+	float speedTransitionTimeMs;
+	// If gain changes this is how long it takes to lerp to the new value in ms (lerp happens in amp space)
+	float volumeTransitionTimeMs;
+	bool loop;
+	bool pingpong;
+	// Start of the looping region in frames
+	// If this value is >= buffer->frames, we treat this value as 0
+	uint32_t loopStart;
+	// End of the looping region in frames
+	// If this value is <= loopStart, we treat this value as buffer->frames
+	uint32_t loopEnd;
+	azaADSRConfig envelope;
 } azaSamplerConfig;
 
 typedef struct azaSampler {
 	azaDSP header;
 	azaSamplerConfig config;
-	azaSamplerPos pos;
-	float s; // Smooth speed
-	float g; // Smooth gain
+	azaMutex mutex;
+
+	azaSamplerInstance instances[AZAUDIO_SAMPLER_MAX_INSTANCES];
+	uint8_t numInstances;
 } azaSampler;
 
 // returns the size in bytes of azaSampler (included for completeness)
@@ -643,6 +661,82 @@ void azaFreeSampler(azaSampler *data);
 azaDSP* azaMakeDefaultSampler(uint8_t);
 
 int azaSamplerProcess(azaSampler *data, azaBuffer buffer);
+
+// Adds an instance of the sound
+// speed affects the rate of playback for this instance (pitch control where 1.0f is base speed)
+// gainDB affects the volume for this instance
+// returns the sound id, used for interacting with this instance later
+uint32_t azaSamplerPlay(azaSampler *data, float speed, float gainDB);
+
+// may return NULL, indicating the id wasn't found
+azaSamplerInstance* azaSamplerGetInstance(azaSampler *data, uint32_t id);
+
+static inline void azaSamplerSetSpeed(azaSampler *data, uint32_t id, float speed) {
+	azaMutexLock(&data->mutex);
+	azaSamplerInstance *instance = azaSamplerGetInstance(data, id);
+	if (instance) {
+		azaFollowerLinearSetTarget(&instance->speed, speed);
+	}
+	azaMutexUnlock(&data->mutex);
+}
+
+static inline void azaSamplerSetGain(azaSampler *data, uint32_t id, float gainDB) {
+	azaMutexLock(&data->mutex);
+	azaSamplerInstance *instance = azaSamplerGetInstance(data, id);
+	if (instance) {
+		azaFollowerLinearSetTarget(&instance->volume, aza_db_to_ampf(gainDB));
+	}
+	azaMutexUnlock(&data->mutex);
+}
+
+static inline float azaSamplerGetSpeedCurrent(azaSampler *data, uint32_t id) {
+	azaMutexLock(&data->mutex);
+	azaSamplerInstance *instance = azaSamplerGetInstance(data, id);
+	float result = 0.0f;
+	if (instance) {
+		result = azaFollowerLinearGetValue(&instance->speed);
+	}
+	azaMutexUnlock(&data->mutex);
+	return result;
+}
+
+static inline float azaSamplerGetGainCurrent(azaSampler *data, uint32_t id) {
+	azaMutexLock(&data->mutex);
+	azaSamplerInstance *instance = azaSamplerGetInstance(data, id);
+	float result = 0.0f;
+	if (instance) {
+		result = aza_amp_to_dbf(azaFollowerLinearGetValue(&instance->volume));
+	}
+	azaMutexUnlock(&data->mutex);
+	return result;
+}
+
+static inline float azaSamplerGetSpeedTarget(azaSampler *data, uint32_t id) {
+	azaMutexLock(&data->mutex);
+	azaSamplerInstance *instance = azaSamplerGetInstance(data, id);
+	float result = 0.0f;
+	if (instance) {
+		result = instance->speed.end;
+	}
+	azaMutexUnlock(&data->mutex);
+	return result;
+}
+
+static inline float azaSamplerGetGainTarget(azaSampler *data, uint32_t id) {
+	azaMutexLock(&data->mutex);
+	azaSamplerInstance *instance = azaSamplerGetInstance(data, id);
+	float result = 0.0f;
+	if (instance) {
+		result = aza_amp_to_dbf(instance->volume.end);
+	}
+	azaMutexUnlock(&data->mutex);
+	return result;
+}
+
+// Triggers the release of the given sound instance
+void azaSamplerStop(azaSampler *data, uint32_t id);
+
+void azaSamplerStopAll(azaSampler *data);
 
 
 

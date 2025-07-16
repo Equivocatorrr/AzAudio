@@ -1479,16 +1479,12 @@ void azaSamplerInit(azaSampler *data, uint32_t allocSize, azaSamplerConfig confi
 	data->header.kind = AZA_DSP_SAMPLER;
 	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
 	data->config = config;
-	data->pos.frame = 0;
-	data->pos.fraction = 0.0f;
-	data->s = config.speed;
-	// Starting at zero ensures click-free playback no matter what
-	data->g = 0.0f;
-	// TODO: Probably use envelopes
+	data->numInstances = 0;
+	azaMutexInit(&data->mutex);
 }
 
 void azaSamplerDeinit(azaSampler *data) {
-	// Nothing to do :)
+	azaMutexDeinit(&data->mutex);
 }
 
 azaSampler* azaMakeSampler(azaSamplerConfig config) {
@@ -1509,94 +1505,138 @@ void azaFreeSampler(azaSampler *data) {
 azaDSP* azaMakeDefaultSampler(uint8_t channelCapInline) {
 	return (azaDSP*)azaMakeSampler((azaSamplerConfig) {
 		.buffer = NULL,
-		.speed = 1.0f,
-		.gain = 0.0f,
+		.speedTransitionTimeMs = 50.0f,
+		.volumeTransitionTimeMs = 50.0f,
 	});
 }
 
 int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 	int err = AZA_SUCCESS;
-	if (data == NULL) return AZA_ERROR_NULL_POINTER;
+	if AZA_UNLIKELY(data == NULL) return AZA_ERROR_NULL_POINTER;
 	if (azaDSPMetadataGetBypass(data->header.metadata)) {
 		goto bypassed;
 	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
-	if (!data->config.buffer) return AZA_SUCCESS;
-	if (buffer.channelLayout.count != data->config.buffer->channelLayout.count) return AZA_ERROR_MISMATCHED_CHANNEL_COUNT;
-	float transition = expf(-1.0f / (AZAUDIO_SAMPLER_TRANSITION_FRAMES));
+	if AZA_UNLIKELY(!data->config.buffer) return AZA_SUCCESS;
+	if AZA_UNLIKELY(buffer.channelLayout.count != data->config.buffer->channelLayout.count) return AZA_ERROR_MISMATCHED_CHANNEL_COUNT;
+	azaMutexLock(&data->mutex);
 	float samplerateFactor = (float)data->config.buffer->samplerate / (float)buffer.samplerate;
-	for (size_t i = 0; i < buffer.frames; i++) {
-		data->s = data->config.speed + transition * (data->s - data->config.speed);
-		data->g = data->config.gain + transition * (data->g - data->config.gain);
-
-		// Adjust for different samplerates
-		float speed = data->s * samplerateFactor;
-		float volume = aza_db_to_ampf(data->g);
-
-		// TODO: Refactor the entire sampler, because it's overly simple, and this solution is incredibly inefficient.
-		// Keeping it for now because it IS a solution to the aliasing problem, and we'll need that later, even after the redesign.
-		#define SAMPLER_LANCZOS_SAMPLE_COUNT 15
-		float lanczosSamples[SAMPLER_LANCZOS_SAMPLE_COUNT*2+1];
-		float total = 0.0f;
-		{ // Calculate lanczos kernel for our speed
-			// Keep our lowpass at the minimum nyquist frequency
-			float rate = azaMinf(1.0f / speed, 1.0f);
-			float x = rate*(-data->pos.fraction - (float)SAMPLER_LANCZOS_SAMPLE_COUNT);
-			for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
-				float amount = azaLanczosf(x, (float)(1+SAMPLER_LANCZOS_SAMPLE_COUNT)*rate);
-				lanczosSamples[i] = amount;
-				total += amount;
-				x += rate;
-			}
-		}
-		for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
-			float sample = 0.0f;
-#if 1
-			// TODO: Maybe switch to using the lanczos kernel that we use to resample for the backend
-			// Lanczos
-			for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
-				int frame = azaWrapi(i + (int)data->pos.frame - SAMPLER_LANCZOS_SAMPLE_COUNT, data->config.buffer->frames);
-				float amount = lanczosSamples[i];
-				sample += data->config.buffer->samples[frame * data->config.buffer->stride + c] * amount;
-			}
-			sample /= total;
-#elif 1
-			if (speed <= 1.0f) {
-				// Cubic
-				float abcd[4];
-				int ii = data->pos.frame + (int)data->config.buffer->frames - 2;
-				for (int i = 0; i < 4; i++) {
-					abcd[i] = data->config.buffer->samples[(ii++ % data->config.buffer->frames) * data->config.buffer->stride + c];
+	float deltaMs = 1000.0f / (float)data->config.buffer->samplerate;
+	for (uint32_t inst = 0; inst < data->numInstances; inst++) {
+		azaSamplerInstance *instance = &data->instances[inst];
+		for (uint32_t i = 0; i < buffer.frames; i++) {
+			float volumeEnvelope = azaADSRUpdate(&data->config.envelope, &instance->envelope, deltaMs);
+			if (instance->envelope.stage == AZA_ADSR_STAGE_STOP) {
+				data->numInstances--;
+				if ((int)inst < (int)data->numInstances-1) {
+					memmove(data->instances+inst, data->instances+inst+1, (data->numInstances-inst-1) * sizeof(*data->instances));
 				}
-				sample = azaCubicf(abcd[0], abcd[1], abcd[2], abcd[3], data->pos.fraction);
-			} else {
-				// Oversampling
-				float total = 0.0f;
-				total += data->config.buffer->samples[(data->pos.frame % data->config.buffer->frames) * data->config.buffer->stride + c] * (1.0f - data->pos.fraction);
-				for (int i = 1; i < (int)speed; i++) {
-					total += data->config.buffer->samples[((data->pos.frame + i) % data->config.buffer->frames) * data->config.buffer->stride + c];
-				}
-				total += data->config.buffer->samples[((data->pos.frame + (int)speed) % data->config.buffer->frames) * data->config.buffer->stride + c] * data->pos.fraction;
-				sample = total / (float)((int)speed);
+				inst -= 1;
+				break;
 			}
-#endif
+			float volumeGain = azaFollowerLinearUpdate(&instance->volume, deltaMs / data->config.volumeTransitionTimeMs);
+			float volume = volumeEnvelope * volumeGain;
+			float speed = azaFollowerLinearUpdate(&instance->speed, deltaMs / data->config.speedTransitionTimeMs);
+			if AZA_UNLIKELY(volume == 0.0f) continue;
+			speed *= samplerateFactor;
+			#define SAMPLER_LANCZOS_SAMPLE_COUNT 15
+			float lanczosSamples[SAMPLER_LANCZOS_SAMPLE_COUNT*2+1];
+			float total = 0.0f;
+			{ // Calculate lanczos kernel for our speed
+				// Keep our lowpass at the minimum nyquist frequency
+				float rate = azaMinf(1.0f / speed, 1.0f);
+				float x = rate*(-instance->fraction - (float)SAMPLER_LANCZOS_SAMPLE_COUNT);
+				for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
+					float amount = azaLanczosf(x, (float)(1+SAMPLER_LANCZOS_SAMPLE_COUNT)*rate);
+					lanczosSamples[i] = amount;
+					total += amount;
+					x += rate;
+				}
+			}
+			for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
+				float sample = 0.0f;
+				// TODO: Maybe switch to using the lanczos kernel that we use to resample for the backend
+				// Lanczos
+				// TODO: Handle loop ranges
+				for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
+					int frame = azaWrapi(i + (int)instance->frame - SAMPLER_LANCZOS_SAMPLE_COUNT, data->config.buffer->frames);
+					float amount = lanczosSamples[i];
+					sample += data->config.buffer->samples[frame * data->config.buffer->stride + c] * amount;
+				}
+				sample /= total;
 
-			buffer.samples[i * buffer.stride + c] = sample * volume;
-		}
-		data->pos.fraction += speed;
-		uint32_t framesToAdd = (uint32_t)data->pos.fraction;
-		data->pos.frame += framesToAdd;
-		data->pos.fraction -= framesToAdd;
-		if (data->pos.frame > data->config.buffer->frames) {
-			data->pos.frame -= data->config.buffer->frames;
+				buffer.samples[i * buffer.stride + c] += sample * volume;
+			}
+			instance->fraction += speed;
+			uint32_t framesToAdd = (uint32_t)instance->fraction;
+			instance->frame += framesToAdd;
+			instance->fraction -= framesToAdd;
+			if (instance->frame > data->config.buffer->frames) {
+				instance->frame -= data->config.buffer->frames;
+			}
 		}
 	}
+	azaMutexUnlock(&data->mutex);
 bypassed:
 	if (data->header.pNext) {
 		return azaDSPProcessSingle(data->header.pNext, buffer);
 	}
 	return AZA_SUCCESS;
+}
+
+uint32_t azaSamplerPlay(azaSampler *data, float speed, float gainDB) {
+	static uint32_t nextId = 1;
+	azaMutexLock(&data->mutex);
+	if (data->numInstances >= AZAUDIO_SAMPLER_MAX_INSTANCES) {
+		azaMutexUnlock(&data->mutex);
+		return 0;
+	}
+	uint32_t id = nextId++;
+	// TODO: Do we have to care about id looparound? Maybe just use 64-bit ints to guarantee no matter what that we don't or handle overlap.
+	uint32_t index = data->numInstances++;
+	azaSamplerInstance *instance = &data->instances[index];
+	instance->id = id;
+	instance->frame = 0;
+	instance->fraction = 0.0f;
+	azaADSRStart(&instance->envelope);
+	azaFollowerLinearJump(&instance->speed, speed);
+	azaFollowerLinearJump(&instance->volume, aza_db_to_ampf(gainDB));
+	azaMutexUnlock(&data->mutex);
+	return id;
+}
+
+azaSamplerInstance* azaSamplerGetInstance(azaSampler *data, uint32_t id) {
+	azaSamplerInstance *result = NULL;
+	azaMutexLock(&data->mutex);
+	for (uint32_t i = 0; i < data->numInstances; i++) {
+		if (data->instances[i].id == id) {
+			result = &data->instances[i];
+		}
+	}
+	azaMutexUnlock(&data->mutex);
+	return result;
+}
+
+static void azaSamplerStopInstance(azaSamplerInstance *data) {
+	azaADSRStop(&data->envelope);
+}
+
+void azaSamplerStop(azaSampler *data, uint32_t id) {
+	azaMutexLock(&data->mutex);
+	azaSamplerInstance *instance = azaSamplerGetInstance(data, id);
+	if (instance) {
+		azaSamplerStopInstance(instance);
+	}
+	azaMutexUnlock(&data->mutex);
+}
+
+void azaSamplerStopAll(azaSampler *data) {
+	azaMutexLock(&data->mutex);
+	for (uint32_t i = 0; i < data->numInstances; i++) {
+		azaSamplerStopInstance(&data->instances[i]);
+	}
+	azaMutexUnlock(&data->mutex);
 }
 
 

@@ -178,8 +178,8 @@ int main(int argumentCount, char** argumentValues) {
 
 	sampler = azaMakeSampler((azaSamplerConfig) {
 		.buffer = &bufferCat,
-		.speed = 1.0f,
-		.gain = 0.0f,
+		.speedTransitionTimeMs = 50.0f,
+		.volumeTransitionTimeMs = 50.0f,
 	});
 
 	objects = calloc(bufferCat.channelLayout.count, sizeof(Object));

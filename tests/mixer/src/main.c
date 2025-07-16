@@ -302,8 +302,13 @@ int main(int argumentCount, char** argumentValues) {
 
 	samplerCat = azaMakeSampler((azaSamplerConfig) {
 		.buffer = &bufferCat,
-		.speed = 1.0f,
-		.gain = 0.0f,
+		.speedTransitionTimeMs = 250.0f,
+		.volumeTransitionTimeMs = 250.0f,
+		.loop = true,
+		.envelope = (azaADSRConfig) {
+			.attack = 5.0f,
+			.release = 500.0f,
+		}
 	});
 
 	objects = calloc(bufferCat.channelLayout.count, sizeof(Object));
@@ -388,14 +393,25 @@ int main(int argumentCount, char** argumentValues) {
 	azaMixerStreamSetActive(&mixer, true);
 
 
-	printf("Press ENTER to stop or type M first to open the mixer GUI\n");
+	printf("Type Q to stop, M to open the mixer GUI, P to play, and S to stop, + to increase speed, - to decrease speed, = to reset speed\n");
+	uint32_t lastId = 0;
 	azaMixerGUIOpen(&mixer, /* onTop */ false);
+	static const float semitone = 1.05946309436f;
 	while (true) {
 		int c = getc(stdin);
 		if (c == 'M' || c == 'm') {
 			azaMixerGUIOpen(&mixer, /* onTop */ true);
-			do { c = getc(stdin); } while (c != EOF && c != '\n');
-		} else {
+		} else if (c == 'P' || c == 'p') {
+			lastId = azaSamplerPlay(samplerCat, 1.0f, 0.0f);
+		} else if (c == 'S' || c == 's') {
+			azaSamplerStopAll(samplerCat);
+		} else if (c == '+') {
+			azaSamplerSetSpeed(samplerCat, lastId, azaSamplerGetSpeedTarget(samplerCat, lastId) * semitone);
+		} else if (c == '-') {
+			azaSamplerSetSpeed(samplerCat, lastId, azaSamplerGetSpeedTarget(samplerCat, lastId) / semitone);
+		} else if (c == '=') {
+			azaSamplerSetSpeed(samplerCat, lastId, 1.0f);
+		} else if (c == 'Q' || c == 'q') {
 			break;
 		}
 	}
