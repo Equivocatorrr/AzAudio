@@ -164,6 +164,53 @@ static const Color colorCompressorAttenuation = {   0, 128, 255, 255 };
 
 
 
+static Color ColorHSV(float hue, float sat, float val, uint8_t alpha) {
+	float r, g, b;
+	r = g = b = 0.0f;
+	int section = (int)(hue * 6.0f);
+	float fraction = hue * 6.0f - (float)section;
+	section %= 6;
+	switch (section) {
+		case 0:
+			r = (1.0f)*val;
+			g = azaLerpf(1.0f, fraction, sat)*val;
+			b = 1.0f - sat;
+			break;
+		case 1:
+			r = azaLerpf(1.0f, 1.0f - fraction, sat)*val;
+			g = (1.0f)*val;
+			b = 1.0f - sat;
+			break;
+		case 2:
+			r = 1.0f - sat;
+			g = (1.0f)*val;
+			b = azaLerpf(1.0f, fraction, sat)*val;
+			break;
+		case 3:
+			r = 1.0f - sat;
+			g = azaLerpf(1.0f, 1.0f - fraction, sat)*val;
+			b = (1.0f)*val;
+			break;
+		case 4:
+			r = azaLerpf(1.0f, fraction, sat)*val;
+			g = 1.0f - sat;
+			b = (1.0f)*val;
+			break;
+		case 5:
+			r = (1.0f)*val;
+			g = 1.0f - sat;
+			b = azaLerpf(1.0f, 1.0f - fraction, sat)*val;
+			break;
+	}
+	Color result = {
+		(uint8_t)(r * 255.0f),
+		(uint8_t)(g * 255.0f),
+		(uint8_t)(b * 255.0f),
+		alpha,
+	};
+	return result;
+}
+
 static int TextCountLines(const char *text) {
 	if (!text) return 0;
 	int result = 1;
@@ -1678,7 +1725,7 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 	uint32_t lastX = 0, lastWidth = 0;
 	for (uint32_t i = 0; i <= window; i++) {
 		float magnitude = data->outputBuffer[i];
-		// float phase = data->outputBuffer[i + data->config.window];
+		// float phase = data->outputBuffer[i + data->config.window] / AZA_TAU + 0.5f;
 		float magDB = aza_amp_to_dbf(magnitude);
 		int yOffset = azaDBToYOffsetClamped(12.0f-magDB, spectrumRect.h, 0, 96+12);
 		bar.x = azaMonitorSpectrumBarXFromIndex(data, spectrumRect.w-1, i);
@@ -1689,6 +1736,8 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 		bar.x += spectrumRect.x;
 		bar.y += spectrumRect.y;
 		azaDrawRect(bar, colorMonitorSpectrumFG);
+		// This is atrocious to look at
+		// azaDrawRect(bar, ColorHSV(phase, 0.5f, 0.8f, 255));
 		float freq = baseFreq * i;
 		if (freq / lastFreq >= 2.0f) {
 			azaDrawLine(bar.x, spectrumRect.y, bar.x, spectrumRect.y + spectrumRect.h + textMargin, (Color) {0,0,0,128});
