@@ -1523,6 +1523,9 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 	azaMutexLock(&data->mutex);
 	float samplerateFactor = (float)data->config.buffer->samplerate / (float)buffer.samplerate;
 	float deltaMs = 1000.0f / (float)data->config.buffer->samplerate;
+	uint32_t loopStart = data->config.loopStart >= data->config.buffer->frames ? 0 : data->config.loopStart;
+	uint32_t loopEnd = data->config.loopEnd <= loopStart ? data->config.buffer->frames : data->config.loopEnd;
+	uint32_t loopRegionLength = loopEnd - loopStart;
 	for (uint32_t inst = 0; inst < data->numInstances; inst++) {
 		azaSamplerInstance *instance = &data->instances[inst];
 		for (uint32_t i = 0; i < buffer.frames; i++) {
@@ -1542,38 +1545,58 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 			speed *= samplerateFactor;
 			#define SAMPLER_LANCZOS_SAMPLE_COUNT 15
 			float lanczosSamples[SAMPLER_LANCZOS_SAMPLE_COUNT*2+1];
-			float total = 0.0f;
+			float lanczosIntegral = 0.0f;
 			{ // Calculate lanczos kernel for our speed
+				// TODO: Maybe switch to using LUTs for the sinc and hann window separately
 				// Keep our lowpass at the minimum nyquist frequency
 				float rate = azaMinf(1.0f / speed, 1.0f);
 				float x = rate*(-instance->fraction - (float)SAMPLER_LANCZOS_SAMPLE_COUNT);
 				for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
 					float amount = azaLanczosf(x, (float)(1+SAMPLER_LANCZOS_SAMPLE_COUNT)*rate);
 					lanczosSamples[i] = amount;
-					total += amount;
+					lanczosIntegral += amount;
 					x += rate;
 				}
 			}
 			for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 				float sample = 0.0f;
-				// TODO: Maybe switch to using the lanczos kernel that we use to resample for the backend
-				// Lanczos
-				// TODO: Handle loop ranges
 				for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
 					int frame = azaWrapi(i + (int)instance->frame - SAMPLER_LANCZOS_SAMPLE_COUNT, data->config.buffer->frames);
 					float amount = lanczosSamples[i];
 					sample += data->config.buffer->samples[frame * data->config.buffer->stride + c] * amount;
 				}
-				sample /= total;
+				sample /= lanczosIntegral;
 
 				buffer.samples[i * buffer.stride + c] += sample * volume;
 			}
+			// TODO: Loop crossfades, because nobody likes a pop
+			bool startedBeforeLoopEnd = instance->frame <= loopEnd;
+			bool startedAfterLoopStart = instance->frame >= loopStart;
 			instance->fraction += speed;
-			uint32_t framesToAdd = (uint32_t)instance->fraction;
+			int32_t framesToAdd = (int32_t)instance->fraction;
 			instance->frame += framesToAdd;
 			instance->fraction -= framesToAdd;
-			if (instance->frame > data->config.buffer->frames) {
-				instance->frame -= data->config.buffer->frames;
+			bool forward = azaFollowerLinearGetValue(&instance->speed) > 0.0f;
+			if (data->config.loop) {
+				if (data->config.pingpong) {
+					if (forward && startedBeforeLoopEnd && instance->frame >= loopEnd) {
+						instance->frame = loopEnd - (instance->frame - loopEnd);
+						instance->fraction = 1.0f - instance->fraction;
+						instance->speed.end = -instance->speed.end;
+						instance->speed.start = -instance->speed.start;
+					} else if (!forward && startedAfterLoopStart && instance->frame <= loopStart) {
+						instance->frame = loopStart + (loopStart - instance->frame);
+						instance->fraction = 1.0f - instance->fraction;
+						instance->speed.end = -instance->speed.end;
+						instance->speed.start = -instance->speed.start;
+					}
+				} else {
+					if (forward && startedBeforeLoopEnd && instance->frame >= loopEnd) {
+						instance->frame -= loopRegionLength;
+					} else if (!forward && startedAfterLoopStart && instance->frame <= loopStart) {
+						instance->frame += loopRegionLength;
+					}
+				}
 			}
 		}
 	}
