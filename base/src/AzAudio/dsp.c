@@ -1523,7 +1523,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 	azaMutexLock(&data->mutex);
 	float samplerateFactor = (float)data->config.buffer->samplerate / (float)buffer.samplerate;
 	float deltaMs = 1000.0f / (float)data->config.buffer->samplerate;
-	int32_t loopStart = data->config.loopStart >= data->config.buffer->frames ? 0 : data->config.loopStart;
+	int32_t loopStart = data->config.loopStart >= (int32_t)data->config.buffer->frames ? 0 : data->config.loopStart;
 	int32_t loopEnd = data->config.loopEnd <= loopStart ? data->config.buffer->frames : data->config.loopEnd;
 	int32_t loopRegionLength = loopEnd - loopStart;
 	for (uint32_t inst = 0; inst < data->numInstances; inst++) {
@@ -1532,8 +1532,8 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 			float volumeEnvelope = azaADSRUpdate(&data->config.envelope, &instance->envelope, deltaMs);
 			if (instance->envelope.stage == AZA_ADSR_STAGE_STOP) {
 				data->numInstances--;
-				if ((int)inst < (int)data->numInstances-1) {
-					memmove(data->instances+inst, data->instances+inst+1, (data->numInstances-inst-1) * sizeof(*data->instances));
+				if ((int)inst < (int)data->numInstances) {
+					memmove(data->instances+inst, data->instances+inst+1, (data->numInstances-inst) * sizeof(*data->instances));
 				}
 				inst -= 1;
 				break;
@@ -1601,7 +1601,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 					}
 				}
 			}
-			if ((!instance->reverse && instance->frame >= data->config.buffer->frames) || (instance->reverse && instance->frame < 0)) {
+			if ((!instance->reverse && instance->frame >= (int32_t)data->config.buffer->frames) || (instance->reverse && instance->frame < 0)) {
 				instance->envelope.stage = AZA_ADSR_STAGE_STOP;
 			}
 		}
