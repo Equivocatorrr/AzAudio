@@ -609,8 +609,9 @@ int azaReverbProcess(azaReverb *data, azaBuffer buffer);
 
 typedef struct azaSamplerInstance {
 	uint32_t id;
-	uint32_t frame;
+	int32_t frame;
 	float fraction;
+	bool reverse;
 	azaADSRInstance envelope;
 	azaFollowerLinear speed;
 	azaFollowerLinear volume;
@@ -627,10 +628,10 @@ typedef struct azaSamplerConfig {
 	bool pingpong;
 	// Start of the looping region in frames
 	// If this value is >= buffer->frames, we treat this value as 0
-	uint32_t loopStart;
+	int32_t loopStart;
 	// End of the looping region in frames
 	// If this value is <= loopStart, we treat this value as buffer->frames
-	uint32_t loopEnd;
+	int32_t loopEnd;
 	azaADSRConfig envelope;
 } azaSamplerConfig;
 

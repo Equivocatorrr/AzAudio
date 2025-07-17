@@ -371,10 +371,12 @@ int main(int argumentCount, char** argumentValues) {
 		.ratio = 4.0f,
 		.attack = 10.0f,
 		.decay = 500.0f,
-		.gain = 12.0f,
+		.gain = 6.0f,
 	}, outputChannelCount);
 
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)compressor);
+
+	azaTrackAppendDSP(&mixer.master, azaMakeDefaultMonitorSpectrum(2));
 
 	azaLookaheadLimiter *limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
 		.gainInput  =  0.0f,
@@ -382,8 +384,6 @@ int main(int argumentCount, char** argumentValues) {
 	}, outputChannelCount);
 
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)limiter);
-
-	azaTrackAppendDSP(&mixer.master, azaMakeDefaultMonitorSpectrum(2));
 
 	mixer.master.gain = -12.0f;
 

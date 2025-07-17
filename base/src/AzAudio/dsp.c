@@ -1523,9 +1523,9 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 	azaMutexLock(&data->mutex);
 	float samplerateFactor = (float)data->config.buffer->samplerate / (float)buffer.samplerate;
 	float deltaMs = 1000.0f / (float)data->config.buffer->samplerate;
-	uint32_t loopStart = data->config.loopStart >= data->config.buffer->frames ? 0 : data->config.loopStart;
-	uint32_t loopEnd = data->config.loopEnd <= loopStart ? data->config.buffer->frames : data->config.loopEnd;
-	uint32_t loopRegionLength = loopEnd - loopStart;
+	int32_t loopStart = data->config.loopStart >= data->config.buffer->frames ? 0 : data->config.loopStart;
+	int32_t loopEnd = data->config.loopEnd <= loopStart ? data->config.buffer->frames : data->config.loopEnd;
+	int32_t loopRegionLength = loopEnd - loopStart;
 	for (uint32_t inst = 0; inst < data->numInstances; inst++) {
 		azaSamplerInstance *instance = &data->instances[inst];
 		for (uint32_t i = 0; i < buffer.frames; i++) {
@@ -1549,7 +1549,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 			{ // Calculate lanczos kernel for our speed
 				// TODO: Maybe switch to using LUTs for the sinc and hann window separately
 				// Keep our lowpass at the minimum nyquist frequency
-				float rate = azaMinf(1.0f / speed, 1.0f);
+				float rate = azaMinf(1.0f / azaAbsf(speed), 1.0f);
 				float x = rate*(-instance->fraction - (float)SAMPLER_LANCZOS_SAMPLE_COUNT);
 				for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
 					float amount = azaLanczosf(x, (float)(1+SAMPLER_LANCZOS_SAMPLE_COUNT)*rate);
@@ -1572,31 +1572,37 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 			// TODO: Loop crossfades, because nobody likes a pop
 			bool startedBeforeLoopEnd = instance->frame <= loopEnd;
 			bool startedAfterLoopStart = instance->frame >= loopStart;
-			instance->fraction += speed;
-			int32_t framesToAdd = (int32_t)instance->fraction;
+			if (instance->reverse) {
+				instance->fraction -= speed;
+			} else {
+				instance->fraction += speed;
+			}
+			int32_t framesToAdd = (int32_t)truncf(instance->fraction);
 			instance->frame += framesToAdd;
 			instance->fraction -= framesToAdd;
-			bool forward = azaFollowerLinearGetValue(&instance->speed) > 0.0f;
 			if (data->config.loop) {
 				if (data->config.pingpong) {
-					if (forward && startedBeforeLoopEnd && instance->frame >= loopEnd) {
-						instance->frame = loopEnd - (instance->frame - loopEnd);
-						instance->fraction = 1.0f - instance->fraction;
-						instance->speed.end = -instance->speed.end;
-						instance->speed.start = -instance->speed.start;
-					} else if (!forward && startedAfterLoopStart && instance->frame <= loopStart) {
-						instance->frame = loopStart + (loopStart - instance->frame);
-						instance->fraction = 1.0f - instance->fraction;
-						instance->speed.end = -instance->speed.end;
-						instance->speed.start = -instance->speed.start;
+					if (!instance->reverse && startedBeforeLoopEnd && instance->frame >= loopEnd) {
+						// AZA_LOG_INFO("We're forwards going backwards (frame = %i, fraction= %f)!\n", instance->frame, instance->fraction);
+						instance->frame = loopEnd+loopEnd - instance->frame;
+						instance->fraction = -instance->fraction;
+						instance->reverse = true;
+					} else if (instance->reverse && startedAfterLoopStart && instance->frame <= loopStart) {
+						// AZA_LOG_INFO("We're backwards going forwards (frame = %i, fraction= %f)!\n", instance->frame, instance->fraction);
+						instance->frame = loopStart+loopStart - instance->frame;
+						instance->fraction = -instance->fraction;
+						instance->reverse = false;
 					}
 				} else {
-					if (forward && startedBeforeLoopEnd && instance->frame >= loopEnd) {
+					if (!instance->reverse && startedBeforeLoopEnd && instance->frame >= loopEnd) {
 						instance->frame -= loopRegionLength;
-					} else if (!forward && startedAfterLoopStart && instance->frame <= loopStart) {
+					} else if (instance->reverse && startedAfterLoopStart && instance->frame <= loopStart) {
 						instance->frame += loopRegionLength;
 					}
 				}
+			}
+			if ((!instance->reverse && instance->frame >= data->config.buffer->frames) || (instance->reverse && instance->frame < 0)) {
+				instance->envelope.stage = AZA_ADSR_STAGE_STOP;
 			}
 		}
 	}
