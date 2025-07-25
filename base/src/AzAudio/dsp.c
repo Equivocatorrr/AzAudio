@@ -2538,6 +2538,7 @@ static int azaMonitorSpectrumHandleBufferResizes(azaMonitorSpectrum *data, azaBu
 			return AZA_ERROR_OUT_OF_MEMORY;
 		}
 		data->inputBufferCapacity = requiredInputCapacity;
+		data->inputBufferUsed = 0;
 	}
 	if (data->inputBufferChannelCount != buffer.channelLayout.count) {
 		// Reset

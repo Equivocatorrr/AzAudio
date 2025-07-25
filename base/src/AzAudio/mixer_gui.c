@@ -1720,7 +1720,7 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 	azaDrawRectGradientV(spectrumRect, colorMonitorSpectrumBGTop, colorMonitorSpectrumBGBot);
 	if (!data->outputBuffer) return;
 	azaRect bar;
-	uint32_t window = data->config.window >> 1;
+	uint32_t window = AZA_MIN((data->config.window >> 1), data->outputBufferCapacity-1);
 	float lastFreq = 1.0f;
 	uint32_t lastX = 0, lastWidth = 0;
 	for (uint32_t i = 0; i <= window; i++) {
@@ -1764,6 +1764,7 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 }
 
 static void azaDrawSelectedDSP() {
+	azaMutexLock(&currentMixer->mutex);
 	pluginDrawHeight = GetLogicalHeight() - (trackDrawHeight + scrollbarSize);
 	azaRect bounds = {
 		margin*2,
@@ -1773,7 +1774,7 @@ static void azaDrawSelectedDSP() {
 	};
 	azaDrawRectGradientV(bounds, colorPluginSettingsTop, colorPluginSettingsBot);
 	azaDrawRectLines(bounds, selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
-	if (!selectedDSP) return;
+	if (!selectedDSP) goto done;
 
 	azaRectShrinkMargin(&bounds, margin*2);
 	azaDrawText(azaGetDSPName(selectedDSP), bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
@@ -1810,6 +1811,8 @@ static void azaDrawSelectedDSP() {
 			break;
 		case AZA_DSP_KIND_COUNT: break;
 	}
+done:
+	azaMutexUnlock(&currentMixer->mutex);
 }
 
 

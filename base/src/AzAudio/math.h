@@ -77,7 +77,7 @@ azaLerpf(float a, float b, float t) {
 
 static AZA_FORCE_INLINE(float)
 azaWrap01f(float a) {
-	int intPart = (int)a - signbit(a);
+	int intPart = (int)a - (int)!!signbit(a);
 	return a - (float)intPart;
 }
 
