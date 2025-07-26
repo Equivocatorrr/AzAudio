@@ -2519,8 +2519,11 @@ void azaFreeMonitorSpectrum(azaMonitorSpectrum *data) {
 azaDSP* azaMakeDefaultMonitorSpectrum(uint8_t channelCountInline) {
 	azaMonitorSpectrum *result = azaMakeMonitorSpectrum((azaMonitorSpectrumConfig) {
 		.mode = AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS,
+		.fullWindowProgression = false,
 		.window = 1024,
-		.smoothing = 3,
+		.smoothing = 1,
+		.floor = -96,
+		.ceiling = 12,
 	});
 	return (azaDSP*)result;
 }
@@ -2586,10 +2589,14 @@ static void azaMonitorSpectrumApplyWindow(azaBuffer buffer) {
 		float t = (float)i / (float)buffer.frames;
 		// Half-sine window (probably bad?)
 		// divide by integral of this sine to keep unity gain
-		// float mul = azaOscSine(t * 0.5f) / 0.636619772368f;
+		// float mul = sinf(0.5f * AZA_TAU * t) / 0.636619772368f;
+
 		// Hann window (cos(t)*0.5+0.5)/0.5
 		// Implicitly dividing by the integral
-		float mul = -azaOscCosine(t) + 1.0f;
+		// float mul = azaWindowHannf(t) / azaWindowHannIntegral;
+
+		// Blackman "not very serious" window a0 - a1*cos(t) + a2*cos(2*t), a0 = 0.42, a1 = 0.5, a2 = 0.08
+		float mul = azaWindowBlackmanf(t) / azaWindowBlackmanIntegral;
 		buffer.samples[i] *= mul;
 	}
 }
@@ -2642,7 +2649,7 @@ int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer) {
 					for (uint32_t i = 0; i < window; i++) {
 						float x = real.samples[i];
 						float y = imag.samples[i];
-						float mag = sqrtf(x*x + y*y) * (float)(i+1) / (float)data->config.window;
+						float mag = sqrtf(x*x + y*y) / (float)window;
 						float phase = atan2f(y, x);
 						real.samples[i] = mag;
 						imag.samples[i] = phase;
@@ -2661,7 +2668,7 @@ int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer) {
 						for (uint32_t i = 0; i < window; i++) {
 							float x = real.samples[i];
 							float y = imag.samples[i];
-							float mag = sqrtf(x*x + y*y) * (float)(i+1) / (float)data->config.window;
+							float mag = sqrtf(x*x + y*y) / (float)window;
 							float phase = atan2f(y, x);
 							real.samples[i] = mag;
 							imag.samples[i] = phase;
@@ -2674,7 +2681,17 @@ int azaMonitorSpectrumProcess(azaMonitorSpectrum *data, azaBuffer buffer) {
 				case AZA_MONITOR_SPECTRUM_MODE_COUNT: break;
 			}
 			azaPopSideBuffer();
-			data->inputBufferUsed -= data->config.window;
+			if (data->config.fullWindowProgression) {
+				data->inputBufferUsed -= data->config.window;
+				if (data->inputBufferUsed) {
+					memmove(data->inputBuffer, data->inputBuffer + data->config.window * data->inputBufferChannelCount, sizeof(float) * data->inputBufferChannelCount * data->inputBufferUsed);
+				}
+			} else {
+				// Shift by half a window each time
+				uint32_t halfWindow = data->config.window>>1;
+				data->inputBufferUsed -= halfWindow;
+				memmove(data->inputBuffer, data->inputBuffer + halfWindow * data->inputBufferChannelCount, sizeof(float) * data->inputBufferChannelCount * data->inputBufferUsed);
+			}
 		}
 	}
 bypassed:

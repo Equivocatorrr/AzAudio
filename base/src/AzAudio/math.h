@@ -17,8 +17,10 @@
 extern "C" {
 #endif
 
-static const float AZA_TAU = 6.283185307179586f;
-static const float AZA_PI = 3.14159265359f;
+static const float AZA_TAU = 6.2831853071795864769253f;
+static const float AZA_PI = 3.141592653589793115997f;
+static const double AZA_TAU_D = 6.2831853071795864769253;
+static const double AZA_PI_D = 3.1415926535897931159979;
 
 #define AZA_DEG_TO_RAD(x) ((x) * AZA_PI / 180.0f)
 #define AZA_RAD_TO_DEG(x) ((x) * 180.0f / AZA_PI)
@@ -81,10 +83,40 @@ azaWrap01f(float a) {
 	return a - (float)intPart;
 }
 
+// Hann window in terms of t from 0 to 1, where 0.5 is the maxima
+// Assumes t is already in the correct bounds
+static inline float azaWindowHannf(float t) {
+	float s = sinf(t * AZA_PI);
+	return s * s;
+}
+// Integral from 0 to 1
+static const float azaWindowHannIntegral = 0.5f;
+
+// Blackman window in terms of t from 0 to 1, where 0.5 is the maxima
+// Assumes t is already in the correct bounds
+static inline float azaWindowBlackmanf(float t) {
+	return 0.42f - 0.5f * cosf(AZA_TAU * t) + 0.08f * cosf(2.0f * AZA_TAU * t);
+}
+// Integral from 0 to 1
+static const float azaWindowBlackmanIntegral = 0.42f;
+
 float azaSincf(float x);
 
 // sinc with a hann window with a total size of 1+2*radius
+float azaSincHannf(float x, float radius);
+
+// sinc with a half-sine window with a total size of 1+2*radius
+float azaSincHalfSinef(float x, float radius);
+
+// sinc with a blackman window with a total size of 1+2*radius
+float azaSincBlackmanf(float x, float radius);
+
+// sinc with a sinc window
 float azaLanczosf(float x, float radius);
+
+float azaLUTSincf(float x);
+float azaLUTSincHannf(float x, float radius);
+float azaLUTLanczosf(float x, float radius);
 
 // Like a % max except the answer is always in the range [0; max) even if the input is negative
 static inline int

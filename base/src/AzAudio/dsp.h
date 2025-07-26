@@ -972,11 +972,21 @@ typedef struct azaMonitorSpectrumConfig {
 	azaMonitorSpectrumMode mode;
 	// In AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL mode, this is which channel gets analyzed
 	uint8_t channelChosen;
+	// If false, we shift our input over by half a window each update instead of the whole way, effectively doubling our update rate and giving samples on the edge of the window the opportunity to contribute.
+	bool fullWindowProgression;
 	// FFT window size (must be a power of 2)
 	uint16_t window;
 	// How much of the existing signal is kept every time the output is updated.
 	// Ex: out = lerp(out, in, 1/(1+smoothing));
 	uint16_t smoothing;
+	// Minimum dB level to show on the graph in the mixer gui.
+	// It's recommended to set this well below zero for most use-cases.
+	// -96dB is the ULP for 16-bit audio
+	// -144dB is the ULP for 24-bit audio
+	int16_t floor;
+	// Maximum dB level to show on the graph in the mixer gui.
+	// 0dB works for sounds that generally don't peak above 0dB, otherwise having a little headroom could be nice.
+	int16_t ceiling;
 } azaMonitorSpectrumConfig;
 
 typedef struct azaMonitorSpectrum {

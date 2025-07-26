@@ -46,13 +46,19 @@ void azaFFT(float * restrict valReal, float * restrict valImag, uint32_t len) {
 	// Start with the 2-point signals because 1-point signals would be unaltered anyway
 	uint32_t levelLenOver2 = 1;
 	for (uint32_t levelLen = 2; levelLen <= len; levelLenOver2 = levelLen, levelLen <<= 1) {
-		float rotReal = 1.0f;
-		float rotImag = 0.0f;
+		// NOTE: This repeated-integration rotation setup is fast, but causes problems at small step sizes. Keeping it around for now in-case we want to use this FFT for more frequent use-cases that don't mind small inaccuracies.
+		// double rotReal_d = 1.0;
+		// double rotImag_d = 0.0;
 		// Calculate sine and cosine values of 1 point along our signal
-		float cosReal =  cosf(AZA_TAU / (float)levelLen);
-		float cosImag = -sinf(AZA_TAU / (float)levelLen);
+		float step = AZA_TAU / (float)levelLen;
+		// double step_d = AZA_TAU_D / (double)levelLen;
+		// double cosReal_d =  cos(step_d);
+		// double cosImag_d = -sin(step_d);
 		// Loop for each sub DFT
 		for (uint32_t subDFT = 0; subDFT < levelLenOver2; subDFT++) {
+			// Calculate these directly since inaccuracies from repeated integration cause problems at extremely low amplitudes no matter what.
+			float rotReal =  cosf(step * (float)subDFT);
+			float rotImag = -sinf(step * (float)subDFT);
 			// Loop for each butterfly
 			for (uint32_t i = subDFT; i < len; i += levelLen) {
 				uint32_t ip = i + levelLenOver2;
@@ -65,9 +71,9 @@ void azaFFT(float * restrict valReal, float * restrict valImag, uint32_t len) {
 				valImag[i]  = valImag[i] + tempImag;
 			}
 			// Progress along the sinusoids
-			tempReal = rotReal;
-			rotReal = tempReal*cosReal - rotImag*cosImag;
-			rotImag = tempReal*cosImag + rotImag*cosReal;
+			// double tempReal_d = rotReal_d;
+			// rotReal_d = tempReal_d*cosReal_d - rotImag*cosImag_d;
+			// rotImag_d = tempReal_d*cosImag_d + rotImag*cosReal_d;
 		}
 	}
 }
