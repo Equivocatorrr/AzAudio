@@ -1486,7 +1486,25 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 		azaDrawText(azaFilterKindString[i], kindRect.x + textMargin, kindRect.y + textMargin, 10, WHITE);
 		kindRect.y += kindRect.h + margin;
 	}
-	azaRectShrinkTop(&kindRect, (kindRect.h + margin) * AZA_FILTER_KIND_COUNT);
+	{ // cutoff
+		int vMove = (int)GetMouseWheelMoveV().y;
+		uint32_t poles = AZA_MIN(data->config.poles+1, AZAUDIO_FILTER_MAX_POLES);
+		bool highlighted = azaMouseInRect(kindRect);
+		if (highlighted) {
+			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+				if (data->config.poles < AZAUDIO_FILTER_MAX_POLES-1) {
+					data->config.poles++;
+				}
+			}
+			if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+				if (data->config.poles > 0) {
+					data->config.poles--;
+				}
+			}
+		}
+		azaDrawRect(kindRect, highlighted ? colorMeterBGTop : colorMeterBGBot);
+		azaDrawText(TextFormat("%udB/oct", poles*6), kindRect.x + textMargin, kindRect.y + textMargin, 10, WHITE);
+	}
 	azaRectShrinkLeft(&bounds, kindRect.w + margin);
 	int usedWidth = azaDrawSliderFloatLog(bounds, &data->config.frequency, 5.0f, 24000.0f, 0.1f, 500.0f, "Cutoff Frequency", "%.1fHz");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);

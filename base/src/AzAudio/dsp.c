@@ -960,6 +960,7 @@ void azaFreeFilter(azaFilter *data) {
 azaDSP* azaMakeDefaultFilter(uint8_t channelCapInline) {
 	return (azaDSP*)azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_LOW_PASS,
+		.poles = AZA_FILTER_12_DB,
 		.frequency = 500.0f,
 		.dryMix = 0.0f,
 	}, channelCapInline);
@@ -977,6 +978,7 @@ int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 	if AZA_UNLIKELY(err) return err;
 	float amount = azaClampf(1.0f - data->config.dryMix, 0.0f, 1.0f);
 	float amountDry = azaClampf(data->config.dryMix, 0.0f, 1.0f);
+	uint32_t poles = AZA_MIN(data->config.poles+1, AZAUDIO_FILTER_MAX_POLES);
 	for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
 		azaFilterChannelData *channelData = azaGetChannelData(&data->channelData, c);
 
@@ -985,8 +987,14 @@ int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 				float decay = azaClampf(expf(-AZA_TAU * (data->config.frequency / (float)buffer.samplerate)), 0.0f, 1.0f);
 				for (uint32_t i = 0; i < buffer.frames; i++) {
 					uint32_t s = i * buffer.stride + c;
-					channelData->outputs[0] = buffer.samples[s] + decay * (channelData->outputs[0] - buffer.samples[s]);
-					buffer.samples[s] = (buffer.samples[s] - channelData->outputs[0]) * amount + buffer.samples[s] * amountDry;
+					float sample = buffer.samples[s];
+					channelData->outputs[0] = sample + decay * (channelData->outputs[0] - sample);
+					sample -= channelData->outputs[0];
+					for (uint32_t pole = 1; pole < poles; pole++) {
+						channelData->outputs[pole] = sample + decay * (channelData->outputs[pole] - sample);
+						sample -= channelData->outputs[pole];
+					}
+					buffer.samples[s] = sample * amount + buffer.samples[s] * amountDry;
 				}
 			} break;
 			case AZA_FILTER_LOW_PASS: {
@@ -994,7 +1002,10 @@ int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 				for (uint32_t i = 0; i < buffer.frames; i++) {
 					uint32_t s = i * buffer.stride + c;
 					channelData->outputs[0] = buffer.samples[s] + decay * (channelData->outputs[0] - buffer.samples[s]);
-					buffer.samples[s] = channelData->outputs[0] * amount + buffer.samples[s] * amountDry;
+					for (uint32_t pole = 1; pole < poles; pole++) {
+						channelData->outputs[pole] = channelData->outputs[pole-1] + decay * (channelData->outputs[pole] - channelData->outputs[pole-1]);
+					}
+					buffer.samples[s] = channelData->outputs[poles-1] * amount + buffer.samples[s] * amountDry;
 				}
 			} break;
 			case AZA_FILTER_BAND_PASS: {
@@ -1002,9 +1013,23 @@ int azaFilterProcess(azaFilter *data, azaBuffer buffer) {
 				float decayHigh = azaClampf(expf(-AZA_TAU * (data->config.frequency / (float)buffer.samplerate)), 0.0f, 1.0f);
 				for (uint32_t i = 0; i < buffer.frames; i++) {
 					uint32_t s = i * buffer.stride + c;
-					channelData->outputs[0] = buffer.samples[s] + decayLow * (channelData->outputs[0] - buffer.samples[s]);
-					channelData->outputs[1] = channelData->outputs[0] + decayHigh * (channelData->outputs[1] - channelData->outputs[0]);
-					buffer.samples[s] = (channelData->outputs[0] - channelData->outputs[1]) * 2.0f * amount + buffer.samples[s] * amountDry;
+					float sample = buffer.samples[s];
+					channelData->outputs[0] = sample + decayLow * (channelData->outputs[0] - sample);
+					// Low pass
+					sample = channelData->outputs[0];
+					channelData->outputs[1] = sample + decayHigh * (channelData->outputs[1] - sample);
+					// High pass
+					sample -= channelData->outputs[1];
+					// Compensate for the innate -3dB at the cutoff, done twice is -6dB, which is ~1/2 amp
+					sample *= 2.0f;
+					for (uint32_t pole = 1; pole < poles; pole++) {
+						channelData->outputs[2*pole+0] = sample + decayLow * (channelData->outputs[2*pole+0] - sample);
+						sample = channelData->outputs[2*pole+0];
+						channelData->outputs[2*pole+1] = sample + decayHigh * (channelData->outputs[2*pole+1] - sample);
+						sample -= channelData->outputs[2*pole+1];
+						sample *= 2.0f;
+					}
+					buffer.samples[s] = sample * amount + buffer.samples[s] * amountDry;
 				}
 			} break;
 			case AZA_FILTER_KIND_COUNT: break;

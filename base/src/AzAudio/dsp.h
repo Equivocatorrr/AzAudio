@@ -407,6 +407,28 @@ int azaLookaheadLimiterProcess(azaLookaheadLimiter *data, azaBuffer buffer);
 
 
 
+#define AZAUDIO_FILTER_MAX_POLES 16
+
+// Constants to define number of filter poles in terms of db/octave
+enum {
+	AZA_FILTER_6_DB=0,
+	AZA_FILTER_12_DB,
+	AZA_FILTER_18_DB,
+	AZA_FILTER_24_DB,
+	AZA_FILTER_30_DB,
+	AZA_FILTER_36_DB,
+	AZA_FILTER_42_DB,
+	AZA_FILTER_48_DB,
+	AZA_FILTER_54_DB,
+	AZA_FILTER_60_DB,
+	AZA_FILTER_66_DB,
+	AZA_FILTER_72_DB,
+	AZA_FILTER_78_DB,
+	AZA_FILTER_84_DB,
+	AZA_FILTER_90_DB,
+	AZA_FILTER_96_DB,
+};
+
 typedef enum azaFilterKind {
 	AZA_FILTER_HIGH_PASS,
 	AZA_FILTER_LOW_PASS,
@@ -418,6 +440,8 @@ extern const char *azaFilterKindString[];
 
 typedef struct azaFilterConfig {
 	azaFilterKind kind;
+	// pole count - 1 (defaults to AZA_FILTER_6_DB_O)
+	uint32_t poles;
 	// Cutoff frequency in Hz
 	float frequency;
 	// Blends the effect output with the dry signal where 1 is fully dry and 0 is fully wet.
@@ -425,7 +449,7 @@ typedef struct azaFilterConfig {
 } azaFilterConfig;
 
 typedef struct azaFilterChannelData {
-	float outputs[2];
+	float outputs[2*AZAUDIO_FILTER_MAX_POLES];
 } azaFilterChannelData;
 
 typedef struct azaFilter {

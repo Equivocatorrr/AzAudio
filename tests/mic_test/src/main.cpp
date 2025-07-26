@@ -252,6 +252,7 @@ int main(int argumentCount, char** argumentValues) {
 		// gate runs on the single-channel mic buffer
 		gateBandPass = azaMakeFilter(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_BAND_PASS,
+			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 300.0f,
 			/* .dryMix    = */ 0.0f,
 		}, 1);
@@ -287,6 +288,7 @@ int main(int argumentCount, char** argumentValues) {
 
 		delayWetFilter = azaMakeFilter(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_BAND_PASS,
+			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 800.0f,
 			/* .dryMix    = */ 0.5f,
 		}, outputChannelCount);
@@ -304,6 +306,7 @@ int main(int argumentCount, char** argumentValues) {
 
 		highPass = azaMakeFilter(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_HIGH_PASS,
+			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 50.0f,
 			/* .dryMix    = */ 0.0f,
 		}, outputChannelCount);
