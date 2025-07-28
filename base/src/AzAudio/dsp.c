@@ -2621,7 +2621,13 @@ static void azaMonitorSpectrumApplyWindow(azaBuffer buffer) {
 		// float mul = azaWindowHannf(t) / azaWindowHannIntegral;
 
 		// Blackman "not very serious" window a0 - a1*cos(t) + a2*cos(2*t), a0 = 0.42, a1 = 0.5, a2 = 0.08
-		float mul = azaWindowBlackmanf(t) / azaWindowBlackmanIntegral;
+		// float mul = azaWindowBlackmanf(t) / azaWindowBlackmanIntegral;
+
+		// Blackman-Harris window
+		float mul = azaWindowBlackmanHarrisf(t) / azaWindowBlackmanHarrisIntegral;
+
+		// Nuttall window
+		// float mul = azaWindowNuttallf(t) / azaWindowNuttallIntegral;
 		buffer.samples[i] *= mul;
 	}
 }

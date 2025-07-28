@@ -100,6 +100,21 @@ static inline float azaWindowBlackmanf(float t) {
 // Integral from 0 to 1
 static const float azaWindowBlackmanIntegral = 0.42f;
 
+// Blackman-Harris window in terms of t from 0 to 1, where 0.5 is the maxima
+// Assumes t is already in the correct bounds
+static inline float azaWindowBlackmanHarrisf(float t) {
+	return 0.35875f - 0.48829f * cosf(AZA_TAU * t) + 0.14128f * cosf(2.0f * AZA_TAU * t) - 0.01168f * cosf(3.0f * AZA_TAU * t);
+}
+// Integral from 0 to 1
+static const float azaWindowBlackmanHarrisIntegral = 0.35875f;
+
+// Nuttall window in terms of t from 0 to 1, where 0.5 is the maxima
+// Assumes t is already in the correct bounds
+static inline float azaWindowNuttallf(float t) {
+	return 0.355768f - 0.487396f * cosf(AZA_TAU * t) + 0.144232f * cosf(2.0f * AZA_TAU * t) - 0.012604f * cosf(3.0f * AZA_TAU * t);
+}
+static const float azaWindowNuttallIntegral = 0.355768f;
+
 float azaSincf(float x);
 
 // sinc with a hann window with a total size of 1+2*radius

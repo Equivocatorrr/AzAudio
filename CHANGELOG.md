@@ -12,13 +12,23 @@ As a bonus, we may try to document porting steps for users of this library that 
 
 ### Changed
 - azaSampler interface
+	- azaSamplerConfig is almost completely different
 	- Uses ADSR envelopes
 	- Can now have multiple instances of sounds with independent pitch and gain
 	- Pitch and gain follows targets in a predictable, linear fashion
+- azaFilter interface
+	- Has up to 16 poles
+	- azaFilterConfig has a `poles` field after `kind` and before `frequency`
 
 ### Added
 - ADSR envelopes
 - azaFollowerLinear for linearly following target values at a given rate
+- in AzAudio/math.h
+	- azaWindow functions (Hann, Blackman, Blackman-Harris, Nuttall)
+	- Additional windowed sinc functions
+
+### Fixed
+- azaFFT sinusoid integration error causing erroneous readings in azaMonitorSpectrum
 
 ## [v0.2.1](https://github.com/Equivocatorrr/AzAudio/releases/tag/v0.2.1)
 
