@@ -1626,14 +1626,28 @@ static void azaDrawReverb(azaReverb *data, azaRect bounds) {
 static int azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, uint32_t width, uint32_t i) {
 	// float nyquist = (float)data->samplerate / 2.0f;
 	// float baseFreq = (float)data->samplerate / (float)data->config.window;
-	uint32_t window = (data->config.window >> 1)+2;
+	uint32_t window = (data->config.window >> 1)+1;
 	float baseLog = log2f((float)window);
 	if (i) {
-		return (int)roundf((float)width * (log2f((float)(i+1) / (float)window) + baseLog) / baseLog);
+		return (int)roundf((float)width * (log2f(((float)i + 0.75f) / (float)window) + baseLog) / baseLog);
 	} else {
 		return 0;
 	}
 }
+
+static int azaMonitorSpectrumBarXFromFreq(azaMonitorSpectrum *data, uint32_t width, float freq) {
+	float nyquist = (float)data->samplerate / 2.0f;
+	float baseFreq = (float)data->samplerate / (float)data->config.window;
+	uint32_t window = (data->config.window >> 1)+1;
+	float baseLog = log2f((float)window);
+	if (freq >= baseFreq && freq <= nyquist) {
+		return (int)roundf((float)width * (log2f(0.75f / (float)window + freq / nyquist) + baseLog) / baseLog);
+	} else {
+		return 0;
+	}
+}
+
+#define AZA_MONITOR_SPECTRUM_DEBUG_FREQUENCY_MARKS 0
 
 static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 	azaRect controlRect = bounds;
@@ -1736,36 +1750,6 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 	azaDrawRect(controlRect, colorWindowControlRect);
 	azaDrawText(TextFormat("%d", data->config.smoothing), controlRect.x + textMargin, controlRect.y + textMargin, 10, WHITE);
 
-	// Floor
-
-	controlRect.y += controlRect.h + margin*2;
-	colorWindowControlRect = colorMonitorSpectrumWindowControl;
-	hover = azaMouseInRect(controlRect);
-	if (hover) {
-		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
-		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
-			if (data->config.floor < data->config.ceiling-12) {
-				if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
-					data->config.floor += 1;
-				} else {
-					data->config.floor += 6;
-				}
-			}
-		}
-		if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
-			if (data->config.floor > monitorSpectrumMinDynamicRange) {
-				if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
-					data->config.floor -= 1;
-				} else {
-					data->config.floor -= 6;
-				}
-			}
-		}
-		azaTooltipAdd("Floor", controlRect.x + controlRect.w, controlRect.y, false);
-	}
-	azaDrawRect(controlRect, colorWindowControlRect);
-	azaDrawText(TextFormat("%+ddB", (int)data->config.floor), controlRect.x + textMargin, controlRect.y + textMargin, 10, WHITE);
-
 	// Ceiling
 
 	controlRect.y += controlRect.h + margin*2;
@@ -1796,17 +1780,49 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 	azaDrawRect(controlRect, colorWindowControlRect);
 	azaDrawText(TextFormat("%+ddB", (int)data->config.ceiling), controlRect.x + textMargin, controlRect.y + textMargin, 10, WHITE);
 
+	// Floor
+
+	controlRect.y += controlRect.h + margin*2;
+	colorWindowControlRect = colorMonitorSpectrumWindowControl;
+	hover = azaMouseInRect(controlRect);
+	if (hover) {
+		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
+		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+			if (data->config.floor < data->config.ceiling-12) {
+				if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+					data->config.floor += 1;
+				} else {
+					data->config.floor += 6;
+				}
+			}
+		}
+		if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+			if (data->config.floor > monitorSpectrumMinDynamicRange) {
+				if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+					data->config.floor -= 1;
+				} else {
+					data->config.floor -= 6;
+				}
+			}
+		}
+		azaTooltipAdd("Floor", controlRect.x + controlRect.w, controlRect.y, false);
+	}
+	azaDrawRect(controlRect, colorWindowControlRect);
+	azaDrawText(TextFormat("%+ddB", (int)data->config.floor), controlRect.x + textMargin, controlRect.y + textMargin, 10, WHITE);
+
 	azaRect spectrumRect = bounds;
 	azaRectShrinkLeft(&spectrumRect, monitorSpectrumWindowControlWidth + margin*2);
 	azaRectShrinkMargin(&spectrumRect, margin);
-	azaRectShrinkBottom(&spectrumRect, textMargin*2 + 10);
+	azaRectShrinkBottom(&spectrumRect, textMargin*3 + 10);
 	float baseFreq = (float)data->samplerate / (float)data->config.window;
 	azaDrawRectGradientV(spectrumRect, colorMonitorSpectrumBGTop, colorMonitorSpectrumBGBot);
 	if (!data->outputBuffer) return;
 	azaRect bar;
 	uint32_t window = AZA_MIN((uint32_t)(data->config.window >> 1), data->outputBufferCapacity-1);
+#if AZA_MONITOR_SPECTRUM_DEBUG_FREQUENCY_MARKS
 	float lastFreq = 1.0f;
 	uint32_t lastX = 0, lastWidth = 0;
+#endif
 	for (uint32_t i = 0; i <= window; i++) {
 		float magnitude = data->outputBuffer[i];
 		// float phase = data->outputBuffer[i + data->config.window] / AZA_TAU + 0.5f;
@@ -1822,9 +1838,10 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 		azaDrawRect(bar, colorMonitorSpectrumFG);
 		// This is atrocious to look at
 		// azaDrawRect(bar, ColorHSV(phase, 0.5f, 0.8f, 255));
+#if AZA_MONITOR_SPECTRUM_DEBUG_FREQUENCY_MARKS
 		float freq = baseFreq * i;
 		if (freq / lastFreq >= 2.0f) {
-			azaDrawLine(bar.x, spectrumRect.y, bar.x, spectrumRect.y + spectrumRect.h + textMargin, (Color) {0,0,0,128});
+			azaDrawLine(bar.x, spectrumRect.y, bar.x, spectrumRect.y + spectrumRect.h + textMargin, (Color) {255,0,0,64});
 			if (bar.x - lastX >= lastWidth+10) {
 				int intFreq = (int)roundf(freq);
 				const char *str;
@@ -1837,11 +1854,91 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 				int x = bar.x-width/2;
 				x = AZA_MAX(spectrumRect.x, x);
 				x = AZA_MIN(x, spectrumRect.x + spectrumRect.w - width);
-				azaDrawText(str, x, spectrumRect.y + spectrumRect.h + margin + textMargin, 10, WHITE);
+				azaDrawText(str, x, spectrumRect.y + spectrumRect.h + margin + textMargin, 10, (Color) {255, 0, 0, 64});
 				lastWidth = width;
 				lastX = x;
 			}
 			lastFreq = freq;
+		}
+#endif
+	}
+	const uint32_t freqTicks[] = {
+		10,
+		20,
+		30,
+		40,
+		50,
+		75,
+		100,
+		150,
+		200,
+		250,
+		300,
+		400,
+		500,
+		600,
+		700,
+		800,
+		900,
+		1000,
+		1200,
+		1400,
+		1600,
+		1800,
+		2000,
+		2500,
+		3000,
+		3500,
+		4000,
+		5000,
+		6000,
+		7000,
+		8000,
+		9000,
+		10000,
+		12000,
+		14000,
+		16000,
+		18000,
+		20000,
+		22000,
+		24000,
+		48000,
+		96000,
+	};
+	int xPrev[2] = {0};
+	for (uint32_t i = 0; i < sizeof(freqTicks) / sizeof(freqTicks[0]); i++) {
+		uint32_t freq = freqTicks[i];
+		if (freq > data->samplerate/2) break;
+		float fFreq = (float)freq;
+		if (fFreq < baseFreq) continue;
+
+		int x = azaMonitorSpectrumBarXFromFreq(data, spectrumRect.w-1, fFreq);
+		x += spectrumRect.x;
+		const char *str;
+		if (freq % 1000 == 0) {
+			str = TextFormat("%dk", freq/1000);
+		} else {
+			str = TextFormat("%d", freq);
+		}
+		int width = MeasureText(str, 10);
+		int textX = x - width/2;
+		textX = AZA_MAX(spectrumRect.x, textX);
+		textX = AZA_MIN(textX, spectrumRect.x + spectrumRect.w - width);
+		int line = 0;
+		int lineOffset = 0;
+		if (textX - xPrev[0] >= margin) {
+			line = 1;
+			lineOffset = textMargin;
+		} else if (textX - xPrev[1] >= margin) {
+			line = 2;
+			lineOffset = textMargin + 10;
+		}
+
+		azaDrawLine(x, spectrumRect.y, x, spectrumRect.y + spectrumRect.h + lineOffset, (Color) {0,0,0,128});
+		if (line) {
+			azaDrawText(str, textX, spectrumRect.y + spectrumRect.h + margin + lineOffset, 10, WHITE);
+			xPrev[line-1] = textX + width;
 		}
 	}
 	azaDrawDBTicks(spectrumRect, data->config.ceiling - data->config.floor, data->config.ceiling, colorMonitorSpectrumDBTick, colorMonitorSpectrumDBTickUnity);
