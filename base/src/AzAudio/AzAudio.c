@@ -62,6 +62,7 @@ int azaInit() {
 	AZA_LOG_INFO("AzAudio Version: " AZA_VERSION_FORMAT_STR "\n", AZA_VERSION_ARGS);
 
 	int err;
+	// A resolution of 128 is 2^7, which gives the LUT a signal-to-noise ratio of 12+12*7 = 96dB
 	err = azaKernelMakeLanczos(&azaKernelDefaultLanczos, 128, 32);
 	if (err) return err;
 	err = azaDSPRegistryInit();

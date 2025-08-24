@@ -13,20 +13,24 @@ float azaSincf(float x) {
 }
 
 float azaSincHannf(float x, float radius) {
-	return azaSincf(x) * azaWindowHannf(x / radius * 0.5f + 0.5f);
+	float windowT = azaClampf(x / radius, -1.0f, 1.0f);
+	return azaSincf(x) * azaWindowHannf(windowT * 0.5f + 0.5f);
 }
 
 float azaSincHalfSinef(float x, float radius) {
-	float c = cosf(x * AZA_PI * 0.5f / radius);
+	float windowT = azaClampf(x / radius, -1.0f, 1.0f);
+	float c = cosf(windowT * AZA_PI * 0.5f);
 	return azaSincf(x) * c;
 }
 
 float azaSincBlackmanf(float x, float radius) {
-	return azaSincf(x) * azaWindowBlackmanf(x / radius * 0.5f + 0.5f);
+	float windowT = azaClampf(x / radius, -1.0f, 1.0f);
+	return azaSincf(x) * azaWindowBlackmanf(windowT * 0.5f + 0.5f);
 }
 
 float azaLanczosf(float x, float radius) {
-	return azaSincf(x) * azaSincf(x/radius);
+	float windowT = azaClampf(x / radius, -1.0f, 1.0f);
+	return azaSincf(x) * azaSincf(windowT);
 }
 
 float azaLUTSincf(float x) {
@@ -36,12 +40,14 @@ float azaLUTSincf(float x) {
 }
 
 float azaLUTSincHannf(float x, float radius) {
-	float c = azaOscCosine(x * 0.25f / radius);
+	float windowT = azaClampf(x / radius, -1.0f, 1.0f);
+	float c = azaOscCosine(windowT * 0.25f);
 	return azaLUTSincf(x) * c*c;
 }
 
 float azaLUTLanczosf(float x, float radius) {
-	return azaLUTSincf(x) * azaLUTSincf(x/radius);
+	float windowT = azaClampf(x / radius, -1.0f, 1.0f);
+	return azaLUTSincf(x) * azaLUTSincf(windowT);
 }
 
 float azaCubicf(float a, float b, float c, float d, float x) {

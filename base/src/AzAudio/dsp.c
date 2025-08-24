@@ -1568,31 +1568,44 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 			float speed = azaFollowerLinearUpdate(&instance->speed, deltaMs / data->config.speedTransitionTimeMs);
 			if AZA_UNLIKELY(volume == 0.0f) continue;
 			speed *= samplerateFactor;
-			#define SAMPLER_LANCZOS_SAMPLE_COUNT 15
-			float lanczosSamples[SAMPLER_LANCZOS_SAMPLE_COUNT*2+1];
-			float lanczosIntegral = 0.0f;
-			{ // Calculate lanczos kernel for our speed
-				// TODO: Maybe switch to using LUTs for the sinc and hann window separately
-				// Keep our lowpass at the minimum nyquist frequency
-				float rate = azaMinf(1.0f / azaAbsf(speed), 1.0f);
-				float x = rate*(-instance->fraction - (float)SAMPLER_LANCZOS_SAMPLE_COUNT);
-				for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
-					float amount = azaLanczosf(x, (float)(1+SAMPLER_LANCZOS_SAMPLE_COUNT)*rate);
-					lanczosSamples[i] = amount;
-					lanczosIntegral += amount;
-					x += rate;
+			if (speed == 1.0f && instance->fraction == 0.0f) {
+				// No resampling necessary
+				for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
+					float sample = data->config.buffer->samples[instance->frame * data->config.buffer->stride + c];
+					buffer.samples[i * buffer.stride + c] += sample * volume;
 				}
-			}
-			for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
-				float sample = 0.0f;
-				for (int i = 0; i < SAMPLER_LANCZOS_SAMPLE_COUNT*2+1; i++) {
-					int frame = azaWrapi(i + (int)instance->frame - SAMPLER_LANCZOS_SAMPLE_COUNT, data->config.buffer->frames);
-					float amount = lanczosSamples[i];
-					sample += data->config.buffer->samples[frame * data->config.buffer->stride + c] * amount;
+			} else {
+				// Oof all resampling!
+				#define SAMPLER_KERNEL_RADIUS 15
+				#define SAMPLER_KERNEL_SAMPLE_COUNT (SAMPLER_KERNEL_RADIUS*2+1)
+				float kernelSamples[SAMPLER_KERNEL_SAMPLE_COUNT];
+				float kernelIntegral = 0.0f;
+				{ // Calculate interpolation kernel for our speed and offset
+					// TODO: Definitely switch to using azaKernel, once it's been altered to allow low-passes below source nyquist, as is generally needed (this is a necessary step to fix aliasing issues in azaSpatialize and backend resampling as well).
+					// Keep our lowpass below the minimum nyquist frequency (leaving some extra space for the transition band to alias onto itself outside the range of human hearing, assuming we're running at 48khz)
+					static const float stopBandFactor = 20.0f / 24.0f;
+					float rate = (speed > 1.0f ? 1.0f / speed : 1.0f) * stopBandFactor;
+					float x = rate*(-instance->fraction - (float)SAMPLER_KERNEL_RADIUS);
+					// Calculating it like this breaks down in the degenerate case where our kernel radius is too small to cover even the first lobe (because we're low-passing well below the source nyquist frequency). Doing this would create volume attenuation when rate is very low.
+					// kernelIntegral = 1.0f / rate;
+					for (int i = 0; i < SAMPLER_KERNEL_SAMPLE_COUNT; i++) {
+						float amount = azaLanczosf(x, azaMaxf(floorf((float)(0+SAMPLER_KERNEL_RADIUS)*rate), 1.0f));
+						kernelSamples[i] = amount;
+						kernelIntegral += amount;
+						x += rate;
+					}
 				}
-				sample /= lanczosIntegral;
+				for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
+					float sample = 0.0f;
+					for (int i = 0; i < SAMPLER_KERNEL_SAMPLE_COUNT; i++) {
+						int frame = azaWrapi(i + (int)instance->frame - SAMPLER_KERNEL_RADIUS, data->config.buffer->frames);
+						float amount = kernelSamples[i];
+						sample += data->config.buffer->samples[frame * data->config.buffer->stride + c] * amount;
+					}
+					sample /= kernelIntegral;
 
-				buffer.samples[i * buffer.stride + c] += sample * volume;
+					buffer.samples[i * buffer.stride + c] += sample * volume;
+				}
 			}
 			// TODO: Loop crossfades, because nobody likes a pop
 			bool startedBeforeLoopEnd = instance->frame <= loopEnd;
