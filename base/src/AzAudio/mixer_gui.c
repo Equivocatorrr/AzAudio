@@ -404,9 +404,15 @@ static void azaMouseCaptureEndFrame() {
 		azaMouseCaptureEnd();
 	}
 }
+// Resets the mouse drag origin to the current mouse position. Useful for relative mouse dragging, allowing you to let a big enough delta to accumulate to make a meaningful change before actually consuming it.
+static void azaMouseCaptureResetDelta() {
+	mouseDragStart = azaMousePosition();
+}
+
 // Pass in a unique pointer identifier for continuity. A const char* can work just fine.
 // returns true if we're capturing the mouse
-// outputs the deltas from the last frame (if we're capturing, else zeroes them)
+// outputs the deltas from the mouseDragOrigin (if we're capturing, else zeroes them)
+// If this delta is consumed, call azaMouseCaptureResetDelta(), otherwise the delta will always be relative to the start position.
 static bool azaCaptureMouseDelta(azaRect bounds, azaPoint *out_delta, void *id) {
 	assert(out_delta);
 	assert(id);
@@ -424,10 +430,15 @@ static bool azaCaptureMouseDelta(azaRect bounds, azaPoint *out_delta, void *id) 
 			return false;
 		}
 		mouseDragTimestamp = azaGetTimestamp();
-		*out_delta = azaPointSub(mouse, mousePrev);
+		*out_delta = azaPointSub(mouse, mouseDragStart);
 		return true;
 	}
 	return false;
+}
+
+// Meant for use when azaCaptureMouse___ returns true to know when a drag was just initiated.
+static bool azaMouseCaptureJustStarted() {
+	return azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 2);
 }
 
 
@@ -946,30 +957,46 @@ static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int 
 	int useableWidth = bounds.w - scrollbarWidth;
 	int mouseX = (int)azaMousePosition().x - bounds.x;
 	azaDrawRect(bounds, colorScrollbarBG);
+	if (min == max) return;
+	int range = AZA_MAX(max - min, 1);
+	int offset = useableWidth * (*value - min) / range;
+	int direction = 1;
+	if (step < 0) {
+		offset = bounds.w - scrollbarWidth - offset;
+		direction = -1;
+	}
 	if (mouseover) {
 		int scroll = (int)GetMouseWheelMoveV().y;
-		int click = (int)azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) * ((int)(mouseX >= bounds.w/2) * 2 - 1);
+		int click = (int)azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) * ((int)(mouseX >= offset + scrollbarWidth) - (int)(mouseX < offset));
 		*value += step * (scroll + click);
 		*value = AZA_CLAMP(*value, min, max);
+		offset = useableWidth * (*value - min) / range;
+		if (step < 0) {
+			offset = bounds.w - scrollbarWidth - offset;
+		}
 	}
-	if (min == max) return;
 	azaRect knobRect = {
-		bounds.x,
+		bounds.x + offset,
 		bounds.y,
 		scrollbarWidth,
 		bounds.h,
 	};
-	int offset = useableWidth * (*value - min) / AZA_MAX(max - min, 1);
-	if (step >= 0) {
-		knobRect.x += offset;
-	} else {
-		knobRect.x += (bounds.w - scrollbarWidth) - offset;
-	}
-	azaDrawRect(knobRect, colorScrollbarFG);
 	azaPoint delta;
 	if (azaCaptureMouseDelta(knobRect, &delta, id)) {
-		// TODO: Dragging the knob
+		static int dragStartValue = 0;
+		if (azaMouseCaptureJustStarted()) {
+			dragStartValue = *value;
+		}
+		int actualDelta = direction * (delta.x * range / useableWidth);
+		*value = dragStartValue + actualDelta;
+		*value = AZA_CLAMP(*value, min, max);
+		offset = useableWidth * (*value - min) / range;
+		if (step < 0) {
+			offset = bounds.w - scrollbarWidth - offset;
+		}
+		knobRect.x = bounds.x + offset;
 	}
+	azaDrawRect(knobRect, colorScrollbarFG);
 }
 
 
@@ -2046,9 +2073,9 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 100)) {
 				lastClickTime = azaGetTimestamp();
 			}
-		EndDrawing();
-		azaMouseCaptureEndFrame();
 		mousePrev = azaMousePosition();
+		EndDrawing(); // EndDrawing is when input events are polled. We may want to switch to using PollInputEvents manually, but this works for now.
+		azaMouseCaptureEndFrame();
 	}
 
 	CloseWindow();
