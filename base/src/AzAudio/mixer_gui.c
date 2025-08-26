@@ -596,6 +596,55 @@ static inline void azaDrawMeterBackground(azaRect bounds, int dbRange, int dbHea
 static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label, int dbRange, int dbHeadroom) {
 	bounds.w = faderDrawWidth;
 	bool mouseover = azaMouseInRect(bounds);
+	bool reset = false;
+	if (mouseover && azaDidDoubleClick(2)) {
+		reset = true;
+	}
+	bool precise = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
+	bool snap = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+	azaRect meterBounds = bounds;
+	azaRectShrinkTop(&meterBounds, bounds.w - margin); // Remove mute rect
+	azaRect sliderBounds = meterBounds;
+	azaRectShrinkMargin(&sliderBounds, margin);
+	int yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, sliderBounds.h, 0, dbRange);
+	azaRect knobRect = {
+		sliderBounds.x,
+		sliderBounds.y + yOffset - 6,
+		sliderBounds.w,
+		12
+	};
+	if (reset) {
+		*gain = 0.0f;
+	}
+	azaPoint mouseDelta = {0};
+	// We assume our gain pointer is unique, so it works as an implicit id. Even if we had 2 faders for the same gain, this would probably still be well-behaved.
+	if (azaCaptureMouseDelta(knobRect, &mouseDelta, gain)) {
+		static float dragStartValue = 0.0f;
+		if (azaMouseCaptureJustStarted()) {
+			dragStartValue = *gain;
+		}
+		if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT) || IsKeyReleased(KEY_LEFT_SHIFT) || IsKeyReleased(KEY_RIGHT_SHIFT)) {
+			dragStartValue = *gain;
+			azaMouseCaptureResetDelta();
+			mouseDelta.y = 0;
+		}
+		float actualDelta = (float)-mouseDelta.y * (float)dbRange / (float)sliderBounds.h;
+		if (precise) {
+			actualDelta *= 0.1f;
+		}
+		*gain = dragStartValue + actualDelta;
+		if (snap) {
+			if (precise) {
+				*gain = roundf(20.0f * *gain) / 20.0f;
+			} else {
+				*gain = roundf(2.0f * *gain) / 2.0f;
+			}
+		}
+		// *gain = azaClampf(*gain, (float)(-dbRange+dbHeadroom), (float)dbHeadroom);
+		yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, sliderBounds.h, 0, dbRange);
+		knobRect.y = sliderBounds.y + yOffset - 6;
+		mouseover = true;
+	}
 	if (mouseover) {
 		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
 	}
@@ -615,29 +664,18 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 		} else {
 			azaDrawRectLines(muteRect, colorFaderMuteButton);
 		}
-		azaRectShrinkTop(&bounds, muteRect.h + margin);
 	}
-	azaDrawMeterBackground(bounds, dbRange, dbHeadroom);
-	azaRectShrinkMargin(&bounds, margin);
-	int yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, bounds.h, 0, dbRange);
+	azaDrawMeterBackground(meterBounds, dbRange, dbHeadroom);
 	if (mouseover) {
-		azaDrawRect(bounds, colorFaderHighlight);
-		azaTooltipAdd(TextFormat("%+.1fdb", *gain), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
+		azaDrawRect(meterBounds, colorFaderHighlight);
+		azaTooltipAdd(TextFormat(precise ? "%+.2fdb" : "%+.1fdb", *gain), sliderBounds.x + sliderBounds.w + margin, sliderBounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		*gain += delta;
-		if (azaDidDoubleClick(0)) {
-			*gain = 0.0f;
-		}
 	}
-	PushScissor(bounds);
-	azaDrawRectGradientV((azaRect) {
-		bounds.x,
-		bounds.y + yOffset - 6,
-		bounds.w,
-		12
-	}, colorFaderKnobTop, colorFaderKnobBot);
-	azaDrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
+	PushScissor(meterBounds);
+	azaDrawRectGradientV(knobRect, colorFaderKnobTop, colorFaderKnobBot);
+	azaDrawLine(sliderBounds.x, sliderBounds.y + yOffset, sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset, Fade(BLACK, 0.5));
 	PopScissor();
 	return faderDrawWidth;
 }
