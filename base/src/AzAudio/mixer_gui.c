@@ -567,6 +567,183 @@ static void azaDrawTooltips() {
 
 
 
+static float azaSnapFloat(float value, float interval) {
+	assert(interval > 0.0f);
+	return roundf(value / interval) * interval;
+}
+
+static int azaSnapInt(int value, int interval) {
+	assert(interval > 0);
+	if (value >= 0) {
+		return ((value + interval/2) / interval) * interval;
+	} else {
+		return ((value - interval/2) / interval) * interval;
+	}
+}
+
+// knobRect is the region on the screen that can be grabbed
+// value is the target value to be changed by dragging
+// inverted changes how the drag coordinates change value. When true, positive mouse movements (down, or right) result in negative changes in value.
+// dragRegion is how many logical pixels we have to drag (used to scale pixels to the range determined by valueMin and valueMax)
+// when vertical is true, we use the y component of the mouse drag
+// valueMin determines the lowest value representable in our drag region
+// valueMax determines the highest value representable in our drag region
+// when doClamp is true, the output value is clamped between valueMin and valueMax
+// preciseDiv is a scaling factor used during precise dragging (actual delta = delta * preciseDiv)
+// when doPrecise is true, holding either shift key enables precise dragging
+// snapInterval is the exact interval we snap to when snapping (modified by precise dragging)
+// when doSnap is true, holding either control key enables snapping
+// returns true if we're dragging, meaning the value may have updated
+static bool azaMouseDragFloat(azaRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
+	assert(valueMax > valueMin);
+	azaPoint mouseDelta = {0};
+	// We assume our value pointer is unique, so it works as an implicit id. Even if we had 2 knobs for the same value, this would probably still be well-behaved.
+	if (azaCaptureMouseDelta(knobRect, &mouseDelta, value)) {
+		static float dragStartValue = 0.0f;
+		if (azaMouseCaptureJustStarted()) {
+			dragStartValue = *value;
+		}
+		bool precise = doPrecise && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+		bool snap = doSnap && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL));
+		if (doSnap && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT) || IsKeyReleased(KEY_LEFT_SHIFT) || IsKeyReleased(KEY_RIGHT_SHIFT))) {
+			// Transition between precise and not precise, reset the offsets and values so the knob doesn't jump.
+			dragStartValue = *value;
+			azaMouseCaptureResetDelta();
+			mouseDelta = (azaPoint) {0};
+		}
+		int usefulDelta = vertical ? mouseDelta.y : mouseDelta.x;
+		float valueRange = valueMax - valueMin;
+		float actualDelta = (float)usefulDelta * valueRange / (float)dragRegion;
+		if (inverted) {
+			actualDelta = -actualDelta;
+		}
+		if (precise) {
+			actualDelta /= preciseDiv;
+			snapInterval /= preciseDiv;
+		}
+		*value = dragStartValue + actualDelta;
+		if (snap) {
+			*value = azaSnapFloat(*value, snapInterval);
+		}
+		if (doClamp) {
+			*value = azaClampf(*value, valueMin, valueMax);
+		}
+		return true;
+	}
+	return false;
+}
+
+// knobRect is the region on the screen that can be grabbed
+// value is the target value to be changed by dragging
+// inverted changes how the drag coordinates change value. When true, positive mouse movements (down, or right) result in negative changes in value.
+// dragRegion is how many logical pixels we have to drag (used to scale pixels to the range determined by valueMin and valueMax)
+// when vertical is true, we use the y component of the mouse drag
+// valueMin determines the lowest value representable in our drag region
+// valueMax determines the highest value representable in our drag region
+// when doClamp is true, the output value is clamped between valueMin and valueMax
+// preciseDiv is a scaling factor used during precise dragging (actual delta = delta * preciseDiv)
+// when doPrecise is true, holding either shift key enables precise dragging
+// snapInterval is the exact interval we snap to when snapping (modified by precise dragging)
+// when doSnap is true, holding either control key enables snapping
+// NOTE: snapping is done in linear space, since basically the only reason snapping exists at all is to make the number pretty
+// returns true if we're dragging, meaning the value may have updated
+static bool azaMouseDragFloatLog(azaRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
+	assert(valueMax > valueMin);
+	azaPoint mouseDelta = {0};
+	// We assume our value pointer is unique, so it works as an implicit id. Even if we had 2 knobs for the same value, this would probably still be well-behaved.
+	if (azaCaptureMouseDelta(knobRect, &mouseDelta, value)) {
+		static float dragStartValue = 0.0f;
+		float logValue = log10f(*value);
+		float logMin = log10f(valueMin);
+		float logMax = log10f(valueMax);
+		if (azaMouseCaptureJustStarted()) {
+			dragStartValue = logValue;
+		}
+		bool precise = doPrecise && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+		bool snap = doSnap && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL));
+		if (doSnap && (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT) || IsKeyReleased(KEY_LEFT_SHIFT) || IsKeyReleased(KEY_RIGHT_SHIFT))) {
+			// Transition between precise and not precise, reset the offsets and values so the knob doesn't jump.
+			dragStartValue = logValue;
+			azaMouseCaptureResetDelta();
+			mouseDelta = (azaPoint) {0};
+		}
+		int usefulDelta = vertical ? mouseDelta.y : mouseDelta.x;
+		float valueRange = logMax - logMin;
+		float actualDelta = (float)usefulDelta * valueRange / (float)dragRegion;
+		if (inverted) {
+			actualDelta = -actualDelta;
+		}
+		if (precise) {
+			actualDelta /= preciseDiv;
+			snapInterval /= preciseDiv;
+		}
+		logValue = dragStartValue + actualDelta;
+		*value = powf(10.0f, logValue);
+		if (snap) {
+			// Since snapping almost exclusively exists to make the number easier on the eyes, we need to snap in linear space, else it won't look good.
+			float snapMagnitude = powf(10.0f, floorf(logValue));
+			*value = azaSnapFloat(*value, snapInterval * snapMagnitude);
+		}
+		if (doClamp) {
+			*value = azaClampf(*value, valueMin, valueMax);
+		}
+		return true;
+	}
+	return false;
+}
+
+// knobRect is the region on the screen that can be grabbed
+// value is the target value to be changed by dragging
+// inverted changes how the drag coordinates change value. When true, positive mouse movements (down, or right) result in negative changes in value.
+// dragRegion is how many logical pixels we have to drag (used to scale pixels to the range determined by valueMin and valueMax)
+// when vertical is true, we use the y component of the mouse drag
+// valueMin determines the lowest value representable in our drag region
+// valueMax determines the highest value representable in our drag region
+// when doClamp is true, the output value is clamped between valueMin and valueMax
+// preciseDiv is a scaling factor used during precise dragging (actual delta = delta / preciseDiv)
+// when doPrecise is true, holding either shift key enables precise dragging
+// snapInterval is the exact interval we snap to when snapping (modified by precise dragging)
+// when doSnap is true, holding either control key enables snapping
+// returns true if we're dragging, meaning the value may have updated
+static bool azaMouseDragInt(azaRect knobRect, int *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+	assert(valueMax > valueMin);
+	azaPoint mouseDelta = {0};
+	// We assume our value pointer is unique, so it works as an implicit id. Even if we had 2 knobs for the same value, this would probably still be well-behaved.
+	if (azaCaptureMouseDelta(knobRect, &mouseDelta, value)) {
+		static int dragStartValue = 0;
+		if (azaMouseCaptureJustStarted()) {
+			dragStartValue = *value;
+		}
+		bool precise = doPrecise && (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT));
+		bool snap = doSnap && (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL));
+		if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT) || IsKeyReleased(KEY_LEFT_SHIFT) || IsKeyReleased(KEY_RIGHT_SHIFT)) {
+			// Transition between precise and not precise, reset the offsets and values so the knob doesn't jump.
+			dragStartValue = *value;
+			azaMouseCaptureResetDelta();
+			mouseDelta = (azaPoint) {0};
+		}
+		int usefulDelta = vertical ? mouseDelta.y : mouseDelta.x;
+		int valueRange = valueMax - valueMin;
+		int actualDelta = usefulDelta * valueRange / dragRegion;
+		if (inverted) {
+			actualDelta = -actualDelta;
+		}
+		if (precise) {
+			actualDelta /= preciseDiv;
+			snapInterval /= preciseDiv;
+		}
+		*value = dragStartValue + actualDelta;
+		if (snap) {
+			*value = azaSnapInt(*value, AZA_MAX(snapInterval, 1));
+		}
+		if (doClamp) {
+			*value = AZA_CLAMP(*value, valueMin, valueMax);
+		}
+		return true;
+	}
+	return false;
+}
+
 static int azaDBToYOffset(float db, float height, float dbRange) {
 	return (int)AZA_MIN(db * height / dbRange, height);
 }
@@ -596,12 +773,10 @@ static inline void azaDrawMeterBackground(azaRect bounds, int dbRange, int dbHea
 static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label, int dbRange, int dbHeadroom) {
 	bounds.w = faderDrawWidth;
 	bool mouseover = azaMouseInRect(bounds);
-	bool reset = false;
-	if (mouseover && azaDidDoubleClick(2)) {
-		reset = true;
+	if (mouseover && azaDidDoubleClick(0)) {
+		*gain = 0.0f;
 	}
 	bool precise = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-	bool snap = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 	azaRect meterBounds = bounds;
 	azaRectShrinkTop(&meterBounds, bounds.w - margin); // Remove mute rect
 	azaRect sliderBounds = meterBounds;
@@ -613,34 +788,20 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 		sliderBounds.w,
 		12
 	};
-	if (reset) {
-		*gain = 0.0f;
-	}
-	azaPoint mouseDelta = {0};
-	// We assume our gain pointer is unique, so it works as an implicit id. Even if we had 2 faders for the same gain, this would probably still be well-behaved.
-	if (azaCaptureMouseDelta(knobRect, &mouseDelta, gain)) {
-		static float dragStartValue = 0.0f;
-		if (azaMouseCaptureJustStarted()) {
-			dragStartValue = *gain;
-		}
-		if (IsKeyPressed(KEY_LEFT_SHIFT) || IsKeyPressed(KEY_RIGHT_SHIFT) || IsKeyReleased(KEY_LEFT_SHIFT) || IsKeyReleased(KEY_RIGHT_SHIFT)) {
-			dragStartValue = *gain;
-			azaMouseCaptureResetDelta();
-			mouseDelta.y = 0;
-		}
-		float actualDelta = (float)-mouseDelta.y * (float)dbRange / (float)sliderBounds.h;
-		if (precise) {
-			actualDelta *= 0.1f;
-		}
-		*gain = dragStartValue + actualDelta;
-		if (snap) {
-			if (precise) {
-				*gain = roundf(20.0f * *gain) / 20.0f;
-			} else {
-				*gain = roundf(2.0f * *gain) / 2.0f;
-			}
-		}
-		// *gain = azaClampf(*gain, (float)(-dbRange+dbHeadroom), (float)dbHeadroom);
+	if (azaMouseDragFloat(
+		/* knobRect: */ knobRect,
+		/* value: */ gain,
+		/* inverted: */ true,
+		/* dragRegion: */ sliderBounds.h,
+		/* vertical: */ true,
+		/* valueMin: */ (float)(dbHeadroom-dbRange),
+		/* valueMax: */ (float)dbHeadroom,
+		/* doClamp: */ false,
+		/* preciseDiv: */ 10.0f,
+		/* doPrecise: */ true,
+		/* snapInterval */ 0.5f,
+		/* doSnap: */ true
+	)) {
 		yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, sliderBounds.h, 0, dbRange);
 		knobRect.y = sliderBounds.y + yOffset - 6;
 		mouseover = true;
@@ -754,21 +915,14 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 	assert(max > min);
 	bounds.w = sliderDrawWidth;
 	bool mouseover = azaMouseInRect(bounds);
-	if (mouseover) {
-		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
-	}
 	azaDrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
-	azaRectShrinkMargin(&bounds, margin);
+	azaRect sliderBounds = bounds;
+	azaRectShrinkMargin(&sliderBounds, margin);
 	float logValue = logf(*value);
 	float logMin = logf(min);
 	float logMax = logf(max);
-	int yOffset = (int)((float)bounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
+	int yOffset = (int)((float)sliderBounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
 	if (mouseover) {
-		azaDrawRect(bounds, colorFaderHighlight);
-		if (!valueFormat) {
-			valueFormat = "%+.1f";
-		}
-		azaTooltipAdd(TextFormat(valueFormat, *value), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		if (delta > 0.0f) {
@@ -781,14 +935,47 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 		}
 		*value = azaClampf(*value, min, max);
 	}
-	PushScissor(bounds);
+	azaRect knobRect = {
+		sliderBounds.x,
+		sliderBounds.y + yOffset - 6,
+		sliderBounds.w,
+		12
+	};
+	if (azaMouseDragFloatLog(
+		/* knobRect: */ knobRect,
+		/* value: */ value,
+		/* inverted: */ step >= 0,
+		/* dragRegion: */ sliderBounds.h,
+		/* vertical: */ true,
+		/* valueMin: */ min,
+		/* valueMax: */ max,
+		/* doClamp: */ true,
+		/* preciseDiv: */ 10.0f,
+		/* doPrecise: */ true,
+		/* snapInterval */ azaAbsf(step),
+		/* doSnap: */ true
+	)) {
+		logValue = logf(*value);
+		yOffset = (int)((float)sliderBounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
+		knobRect.y = sliderBounds.y + yOffset - 6;
+		mouseover = true;
+	}
+	if (mouseover) {
+		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
+		azaDrawRect(sliderBounds, colorFaderHighlight);
+		if (!valueFormat) {
+			valueFormat = "%+.1f";
+		}
+		azaTooltipAdd(TextFormat(valueFormat, *value), sliderBounds.x + sliderBounds.w + margin, sliderBounds.y + yOffset - (textMargin + 5), false);
+	}
+	PushScissor(sliderBounds);
 	azaDrawRectGradientV((azaRect) {
-		bounds.x,
-		bounds.y + yOffset - 6,
-		bounds.w,
+		sliderBounds.x,
+		sliderBounds.y + yOffset - 6,
+		sliderBounds.w,
 		12
 	}, colorFaderKnobTop, colorFaderKnobBot);
-	azaDrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
+	azaDrawLine(sliderBounds.x, sliderBounds.y + yOffset, sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset, Fade(BLACK, 0.5));
 	PopScissor();
 	return sliderDrawWidth;
 }
@@ -802,18 +989,11 @@ static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max
 	assert(max > min);
 	bounds.w = sliderDrawWidth;
 	bool mouseover = azaMouseInRect(bounds);
-	if (mouseover) {
-		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
-	}
 	azaDrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
-	azaRectShrinkMargin(&bounds, margin);
-	int yOffset = (int)((float)bounds.h * (1.0f - (*value - min) / (max - min)));
+	azaRect sliderBounds = bounds;
+	azaRectShrinkMargin(&sliderBounds, margin);
+	int yOffset = (int)((float)sliderBounds.h * (1.0f - (*value - min) / (max - min)));
 	if (mouseover) {
-		azaDrawRect(bounds, colorFaderHighlight);
-		if (!valueFormat) {
-			valueFormat = "%+.1f";
-		}
-		azaTooltipAdd(TextFormat(valueFormat, *value), bounds.x + bounds.w + margin, bounds.y + yOffset - (textMargin + 5), false);
 		float delta = GetMouseWheelMoveV().y;
 		if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) delta /= 10.0f;
 		*value += delta*step;
@@ -822,14 +1002,41 @@ static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max
 		}
 		*value = azaClampf(*value, min, max);
 	}
-	PushScissor(bounds);
-	azaDrawRectGradientV((azaRect) {
-		bounds.x,
-		bounds.y + yOffset - 6,
-		bounds.w,
+	azaRect knobRect = {
+		sliderBounds.x,
+		sliderBounds.y + yOffset - 6,
+		sliderBounds.w,
 		12
-	}, colorFaderKnobTop, colorFaderKnobBot);
-	azaDrawLine(bounds.x, bounds.y + yOffset, bounds.x + bounds.w, bounds.y + yOffset, Fade(BLACK, 0.5));
+	};
+	if (azaMouseDragFloat(
+		/* knobRect: */ knobRect,
+		/* value: */ value,
+		/* inverted: */ step >= 0,
+		/* dragRegion: */ sliderBounds.h,
+		/* vertical: */ true,
+		/* valueMin: */ min,
+		/* valueMax: */ max,
+		/* doClamp: */ true,
+		/* preciseDiv: */ 10.0f,
+		/* doPrecise: */ true,
+		/* snapInterval */ azaAbsf(step),
+		/* doSnap: */ true
+	)) {
+		yOffset = (int)((float)sliderBounds.h * (1.0f - (*value - min) / (max - min)));
+		knobRect.y = sliderBounds.y + yOffset - 6;
+		mouseover = true;
+	}
+	if (mouseover) {
+		azaTooltipAdd(label, bounds.x, bounds.y - (10 * TextCountLines(label) + textMargin*2), false);
+		azaDrawRect(bounds, colorFaderHighlight);
+		if (!valueFormat) {
+			valueFormat = "%+.1f";
+		}
+		azaTooltipAdd(TextFormat(valueFormat, *value), sliderBounds.x + sliderBounds.w + margin, sliderBounds.y + yOffset - (textMargin + 5), false);
+	}
+	PushScissor(sliderBounds);
+	azaDrawRectGradientV(knobRect, colorFaderKnobTop, colorFaderKnobBot);
+	azaDrawLine(sliderBounds.x, sliderBounds.y + yOffset, sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset, Fade(BLACK, 0.5));
 	PopScissor();
 	return sliderDrawWidth;
 }
@@ -998,10 +1205,8 @@ static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int 
 	if (min == max) return;
 	int range = AZA_MAX(max - min, 1);
 	int offset = useableWidth * (*value - min) / range;
-	int direction = 1;
 	if (step < 0) {
 		offset = bounds.w - scrollbarWidth - offset;
-		direction = -1;
 	}
 	if (mouseover) {
 		int scroll = (int)GetMouseWheelMoveV().y;
@@ -1019,15 +1224,20 @@ static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int 
 		scrollbarWidth,
 		bounds.h,
 	};
-	azaPoint delta;
-	if (azaCaptureMouseDelta(knobRect, &delta, id)) {
-		static int dragStartValue = 0;
-		if (azaMouseCaptureJustStarted()) {
-			dragStartValue = *value;
-		}
-		int actualDelta = direction * (delta.x * range / useableWidth);
-		*value = dragStartValue + actualDelta;
-		*value = AZA_CLAMP(*value, min, max);
+	if (azaMouseDragInt(
+		/* knobRect: */ knobRect,
+		/* value: */ value,
+		/* inverted: */ step < 0,
+		/* dragRegion: */ useableWidth,
+		/* vertical: */ false,
+		/* valueMin: */ min,
+		/* valueMax: */ max,
+		/* doClamp: */ true,
+		/* preciseDiv: */ 10,
+		/* doPrecise: */ true,
+		/* snapInterval */ abs(step),
+		/* doSnap: */ true
+	)) {
 		offset = useableWidth * (*value - min) / range;
 		if (step < 0) {
 			offset = bounds.w - scrollbarWidth - offset;
@@ -2085,6 +2295,7 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 	);
 	isWindowOpen = true;
 	SetExitKey(-1); // Don't let raylib use the ESC key to close
+	lastClickTime = azaGetTimestamp(); // Make sure lastClickTime isn't 0 so we don't have massive deltas that overflow
 
 	while (true) {
 		if (!isWindowOpen) break;
