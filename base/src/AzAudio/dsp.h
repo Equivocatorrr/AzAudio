@@ -689,6 +689,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer);
 
 // Adds an instance of the sound
 // speed affects the rate of playback for this instance (pitch control where 1.0f is base speed)
+// negative speed values will play the sound in reverse
 // gainDB affects the volume for this instance
 // returns the sound id, used for interacting with this instance later
 uint32_t azaSamplerPlay(azaSampler *data, float speed, float gainDB);

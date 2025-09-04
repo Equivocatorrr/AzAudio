@@ -1622,11 +1622,13 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 				if (data->config.pingpong) {
 					if (!instance->reverse && startedBeforeLoopEnd && instance->frame >= loopEnd) {
 						// AZA_LOG_INFO("We're forwards going backwards (frame = %i, fraction= %f)!\n", instance->frame, instance->fraction);
-						instance->frame = loopEnd+loopEnd - instance->frame;
+						// - 1 because loopEnd is not considered a part of the range, and we definitely
+						instance->frame = loopEnd+loopEnd - instance->frame - 1;
 						instance->fraction = -instance->fraction;
 						instance->reverse = true;
 					} else if (instance->reverse && startedAfterLoopStart && instance->frame <= loopStart) {
 						// AZA_LOG_INFO("We're backwards going forwards (frame = %i, fraction= %f)!\n", instance->frame, instance->fraction);
+						// not - 1 because loopStart is considered a part of the range
 						instance->frame = loopStart+loopStart - instance->frame;
 						instance->fraction = -instance->fraction;
 						instance->reverse = false;
@@ -1635,7 +1637,7 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 					if (!instance->reverse && startedBeforeLoopEnd && instance->frame >= loopEnd) {
 						instance->frame -= loopRegionLength;
 					} else if (instance->reverse && startedAfterLoopStart && instance->frame <= loopStart) {
-						instance->frame += loopRegionLength;
+						instance->frame += loopRegionLength - 1;
 					}
 				}
 			}
@@ -1666,6 +1668,11 @@ uint32_t azaSamplerPlay(azaSampler *data, float speed, float gainDB) {
 	instance->id = id;
 	instance->frame = 0;
 	instance->fraction = 0.0f;
+	if (speed < 0.0f) {
+		instance->frame = data->config.buffer->frames-1;
+		instance->reverse = true;
+		speed = -speed;
+	}
 	azaADSRStart(&instance->envelope);
 	azaFollowerLinearJump(&instance->speed, speed);
 	azaFollowerLinearJump(&instance->volume, aza_db_to_ampf(gainDB));
