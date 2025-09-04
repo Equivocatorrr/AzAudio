@@ -778,7 +778,9 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 	}
 	bool precise = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 	azaRect meterBounds = bounds;
-	azaRectShrinkTop(&meterBounds, bounds.w - margin); // Remove mute rect
+	if (mute) {
+		azaRectShrinkTop(&meterBounds, bounds.w - margin); // Remove mute rect
+	}
 	azaRect sliderBounds = meterBounds;
 	azaRectShrinkMargin(&sliderBounds, margin);
 	int yOffset = azaDBToYOffsetClamped((float)dbHeadroom - *gain, sliderBounds.h, 0, dbRange);
