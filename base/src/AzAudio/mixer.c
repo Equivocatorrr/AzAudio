@@ -219,6 +219,14 @@ void azaMixerRemoveTrack(azaMixer *data, int32_t index) {
 	azaMutexUnlock(&data->mutex);
 }
 
+int azaMixerGetTrackSendCount(azaMixer *mixer, azaTrack *track) {
+	int count = (azaTrackGetReceive(track, &mixer->master) != NULL);
+	for (uint32_t i = 0; i < mixer->tracks.count; i++) {
+		if (azaTrackGetReceive(track, mixer->tracks.data[i])) count++;
+	}
+	return count;
+}
+
 // Modified depth-first search for directed graphs to determine whether a cycle exists.
 static int azaMixerCheckRoutingVisit(azaTrack *track) {
 	// Co-opt this search to reset whether track is processed

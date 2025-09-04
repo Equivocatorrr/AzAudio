@@ -114,6 +114,9 @@ void azaMixerDeinit(azaMixer *data);
 int azaMixerAddTrack(azaMixer *data, int32_t index, azaTrack **dst, azaChannelLayout channelLayout, bool connectToMaster);
 void azaMixerRemoveTrack(azaMixer *data, int32_t index);
 
+// Returns the total number of sends from the given track to other tracks in the mixer
+int azaMixerGetTrackSendCount(azaMixer *data, azaTrack *track);
+
 // Processes all the tracks to produce a result into the output track.
 // frames MUST be <= data->config.bufferFrames
 int azaMixerProcess(uint32_t frames, uint32_t samplerate, azaMixer *data);
