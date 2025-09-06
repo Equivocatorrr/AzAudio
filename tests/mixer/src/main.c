@@ -376,7 +376,8 @@ int main(int argumentCount, char** argumentValues) {
 
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)compressor);
 
-	azaTrackAppendDSP(&mixer.master, azaMakeDefaultMonitorSpectrum(2));
+	azaMonitorSpectrum *monitorSpectrum = (azaMonitorSpectrum*)azaMakeDefaultMonitorSpectrum(2);
+	azaTrackAppendDSP(&mixer.master, (azaDSP*)monitorSpectrum);
 
 	azaLookaheadLimiter *limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
 		.gainInput  =  0.0f,
@@ -418,6 +419,8 @@ int main(int argumentCount, char** argumentValues) {
 	azaMixerGUIClose();
 	azaMixerStreamClose(&mixer, false);
 
+	FreeSynth((Synth*)dspSynth);
+
 	free(objects);
 	azaFreeSampler(samplerCat);
 	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
@@ -425,6 +428,13 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	free(spatializeCat);
 	azaBufferDeinit(&bufferCat);
+
+	azaFreeFilter(reverbHighpass);
+	azaFreeReverb(reverb);
+
+	azaFreeCompressor(compressor);
+	azaFreeMonitorSpectrum(monitorSpectrum);
+	azaFreeLookaheadLimiter(limiter);
 
 	azaDeinit();
 	return 0;

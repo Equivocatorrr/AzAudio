@@ -1468,10 +1468,10 @@ static void azaContextMenuTrackFX() {
 	if (doRemovePlugin) {
 		if (azaDrawContextMenuButton(1, TextFormat("Remove %s", azaGetDSPName(contextMenuTrackFXDSP)))) {
 			azaTrackRemoveDSP(azaContextMenuTrackFromIndex(), contextMenuTrackFXDSP);
+			if (selectedDSP == contextMenuTrackFXDSP) {
+				selectedDSP = NULL;
+			}
 			if (azaDSPMetadataGetOwned(contextMenuTrackFXDSP->metadata)) {
-				if (selectedDSP == contextMenuTrackFXDSP) {
-					selectedDSP = NULL;
-				}
 				azaFreeDSP(contextMenuTrackFXDSP);
 				contextMenuTrackFXDSP = NULL;
 			}
@@ -2411,4 +2411,11 @@ bool azaMixerGUIIsOpen() {
 
 bool azaMixerGUIHasDSPOpen(azaDSP *dsp) {
 	return dsp == selectedDSP;
+}
+
+void azaMixerGUIUnselectDSP(azaDSP *dsp) {
+	// TODO: This is still hacky. Probably invert the responsibility such that DSP knows when it's selected instead. This would also allow us to have multiple selected at once, which we almost definitely want.
+	if (dsp == selectedDSP) {
+		selectedDSP = NULL;
+	}
 }

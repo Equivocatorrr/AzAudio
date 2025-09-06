@@ -195,8 +195,8 @@ typedef struct azaDSP {
 	azaDSPKind kind;
 	/* struct {
 		uint32_t structSize : 30;
-		// This bit will be set if we were created with any of the azaMake... functions. As such, removal from a dsp chain will imply calling azaFree... on us as well.
 		bool bypass : 1;
+		// This bit will be set if we were created dynamically with the registry, such as through the Mixer GUI. As such, removal of this plugin through the Mixer GUI will call the azaFree function from the registry only if it was also added through the registry.
 		bool owned : 1;
 	} metadata;
 	We do manual bit packing because god forbid our language spec gives us any guarantees or control over anything. */

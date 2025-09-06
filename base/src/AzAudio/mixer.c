@@ -18,6 +18,18 @@ int azaTrackInit(azaTrack *data, uint32_t bufferFrames, azaChannelLayout bufferC
 
 void azaTrackDeinit(azaTrack *data) {
 	azaBufferDeinit(&data->buffer);
+	azaDSP *dsp = data->dsp;
+	while (dsp) {
+		azaDSP *nextDSP = dsp->pNext;
+		if (azaDSPMetadataGetOwned(dsp->metadata)) {
+			if (!azaFreeDSP(dsp)) {
+				AZA_LOG_ERR("Failed to free \"%s\" because a free function doesn't exist in the registry.\n", azaGetDSPName(dsp));
+				dsp->pNext = NULL;
+			}
+		}
+		dsp = nextDSP;
+	}
+	data->dsp = NULL;
 	for (uint32_t i = 0; i < data->receives.count; i++) {
 		azaTrackRouteDeinit(&data->receives.data[i]);
 	}

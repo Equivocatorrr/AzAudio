@@ -129,6 +129,8 @@ void azaMixerGUIOpen(azaMixer *mixer, bool onTop);
 void azaMixerGUIClose();
 bool azaMixerGUIIsOpen();
 bool azaMixerGUIHasDSPOpen(azaDSP *dsp);
+// If the dsp is selected, this unselects it, otherwise does nothing.
+void azaMixerGUIUnselectDSP(azaDSP *dsp);
 
 // Opens an output stream to process this mixer and initializes it such that the tracks have enough frames.
 // config.bufferFrames is set to the max of the value passed in or the number required for the output stream. As such you can leave this at zero.

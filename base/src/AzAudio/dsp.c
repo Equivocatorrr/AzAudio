@@ -115,6 +115,7 @@ bool azaFreeDSP(azaDSP *dsp) {
 	for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
 		if (strncmp(azaDSPRegistry.data[i].name, name, sizeof(azaDSPRegistry.data[0].name)) == 0) {
 			azaDSPRegistry.data[i].fp_freeDSP(dsp);
+			azaMixerGUIUnselectDSP(dsp);
 			return true;
 		}
 	}
@@ -630,7 +631,6 @@ azaRMS* azaMakeRMS(azaRMSConfig config, uint8_t channelCapInline) {
 	azaRMS *result = aza_calloc(1, size);
 	if (result) {
 		azaRMSInit(result, size, config, channelCapInline);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -758,7 +758,6 @@ azaCubicLimiter* azaMakeCubicLimiter() {
 	azaCubicLimiter *result = aza_calloc(1, size);
 	if (result) {
 		azaCubicLimiterInit(result, size);
-		azaDSPMetadataSetOwned(&result->metadata);
 	}
 	return result;
 }
@@ -823,7 +822,6 @@ azaLookaheadLimiter* azaMakeLookaheadLimiter(azaLookaheadLimiterConfig config, u
 	azaLookaheadLimiter *result = aza_calloc(1, size);
 	if (result) {
 		azaLookaheadLimiterInit(result, size, config, channelCapInline);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -947,7 +945,6 @@ azaFilter* azaMakeFilter(azaFilterConfig config, uint8_t channelCapInline) {
 	azaFilter *result = aza_calloc(1, size);
 	if (result) {
 		azaFilterInit(result, size, config, channelCapInline);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -1071,7 +1068,6 @@ azaCompressor* azaMakeCompressor(azaCompressorConfig config, uint8_t channelCapI
 	azaCompressor *result = aza_calloc(1, size);
 	if (result) {
 		azaCompressorInit(result, size, config, channelCapInline);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -1185,7 +1181,6 @@ azaDelay* azaMakeDelay(azaDelayConfig config, uint8_t channelCapInline) {
 	azaDelay *result = aza_calloc(1, size);
 	if (result) {
 		azaDelayInit(result, size, config, channelCapInline);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -1420,7 +1415,6 @@ azaReverb* azaMakeReverb(azaReverbConfig config, uint8_t channelCapInline) {
 	azaReverb *result = aza_calloc(1, size);
 	if (result) {
 		azaReverbInit(result, size, config, channelCapInline);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -1517,7 +1511,6 @@ azaSampler* azaMakeSampler(azaSamplerConfig config) {
 	azaSampler *result = aza_calloc(1, size);
 	if (result) {
 		azaSamplerInit(result, size, config);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -1741,7 +1734,6 @@ azaGate* azaMakeGate(azaGateConfig config) {
 	azaGate *result = aza_calloc(1, size);
 	if (result) {
 		azaGateInit(result, size, config);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -1930,7 +1922,6 @@ azaDelayDynamic* azaMakeDelayDynamic(azaDelayDynamicConfig config, uint8_t chann
 			aza_free(result);
 			return NULL;
 		}
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -2318,7 +2309,6 @@ azaSpatialize* azaMakeSpatialize(azaSpatializeConfig config, uint8_t channelCapI
 	azaSpatialize *result = aza_calloc(1, size);
 	if (result) {
 		azaSpatializeInit(result, size, config, channelCapInline);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
@@ -2551,7 +2541,6 @@ azaMonitorSpectrum* azaMakeMonitorSpectrum(azaMonitorSpectrumConfig config) {
 	azaMonitorSpectrum *result = aza_calloc(1, sizeof(azaMonitorSpectrum));
 	if (result) {
 		azaMonitorSpectrumInit(result, config);
-		azaDSPMetadataSetOwned(&result->header.metadata);
 	}
 	return result;
 }
