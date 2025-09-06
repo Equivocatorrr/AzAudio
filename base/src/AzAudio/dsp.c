@@ -627,6 +627,7 @@ void azaRMSDeinit(azaRMS *data) {
 }
 
 azaRMS* azaMakeRMS(azaRMSConfig config, uint8_t channelCapInline) {
+	// return NULL; // Fake error to test Mixer GUI error reporting
 	uint32_t size = azaRMSGetAllocSize(config, channelCapInline);
 	azaRMS *result = aza_calloc(1, size);
 	if (result) {

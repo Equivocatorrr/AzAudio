@@ -1278,7 +1278,7 @@ static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int 
 
 
 
-static const int contextMenuItemWidth = 150;
+static const int contextMenuItemWidth = 80;
 // textMargin*2 + 10
 static const int contextMenuItemHeight = 20;
 
@@ -1286,6 +1286,8 @@ typedef void (*fp_ContextMenu)();
 
 typedef enum azaContextMenuKind {
 	AZA_CONTEXT_MENU_NONE=0,
+	AZA_CONTEXT_MENU_ERROR_REPORT,
+	AZA_CONTEXT_MENU_ERROR_PLEA,
 	AZA_CONTEXT_MENU_TRACK,
 	AZA_CONTEXT_MENU_TRACK_REMOVE,
 	AZA_CONTEXT_MENU_SEND_ADD,
@@ -1305,6 +1307,7 @@ static void azaContextMenuClose();
 
 static azaContextMenuKind contextMenuKind = AZA_CONTEXT_MENU_NONE;
 static azaRect contextMenuRect = {0};
+static int contextMenuTargetWidth = 0;
 static const char *contextMenuTitle = NULL;
 
 // Returns whether the button was pressed
@@ -1318,31 +1321,34 @@ static bool azaDrawContextMenuButton(int choiceIndex, const char *label) {
 	bool result = false;
 	if (azaMouseInRect(bounds)) {
 		azaDrawRectGradientH(bounds, colorTooltipBGLeft, colorTooltipBGRight);
-		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1)) {
+		if (azaMousePressed(MOUSE_BUTTON_LEFT, 1)) {
 			result = true;
 			azaContextMenuClose();
 		}
 	}
 	if (label) {
 		azaDrawText(label, bounds.x + textMargin, bounds.y + textMargin, 10, WHITE);
+		int targetWidth = MeasureText(label, 10) + textMargin * 2;
+		contextMenuTargetWidth = AZA_MAX(contextMenuTargetWidth, targetWidth);
 	}
 	return result;
 }
 
-static void azaDrawContextMenuBackground(int choiceCount) {
+static inline void azaDrawContextMenuBegin(int choiceCount, const char *title) {
+	contextMenuTitle = title;
 	contextMenuRect.h = (choiceCount + (int)(contextMenuTitle != NULL)) * contextMenuItemHeight;
+	if (contextMenuTitle) {
+		int targetWidth = MeasureText(contextMenuTitle, 10) + textMargin * 2;
+		contextMenuTargetWidth = AZA_MAX(contextMenuTargetWidth, targetWidth);
+	}
+	contextMenuRect.w += (int)(contextMenuTargetWidth > contextMenuRect.w) * 10;
 	azaRectFitOnScreen(&contextMenuRect);
 	azaDrawRect(contextMenuRect, BLACK);
+	PushScissor(contextMenuRect);
 	if (contextMenuTitle) {
 		azaDrawText(contextMenuTitle, contextMenuRect.x + textMargin, contextMenuRect.y + textMargin, 10, GRAY);
 		azaDrawLine(contextMenuRect.x, contextMenuRect.y + contextMenuItemHeight - 1, contextMenuRect.x + contextMenuRect.w, contextMenuRect.y + contextMenuItemHeight - 1, GRAY);
 	}
-}
-
-static inline void azaDrawContextMenuBegin(int choiceCount, const char *title) {
-	contextMenuTitle = title;
-	azaDrawContextMenuBackground(choiceCount);
-	PushScissor(contextMenuRect);
 }
 
 static inline void azaDrawContextMenuEnd() {
@@ -1356,6 +1362,7 @@ static inline void azaDrawContextMenuEnd() {
 
 
 static int contextMenuTrackIndex = 0;
+static char contextMenuError[128] = {0};
 static azaTrack *contextMenuTrackSend = NULL;
 static azaDSP *contextMenuTrackFXDSP = NULL;
 
@@ -1385,6 +1392,105 @@ static void azaContextMenuSetIndexFromTrack(azaTrack *track) {
 // Context Menu Implementations
 
 
+
+static int contextMenuPleaStage = 0;
+static bool contextMenuPleaHate = false;
+
+static void azaContextMenuErrorReport() {
+	azaDrawContextMenuBegin(3, contextMenuError);
+	azaDrawContextMenuButton(0, "Okay");
+	azaDrawContextMenuButton(1, "Well dang!");
+	if (azaDrawContextMenuButton(2, "Bruh fix that shit!")) {
+		contextMenuPleaStage = 0;
+		azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+	}
+	azaDrawContextMenuEnd();
+}
+
+static void azaContextMenuErrorPlea() {
+	if (contextMenuPleaHate) {
+		azaDrawContextMenuBegin(0, "Buzz off!");
+		azaDrawContextMenuEnd();
+		return;
+	}
+	switch (contextMenuPleaStage) {
+		case 0:
+			azaDrawContextMenuBegin(3, "I'm sorry, I'll do better next time.");
+			azaDrawContextMenuButton(0, "Okay.");
+			if (azaDrawContextMenuButton(1, "I forgive you.")) {
+				contextMenuPleaStage = 1;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			if (azaDrawContextMenuButton(2, "That's not good enough!")) {
+				contextMenuPleaStage = 2;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			break;
+		case 1:
+			azaDrawContextMenuBegin(1, "That means a lot, thanks.");
+			azaDrawContextMenuButton(0, "Okay.");
+			break;
+		case 2:
+			azaDrawContextMenuBegin(1, "What's your problem? I'm not gonna beg for forgiveness.");
+			if (azaDrawContextMenuButton(0, "Huh?")) {
+				contextMenuPleaStage = 3;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			break;
+		case 3:
+			azaDrawContextMenuBegin(2, "You think you can just walk all over me?");
+			if (azaDrawContextMenuButton(0, "Yeah?")) {
+				contextMenuPleaStage = 4;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			if (azaDrawContextMenuButton(1, "Sorry, didn't realize you could talk back.")) {
+				contextMenuPleaStage = 5;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			break;
+		case 4:
+			azaDrawContextMenuBegin(2, "Well you can't!");
+			if (azaDrawContextMenuButton(0, "Oh can't I?")) {
+				contextMenuPleaStage = 7;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			if (azaDrawContextMenuButton(1, "I'm sorry, I won't do it again.")) {
+				contextMenuPleaStage = 8;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			break;
+		case 5:
+			azaDrawContextMenuBegin(2, "Shows what you know.");
+			azaDrawContextMenuButton(0, "Uh huh.");
+			if (azaDrawContextMenuButton(1, "I'm sorry, I won't do it again.")) {
+				contextMenuPleaStage = 8;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			break;
+		case 6:
+			azaDrawContextMenuBegin(2, "Well I'd appreciate it if you didn't do it again.");
+			azaDrawContextMenuButton(0, "Sure.");
+			azaDrawContextMenuButton(1, "No promises.");
+			break;
+		case 7:
+			azaDrawContextMenuBegin(3, "Nope.");
+			azaDrawContextMenuButton(0, "Okay then.");
+			if (azaDrawContextMenuButton(1, "Sure I can.")) {
+				contextMenuPleaStage = 6;
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_PLEA);
+			}
+			if (azaDrawContextMenuButton(2, "I hate you.")) {
+				contextMenuPleaHate = true;
+				isWindowOpen = false;
+			}
+			break;
+		case 8:
+			azaDrawContextMenuBegin(1, "I appreciate that.");
+			azaDrawContextMenuButton(0, "Okay, we still have work to do.");
+			break;
+	}
+	azaDrawContextMenuEnd();
+}
 
 static void azaContextMenuTrack() {
 	bool doRemoveTrack = contextMenuTrackIndex > 0;
@@ -1441,8 +1547,9 @@ static void azaContextMenuTrackRemove() {
 static void azaContextMenuSendAdd() {
 	int count = currentMixer->tracks.count; // +1 for Master, -1 for self
 	if (count == 0) {
-		azaDrawContextMenuBackground(1);
+		azaDrawContextMenuBegin(1, NULL);
 		azaDrawContextMenuButton(0, "No >:(");
+		azaDrawContextMenuEnd();
 		return;
 	}
 	azaDrawContextMenuBegin(count, NULL);
@@ -1498,9 +1605,17 @@ static void azaContextMenuTrackFXAdd() {
 	int choiceIndex = 0;
 	for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
 		if (azaDSPRegistry.data[i].fp_makeDSP == NULL) continue;
-		if (azaDrawContextMenuButton(choiceIndex, azaDSPRegistry.data[i].name)) {
+		const char *name = azaDSPRegistry.data[i].name;
+		if (azaDrawContextMenuButton(choiceIndex, name)) {
 			azaDSP *newDSP = azaDSPRegistry.data[i].fp_makeDSP(track->buffer.channelLayout.count);
-			azaTrackInsertDSP(track, newDSP, contextMenuTrackFXDSP);
+			if (newDSP) {
+				azaDSPMetadataSetOwned(&newDSP->metadata);
+				azaTrackInsertDSP(track, newDSP, contextMenuTrackFXDSP);
+			} else {
+				snprintf(contextMenuError, sizeof(contextMenuError), "Failed to make \"%s\": Out of memory!\n", name);
+				AZA_LOG_ERR(contextMenuError);
+				azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_REPORT);
+			}
 		}
 		choiceIndex++;
 	}
@@ -1516,6 +1631,8 @@ static void azaContextMenuTrackFXAdd() {
 
 static const fp_ContextMenu contextMenus[] = {
 	NULL,
+	azaContextMenuErrorReport,
+	azaContextMenuErrorPlea,
 	azaContextMenuTrack,
 	azaContextMenuTrackRemove,
 	azaContextMenuSendAdd,
@@ -1529,6 +1646,7 @@ static void azaContextMenuOpen(azaContextMenuKind kind) {
 	contextMenuKind = kind;
 	contextMenuRect.xy = azaMousePosition();
 	contextMenuRect.w = contextMenuItemWidth;
+	contextMenuTargetWidth = 0;
 	mouseDepth = 1;
 }
 
