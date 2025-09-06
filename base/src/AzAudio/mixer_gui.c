@@ -413,20 +413,24 @@ static bool azaMouseInRect(azaRect rect) {
 	return azaMouseInScissor() && azaPointInRect(rect, azaMousePosition());
 }
 
-static bool azaMouseButtonPressed(int button, int depth) {
+static bool azaMouseInRectDepth(azaRect rect, int depth) {
+	return depth >= mouseDepth && azaMouseInRect(rect);
+}
+
+static bool azaMousePressed(int button, int depth) {
 	return (depth >= mouseDepth && azaMouseInScissor() && IsMouseButtonPressed(button));
 }
 
-static bool azaMouseButtonDown(int button, int depth) {
+static bool azaMouseDown(int button, int depth) {
 	return (depth >= mouseDepth && azaMouseInScissor() && IsMouseButtonDown(button));
 }
 
 static bool azaMousePressedInRect(int button, int depth, azaRect rect) {
-	return azaMouseButtonPressed(button, depth) && azaMouseInRect(rect);
+	return azaMousePressed(button, depth) && azaPointInRect(rect, azaMousePosition());
 }
 
 static bool azaDidDoubleClick(int depth) {
-	if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, depth)) {
+	if (azaMousePressed(MOUSE_BUTTON_LEFT, depth)) {
 		int64_t delta = azaGetTimestamp() - lastClickTime;
 		int64_t delta_ns = azaGetTimestampDeltaNanoseconds(delta);
 		if (delta_ns < 250 * 1000000) return true;
@@ -482,12 +486,13 @@ static bool azaCaptureMouseDelta(azaRect bounds, azaPoint *out_delta, void *id) 
 	*out_delta = (azaPoint) {0};
 
 	if (mouseDragID == NULL) {
-		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) && azaPointInRect(bounds, mouse)) {
+		if (azaMousePressedInRect(MOUSE_BUTTON_LEFT, 0, bounds)) {
 			azaMouseCaptureStart(id);
 			return true;
 		}
 	} else if (mouseDragID == id) {
-		if (!azaMouseButtonDown(MOUSE_BUTTON_LEFT, 2)) {
+		// Don't check depth or scissors, because drags persist outside of their starting bounds
+		if (!IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
 			azaMouseCaptureEnd();
 			return false;
 		}
@@ -500,7 +505,7 @@ static bool azaCaptureMouseDelta(azaRect bounds, azaPoint *out_delta, void *id) 
 
 // Meant for use when azaCaptureMouse___ returns true to know when a drag was just initiated.
 static bool azaMouseCaptureJustStarted() {
-	return azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 2);
+	return azaMousePressed(MOUSE_BUTTON_LEFT, 2);
 }
 
 
@@ -788,7 +793,7 @@ static inline void azaDrawMeterBackground(azaRect bounds, int dbRange, int dbHea
 // returns used width
 static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *label, int dbRange, int dbHeadroom) {
 	bounds.w = faderDrawWidth;
-	bool mouseover = azaMouseInRect(bounds);
+	bool mouseover = azaMouseInRectDepth(bounds, 0);
 	if (mouseover && azaDidDoubleClick(0)) {
 		*gain = 0.0f;
 	}
@@ -832,9 +837,9 @@ static int azaDrawFader(azaRect bounds, float *gain, bool *mute, const char *lab
 		muteRect.h = muteRect.w;
 		azaDrawRect(muteRect, colorMeterBGTop);
 		azaRectShrinkMargin(&muteRect, margin);
-		if (azaMouseInRect(muteRect)) {
+		if (azaMouseInRectDepth(muteRect, 0)) {
 			azaTooltipAdd("Mute", muteRect.x + muteRect.w, muteRect.y, false);
-			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
+			if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
 				*mute = !*mute;
 			}
 		}
@@ -932,7 +937,7 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 	assert(min > 0.0f);
 	assert(max > min);
 	bounds.w = sliderDrawWidth;
-	bool mouseover = azaMouseInRect(bounds);
+	bool mouseover = azaMouseInRectDepth(bounds, 0);
 	azaDrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
 	azaRect sliderBounds = bounds;
 	azaRectShrinkMargin(&sliderBounds, margin);
@@ -1006,7 +1011,7 @@ static int azaDrawSliderFloatLog(azaRect bounds, float *value, float min, float 
 static int azaDrawSliderFloat(azaRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat) {
 	assert(max > min);
 	bounds.w = sliderDrawWidth;
-	bool mouseover = azaMouseInRect(bounds);
+	bool mouseover = azaMouseInRectDepth(bounds, 0);
 	azaDrawRectGradientV(bounds, colorSliderBGTop, colorSliderBGBot);
 	azaRect sliderBounds = bounds;
 	azaRectShrinkMargin(&sliderBounds, margin);
@@ -1087,7 +1092,7 @@ static azaRect textboxBounds;
 
 // If textCapacity is specified, this textbox will be editable.
 static void azaDrawTextBox(azaRect bounds, char *text, uint32_t textCapacity) {
-	bool mouseover = azaMouseInRect(bounds);
+	bool mouseover = azaMouseInRectDepth(bounds, 0);
 	uint32_t textLen = (uint32_t)strlen(text);
 	if (textCapacity && mouseover && azaDidDoubleClick(0)) {
 		textboxTextBeingEdited = text;
@@ -1096,7 +1101,7 @@ static void azaDrawTextBox(azaRect bounds, char *text, uint32_t textCapacity) {
 	}
 	if (textboxTextBeingEdited == text) {
 		if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)
-		|| (!mouseover && azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0))) {
+		|| (!mouseover && azaMousePressed(MOUSE_BUTTON_LEFT, 0))) {
 			textboxTextBeingEdited = NULL;
 		}
 	}
@@ -1215,7 +1220,7 @@ static void azaDrawTextboxBeingEdited() {
 // needs an id for mouse capture
 static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int max, int step, void *id) {
 	assert(max >= min);
-	bool mouseover = azaMouseInRect(bounds);
+	bool mouseover = azaMouseInRectDepth(bounds, 0);
 	int scrollbarWidth = bounds.w / 4;
 	int useableWidth = bounds.w - scrollbarWidth;
 	int mouseX = (int)azaMousePosition().x - bounds.x;
@@ -1228,7 +1233,7 @@ static void azaDrawScrollbarHorizontal(azaRect bounds, int *value, int min, int 
 	}
 	if (mouseover) {
 		int scroll = (int)GetMouseWheelMoveV().y;
-		int click = (int)azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) * ((int)(mouseX >= offset + scrollbarWidth) - (int)(mouseX < offset));
+		int click = (int)azaMousePressed(MOUSE_BUTTON_LEFT, 0) * ((int)(mouseX >= offset + scrollbarWidth) - (int)(mouseX < offset));
 		*value += step * (scroll + click);
 		*value = AZA_CLAMP(*value, min, max);
 		offset = useableWidth * (*value - min) / range;
@@ -1534,7 +1539,7 @@ static void azaContextMenuClose() {
 
 static void azaDrawContextMenu() {
 	if (contextMenuKind == AZA_CONTEXT_MENU_NONE) return;
-	if (IsKeyPressed(KEY_ESCAPE) || (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 1) && !azaMouseInRect(contextMenuRect))) {
+	if (IsKeyPressed(KEY_ESCAPE) || (azaMousePressed(MOUSE_BUTTON_LEFT, 1) && !azaMouseInRect(contextMenuRect))) {
 		azaContextMenuClose();
 		return;
 	}
@@ -1575,16 +1580,16 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 	azaDSP *mouseoverDSP = NULL;
 	azaDSP *dsp = track->dsp;
 	while (dsp) {
-		bool mouseover = azaMouseInRect(pluginRect);
+		bool mouseover = azaMouseInRectDepth(pluginRect, 0);
 		if (mouseover) {
 			azaDrawRectGradientV(pluginRect, colorPluginBorderSelected, colorPluginBorder);
-			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
+			if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
 				selectedDSP = dsp;
 			}
 			mouseoverDSP = dsp;
-		} else if (azaMouseInRect(muteRect)) {
+		} else if (azaMouseInRectDepth(muteRect, 0)) {
 			azaTooltipAdd("Bypass", muteRect.x + muteRect.w, muteRect.y, false);
-			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
+			if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
 				azaDSPMetadataToggleBypass(&dsp->metadata);
 			}
 		}
@@ -1599,7 +1604,7 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 		pluginRect.y += pluginRect.h + margin;
 		muteRect.y += pluginRect.h + margin;
 	}
-	if (azaMouseInRect(bounds)) {
+	if (azaMouseInRectDepth(bounds, 0)) {
 		bool trackFXCanScrollDown = (pluginRect.y + pluginRect.h > bounds.y + bounds.h);
 		int scroll = (int)GetMouseWheelMoveV().y * 8;
 		if (!trackFXCanScrollDown && scroll < 0) scroll = 0;
@@ -1767,7 +1772,7 @@ static void azaDrawLookaheadLimiter(azaLookaheadLimiter *data, azaRect bounds) {
 		bounds.h,
 	};
 	azaRectShrinkLeft(&bounds, attenuationRect.w + margin);
-	bool attenuationMouseover = azaMouseInRect(attenuationRect);
+	bool attenuationMouseover = azaMouseInRectDepth(attenuationRect, 0);
 	if (attenuationMouseover) {
 		azaTooltipAdd("Attenuation", attenuationRect.x, attenuationRect.y - (textMargin*2 + 10), false);
 	}
@@ -1817,14 +1822,14 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 	{ // cutoff
 		int vMove = (int)GetMouseWheelMoveV().y;
 		uint32_t poles = AZA_MIN(data->config.poles+1, AZAUDIO_FILTER_MAX_POLES);
-		bool highlighted = azaMouseInRect(kindRect);
+		bool highlighted = azaMouseInRectDepth(kindRect, 0);
 		if (highlighted) {
-			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+			if (azaMousePressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
 				if (data->config.poles < AZAUDIO_FILTER_MAX_POLES-1) {
 					data->config.poles++;
 				}
 			}
-			if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+			if (azaMousePressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
 				if (data->config.poles > 0) {
 					data->config.poles--;
 				}
@@ -1860,7 +1865,7 @@ static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
 		bounds.h,
 	};
 	azaRectShrinkLeft(&bounds, attenuationRect.w + margin);
-	bool attenuationMouseover = azaMouseInRect(attenuationRect);
+	bool attenuationMouseover = azaMouseInRectDepth(attenuationRect, 0);
 	if (attenuationMouseover) {
 		azaTooltipAdd("Attenuation", attenuationRect.x, attenuationRect.y - (textMargin*2 + 10), false);
 	}
@@ -1988,10 +1993,10 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 	// Mode
 
 	Color colorWindowControlRect = colorMonitorSpectrumWindowControl;
-	bool hover = azaMouseInRect(controlRect);
+	bool hover = azaMouseInRectDepth(controlRect, 0);
 	if (hover) {
 		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
-		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0)) {
+		if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
 			data->config.mode++;
 			if (data->config.mode >= AZA_MONITOR_SPECTRUM_MODE_COUNT) {
 				data->config.mode = 0;
@@ -2034,15 +2039,15 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 
 	controlRect.y += controlRect.h + margin*2;
 	colorWindowControlRect = colorMonitorSpectrumWindowControl;
-	hover = azaMouseInRect(controlRect);
+	hover = azaMouseInRectDepth(controlRect, 0);
 	if (hover) {
 		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
-		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+		if (azaMousePressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
 			if (data->config.window < monitorSpectrumMaxWindow) {
 				data->config.window <<= 1;
 			}
 		}
-		if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+		if (azaMousePressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
 			if (data->config.window > monitorSpectrumMinWindow) {
 				data->config.window >>= 1;
 			}
@@ -2060,15 +2065,15 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 
 	controlRect.y += controlRect.h + margin*2;
 	colorWindowControlRect = colorMonitorSpectrumWindowControl;
-	hover = azaMouseInRect(controlRect);
+	hover = azaMouseInRectDepth(controlRect, 0);
 	if (hover) {
 		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
-		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+		if (azaMousePressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
 			if (data->config.smoothing < monitorSpectrumMaxSmoothing) {
 				data->config.smoothing += 1;
 			}
 		}
-		if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+		if (azaMousePressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
 			if (data->config.smoothing > monitorSpectrumMinSmoothing) {
 				data->config.smoothing -= 1;
 			}
@@ -2082,10 +2087,10 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 
 	controlRect.y += controlRect.h + margin*2;
 	colorWindowControlRect = colorMonitorSpectrumWindowControl;
-	hover = azaMouseInRect(controlRect);
+	hover = azaMouseInRectDepth(controlRect, 0);
 	if (hover) {
 		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
-		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+		if (azaMousePressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
 			if (data->config.ceiling < monitorSpectrumMaxDynamicRange) {
 				if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
 					data->config.ceiling += 1;
@@ -2094,7 +2099,7 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 				}
 			}
 		}
-		if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+		if (azaMousePressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
 			if (data->config.ceiling > data->config.floor+12) {
 				if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
 					data->config.ceiling -= 1;
@@ -2112,10 +2117,10 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 
 	controlRect.y += controlRect.h + margin*2;
 	colorWindowControlRect = colorMonitorSpectrumWindowControl;
-	hover = azaMouseInRect(controlRect);
+	hover = azaMouseInRectDepth(controlRect, 0);
 	if (hover) {
 		colorWindowControlRect = colorMonitorSpectrumWindowControlHighlight;
-		if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
+		if (azaMousePressed(MOUSE_BUTTON_LEFT, 0) || vMove > 0) {
 			if (data->config.floor < data->config.ceiling-12) {
 				if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
 					data->config.floor += 1;
@@ -2124,7 +2129,7 @@ static void azaDrawMonitorSpectrum(azaMonitorSpectrum *data, azaRect bounds) {
 				}
 			}
 		}
-		if (azaMouseButtonPressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
+		if (azaMousePressed(MOUSE_BUTTON_RIGHT, 0) || vMove < 0) {
 			if (data->config.floor > monitorSpectrumMinDynamicRange) {
 				if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
 					data->config.floor -= 1;
@@ -2372,7 +2377,7 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 			azaDrawTextboxBeingEdited();
 			azaDrawContextMenu();
 			azaDrawTooltips();
-			if (azaMouseButtonPressed(MOUSE_BUTTON_LEFT, 100)) {
+			if (azaMousePressed(MOUSE_BUTTON_LEFT, 100)) {
 				lastClickTime = azaGetTimestamp();
 			}
 		mousePrev = azaMousePosition();
