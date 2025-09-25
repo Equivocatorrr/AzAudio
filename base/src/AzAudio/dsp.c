@@ -74,7 +74,7 @@ const char *azaFilterKindString[] = {
 };
 static_assert(sizeof(azaFilterKindString) / sizeof(const char*) == AZA_FILTER_KIND_COUNT, "Pls update azaFilterKindString");
 
-azaKernel azaKernelDefaultLanczos;
+azaKernel azaKernelDefaultLanczos[AZA_KERNEL_DEFAULT_LANCZOS_COUNT] = {0};
 
 azaWorld azaWorldDefault;
 
@@ -1495,6 +1495,10 @@ bypassed:
 
 
 
+// 13 plays nice with 8-wide SIMD
+enum { AZA_SAMPLER_DESIRED_KERNEL_RADIUS = 13 };
+static const float azaSamplerStopBand = 20000.0f;
+
 void azaSamplerInit(azaSampler *data, uint32_t allocSize, azaSamplerConfig config) {
 	data->header.kind = AZA_DSP_SAMPLER;
 	data->header.metadata = azaDSPPackMetadata(allocSize, false, false);
@@ -1545,6 +1549,8 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 	int32_t loopStart = data->config.loopStart >= (int32_t)data->config.buffer->frames ? 0 : data->config.loopStart;
 	int32_t loopEnd = data->config.loopEnd <= loopStart ? data->config.buffer->frames : data->config.loopEnd;
 	int32_t loopRegionLength = loopEnd - loopStart;
+	// Keep our lowpass below the minimum nyquist frequency (leaving some extra space for the transition band to alias onto itself outside the range of human hearing)
+	float stopBandFactor = azaClampf(2.0f * azaSamplerStopBand / (float)buffer.samplerate, 0.25f, 1.0f);
 	for (uint32_t inst = 0; inst < data->numInstances; inst++) {
 		azaSamplerInstance *instance = &data->instances[inst];
 		for (uint32_t i = 0; i < buffer.frames; i++) {
@@ -1570,14 +1576,13 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 				}
 			} else {
 				// Oof all resampling!
+#if 0 // Old way!
 				#define SAMPLER_KERNEL_RADIUS 15
 				#define SAMPLER_KERNEL_SAMPLE_COUNT (SAMPLER_KERNEL_RADIUS*2+1)
 				float kernelSamples[SAMPLER_KERNEL_SAMPLE_COUNT];
 				float kernelIntegral = 0.0f;
 				{ // Calculate interpolation kernel for our speed and offset
 					// TODO: Definitely switch to using azaKernel, once it's been altered to allow low-passes below source nyquist, as is generally needed (this is a necessary step to fix aliasing issues in azaSpatialize and backend resampling as well).
-					// Keep our lowpass below the minimum nyquist frequency (leaving some extra space for the transition band to alias onto itself outside the range of human hearing, assuming we're running at 48khz)
-					static const float stopBandFactor = 20.0f / 24.0f;
 					float rate = (speed > 1.0f ? 1.0f / speed : 1.0f) * stopBandFactor;
 					float x = rate*(-instance->fraction - (float)SAMPLER_KERNEL_RADIUS);
 					// Calculating it like this breaks down in the degenerate case where our kernel radius is too small to cover even the first lobe (because we're low-passing well below the source nyquist frequency). Doing this would create volume attenuation when rate is very low.
@@ -1600,6 +1605,18 @@ int azaSamplerProcess(azaSampler *data, azaBuffer buffer) {
 
 					buffer.samples[i * buffer.stride + c] += sample * volume;
 				}
+#else // NEW WAY
+				float rate = azaMinf(stopBandFactor / speed, 1.0f);
+				// This value has to be <= AZA_KERNEL_DEFAULT_LANCZOS_COUNT
+				azaKernel *kernel = azaKernelGetDefaultLanczos(azaKernelGetRadiusForRate(rate, AZA_SAMPLER_DESIRED_KERNEL_RADIUS));
+				// TODO: Find some way to deal with the quiet pops you get from swapping out kernels
+				float frame[AZA_MAX_CHANNEL_POSITIONS];
+				azaSampleWithKernel(frame, buffer.channelLayout.count, kernel, data->config.buffer->samples, data->config.buffer->stride, 0, data->config.buffer->frames, data->config.loop, instance->frame, instance->fraction, rate);
+				for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
+					float sample = frame[c];
+					buffer.samples[i * buffer.stride + c] += sample * volume;
+				}
+#endif
 			}
 			// TODO: Loop crossfades, because nobody likes a pop
 			bool startedBeforeLoopEnd = instance->frame <= loopEnd;
@@ -1816,10 +1833,18 @@ azaDelayDynamicChannelConfig* azaDelayDynamicGetChannelConfig(azaDelayDynamic *d
 	return &channelData->config;
 }
 
-static azaKernel* azaDelayDynamicGetKernel(azaDelayDynamic *data) {
+enum { AZA_DELAY_DYNAMIC_DESIRED_KERNEL_RADIUS = 13 };
+
+#define AZA_DELAY_DYNAMIC_FIXED_RADIUS 0
+
+static azaKernel* azaDelayDynamicGetKernel(azaDelayDynamic *data, float rate) {
 	azaKernel *kernel = data->config.kernel;
 	if (!kernel) {
-		kernel = &azaKernelDefaultLanczos;
+#if AZA_DELAY_DYNAMIC_FIXED_RADIUS
+		kernel = azaKernelGetDefaultLanczos(AZA_DELAY_DYNAMIC_DESIRED_KERNEL_RADIUS);
+#else
+		kernel = azaKernelGetDefaultLanczos(azaKernelGetRadiusForRate(rate, AZA_DELAY_DYNAMIC_DESIRED_KERNEL_RADIUS));
+#endif
 	}
 	return kernel;
 }
@@ -1829,8 +1854,9 @@ static int azaDelayDynamicHandleBufferResizes(azaDelayDynamic *data, azaBuffer s
 	int err = AZA_SUCCESS;
 	err = azaEnsureChannels(&data->channelData, src.channelLayout.count);
 	if AZA_UNLIKELY(err) return err;
-	azaKernel *kernel = azaDelayDynamicGetKernel(data);
+	azaKernel *kernel = azaDelayDynamicGetKernel(data, 1.0f);
 	uint32_t kernelSamples = kernel->length;
+	// uint32_t kernelSamples = (uint32_t)ceilf((float)kernel->length / delayDynamicDefaultRate);
 	uint32_t delaySamplesMax = (uint32_t)ceilf(aza_ms_to_samples(data->config.delayMax, (float)src.samplerate)) + kernelSamples;
 	uint32_t totalSamplesNeeded = delaySamplesMax + src.frames;
 	uint32_t perChannelBufferCap = data->bufferCap / src.channelLayout.count;
@@ -1859,8 +1885,9 @@ static int azaDelayDynamicHandleBufferResizes(azaDelayDynamic *data, azaBuffer s
 
 // Puts new audio data into the buffer for immediate sampling. Assumes azaDelayDynamicHandleBufferResizes was called already.
 static void azaDelayDynamicPrimeBuffer(azaDelayDynamic *data, azaBuffer src) {
-	azaKernel *kernel = azaDelayDynamicGetKernel(data);
+	azaKernel *kernel = azaDelayDynamicGetKernel(data, 1.0f);
 	uint32_t kernelSamples = kernel->length;
+	// uint32_t kernelSamples = (uint32_t)ceilf((float)kernel->length / delayDynamicDefaultRate);
 	uint32_t delaySamplesMax = (uint32_t)ceilf(aza_ms_to_samples(data->config.delayMax, (float)src.samplerate)) + kernelSamples;
 	for (uint8_t c = 0; c < src.channelLayout.count; c++) {
 		azaDelayDynamicChannelData *channelData = azaGetChannelData(&data->channelData, c);
@@ -1953,7 +1980,7 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 	}
 	err = azaCheckBuffer(buffer);
 	if AZA_UNLIKELY(err) return err;
-	azaKernel *kernel = azaDelayDynamicGetKernel(data);
+	azaKernel *kernel = azaDelayDynamicGetKernel(data, 1.0f);
 	azaBuffer inputBuffer;
 	if (data->config.wetEffects) {
 		inputBuffer = azaPushSideBufferCopy(buffer);
@@ -1966,26 +1993,39 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 	err = azaDelayDynamicHandleBufferResizes(data, inputBuffer);
 	if (err) goto error;
 	// TODO: Verify whether this matters. It was difficult to tell whether there was any problem with not factoring in the kernel (which I suppose would only matter for very close to 0 delay).
+	// int kernelSamplesLeft = 0;
+	// int kernelSamplesRight = 0;
+	const uint32_t maxKernelLength = kernel->length;
 	int kernelSamplesLeft = kernel->sampleZero;
 	int kernelSamplesRight = kernel->length - kernel->sampleZero;
+	// int kernelSamplesLeft = (int)ceilf((float)kernel->sampleZero / delayDynamicDefaultRate);
+	// int kernelSamplesRight = (int)ceilf((float)(kernel->length - kernel->sampleZero) / delayDynamicDefaultRate);
 	uint32_t delaySamplesMax = (uint32_t)ceilf(aza_ms_to_samples(data->config.delayMax, (float)buffer.samplerate));
 	for (uint8_t c = 0; c < inputBuffer.channelLayout.count; c++) {
 		azaDelayDynamicChannelData *channelData = azaGetChannelData(&data->channelData, c);
 		float startIndex = (float)delaySamplesMax - aza_ms_to_samples(channelData->config.delay, (float)inputBuffer.samplerate);
 		float endIndex = startIndex + (float)inputBuffer.frames;
+		float endRate = 1.0f;
 		if (endChannelDelays) {
 			endIndex -= aza_ms_to_samples(endChannelDelays[c] - channelData->config.delay, (float)inputBuffer.samplerate);
+			endRate = azaClampf((endIndex - startIndex) / (float)inputBuffer.frames, 1.0f / (float)maxKernelLength, 1.0f);
 		}
+		float startRate = channelData->ratePrevious != 0.0f ? channelData->ratePrevious : endRate;
+		kernel = azaDelayDynamicGetKernel(data, startRate);
 		startIndex = azaClampf(startIndex, 0.0f, (float)delaySamplesMax);
 		endIndex = azaClampf(endIndex, 0.0f, (float)delaySamplesMax);
 		if (startIndex >= endIndex) continue;
 		uint8_t c2 = (c + 1) % inputBuffer.channelLayout.count;
 		for (uint32_t i = 0; i < inputBuffer.frames; i++) {
-			float index = azaLerpf(startIndex, endIndex, (float)i / (float)inputBuffer.frames);
+			float t = (float)i / (float)inputBuffer.frames;
+			float index = azaLerpf(startIndex, endIndex, t);
+			float rate = azaLerpf(startRate, endRate, t);
+			int32_t frame = (int32_t)truncf(index);
+			float fraction = index - (float)frame;
 			uint32_t s = i * inputBuffer.stride + c;
 			float toAdd = inputBuffer.samples[s];
 			if (data->config.feedback != 0.0f) {
-			 	toAdd += azaSampleWithKernel(channelData->buffer+kernelSamplesLeft, 1, -kernelSamplesLeft, delaySamplesMax+kernelSamplesRight+inputBuffer.frames, kernel, index) * data->config.feedback;
+			 	toAdd += azaSampleWithKernel1Ch(kernel, channelData->buffer+kernelSamplesLeft, 1, -kernelSamplesLeft, delaySamplesMax+kernelSamplesRight+inputBuffer.frames, false, frame, fraction, rate) * data->config.feedback;
 			}
 			inputBuffer.samples[i * inputBuffer.stride + c] += toAdd * (1.0f - data->config.pingpong);
 			inputBuffer.samples[i * inputBuffer.stride + c2] += toAdd * data->config.pingpong;
@@ -1996,19 +2036,32 @@ int azaDelayDynamicProcess(azaDelayDynamic *data, azaBuffer buffer, float *endCh
 		azaDelayDynamicChannelData *channelData = azaGetChannelData(&data->channelData, c);
 		float startIndex = (float)delaySamplesMax - aza_ms_to_samples(channelData->config.delay, (float)buffer.samplerate);
 		float endIndex = startIndex + (float)buffer.frames;
+		float endRate = 1.0f;
 		if (endChannelDelays) {
 			endIndex -= aza_ms_to_samples(endChannelDelays[c] - channelData->config.delay, (float)buffer.samplerate);
 			channelData->config.delay = endChannelDelays[c];
+			endRate = azaClampf((endIndex - startIndex) / (float)inputBuffer.frames, 1.0f / (float)maxKernelLength, 1.0f);
 		}
+		// TODO: Swapping kernels by radius gets us nice, predictable performance costs, but without any interpolation between them, the jump in kernel radius creates a very quiet pop in the sampled audio. Using interpolation like that doubles our kernel sampling costs, which is already the most expensive part of this whole process.
+		float startRate = channelData->ratePrevious != 0.0f ? channelData->ratePrevious : endRate;
+		channelData->ratePrevious = endRate;
+		// if (c == 0) {
+		// 	AZA_LOG_INFO("startRate: %f endRate: %f\n", startRate, endRate);
+		// }
+		kernel = azaDelayDynamicGetKernel(data, startRate);
 		startIndex = azaClampf(startIndex, 0.0f, (float)(delaySamplesMax + buffer.frames));
 		endIndex = azaClampf(endIndex, 0.0f, (float)(delaySamplesMax + buffer.frames));
 		float amount = aza_db_to_ampf(data->config.gain);
 		float amountDry = aza_db_to_ampf(data->config.gainDry);
 		if (startIndex >= endIndex) amount = 0.0f;
 		for (uint32_t i = 0; i < buffer.frames; i++) {
-			float index = azaLerpf(startIndex, endIndex, (float)i / (float)buffer.frames);
+			float t = (float)i / (float)inputBuffer.frames;
+			float index = azaLerpf(startIndex, endIndex, t);
+			float rate = azaLerpf(startRate, endRate, t);
+			int32_t frame = (int32_t)truncf(index);
+			float fraction = index - (float)frame;
 			uint32_t s = i * buffer.stride + c;
-			float wet = azaSampleWithKernel(channelData->buffer+kernelSamplesLeft, 1, -kernelSamplesLeft, delaySamplesMax+kernelSamplesRight+buffer.frames, kernel, index);
+			float wet = azaSampleWithKernel1Ch(kernel, channelData->buffer+kernelSamplesLeft, 1, -kernelSamplesLeft, delaySamplesMax+kernelSamplesRight+buffer.frames, false, frame, fraction, rate);
 			buffer.samples[s] = wet * amount + buffer.samples[s] * amountDry;
 		}
 	}
@@ -2028,20 +2081,16 @@ int azaKernelInit(azaKernel *kernel, uint32_t length, uint32_t sampleZero, uint3
 	kernel->sampleZero = sampleZero;
 	kernel->scale = scale;
 	kernel->size = length * scale;
-	kernel->table = aza_calloc(kernel->size, sizeof(float));
+	size_t tableLen;
+	size_t allocSize = azaKernelGetDynAllocSize(length, scale, &tableLen);
+	kernel->table = aza_calloc(allocSize, 1);
 	if (!kernel->table) return AZA_ERROR_OUT_OF_MEMORY;
-	uint32_t packedSize = length * (scale+1);
-	kernel->packed = aza_calloc(packedSize, sizeof(float));
-	if (!kernel->packed) {
-		aza_free(kernel->table);
-		return AZA_ERROR_OUT_OF_MEMORY;
-	}
+	kernel->packed = (float*)((char*)kernel->table + tableLen);
 	return AZA_SUCCESS;
 }
 
 void azaKernelDeinit(azaKernel *kernel) {
 	aza_free(kernel->table);
-	aza_free(kernel->packed);
 }
 
 void azaKernelPack(azaKernel *kernel) {
@@ -2073,16 +2122,24 @@ int azaKernelMakeLanczos(azaKernel *kernel, uint32_t resolution, uint32_t radius
 }
 
 void azaResample(azaKernel *kernel, float factor, float *dst, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset) {
+	const float rate = azaMinf(factor, 1.0f);
 	for (uint32_t i = 0; i < (uint32_t)dstFrames; i++) {
-		float pos = (float)i * factor + srcSampleOffset;
-		dst[i * dstStride] = azaSampleWithKernel(src, srcStride, srcFrameMin, srcFrameMax, kernel, pos);
+		double pos = (double)i * (double)factor;
+		int32_t frame = (int32_t)trunc(pos);
+		float fraction = (float)(pos - (double)frame) + srcSampleOffset;
+		// BIG TODO: Why is this just one channel???
+		dst[i * dstStride] = azaSampleWithKernel1Ch(kernel, src, srcStride, srcFrameMin, srcFrameMax, false, frame, fraction, rate);
 	}
 }
 
 void azaResampleAdd(azaKernel *kernel, float factor, float amp, float *dst, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset) {
+	const float rate = azaMinf(factor, 1.0f);
 	for (uint32_t i = 0; i < (uint32_t)dstFrames; i++) {
-		float pos = (float)i * factor + srcSampleOffset;
-		dst[i * dstStride] += amp * azaSampleWithKernel(src, srcStride, srcFrameMin, srcFrameMax, kernel, pos);
+		double pos = (double)i * (double)factor;
+		int32_t frame = (int32_t)trunc(pos);
+		float fraction = (float)(pos - (double)frame) + srcSampleOffset;
+		// BIG TODO: Why is this just one channel???
+		dst[i * dstStride] += amp * azaSampleWithKernel1Ch(kernel, src, srcStride, srcFrameMin, srcFrameMax, false, frame, fraction, rate);
 	}
 }
 

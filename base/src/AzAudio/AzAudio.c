@@ -63,8 +63,11 @@ int azaInit() {
 
 	int err;
 	// A resolution of 128 is 2^7, which gives the LUT a signal-to-noise ratio of 12+12*7 = 96dB
-	err = azaKernelMakeLanczos(&azaKernelDefaultLanczos, 128, 32);
-	if (err) return err;
+	static const uint32_t kernelResolution = 128;
+	for (uint32_t radius = 1; radius <= AZA_KERNEL_DEFAULT_LANCZOS_COUNT; radius++) {
+		err = azaKernelMakeLanczos(&azaKernelDefaultLanczos[radius-1], kernelResolution, radius);
+		if (err) return err;
+	}
 	err = azaDSPRegistryInit();
 	if (err) return err;
 	azaInitOscillators();

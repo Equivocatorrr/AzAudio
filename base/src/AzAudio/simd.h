@@ -6,12 +6,14 @@
 
 	Some useful facts:
 	- x86_64 has SSE and SSE2 as core feature sets (guaranteed to be available)
+	- When AVX2 is present, you can also expect FMA to be present. Check both anyway, but there shouldn't be a need for non-fma AVX2 code.
 */
 
 #ifndef AZAUDIO_SIMD_H
 #define AZAUDIO_SIMD_H
 
 #include "cpuid.h"
+#include <stdint.h>
 
 // Deal with Michaelsoft's ineptitude yet again.
 #if __AVX2__ && defined(_MSC_VER)

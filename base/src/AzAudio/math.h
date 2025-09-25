@@ -61,6 +61,12 @@ azaClampf(float a, float min, float max) {
 	return azaMinf(azaMaxf(a, min), max);
 }
 
+#define AZA_MAX(a, b) ((a) > (b) ? (a) : (b))
+
+#define AZA_MIN(a, b) ((a) < (b) ? (a) : (b))
+
+#define AZA_CLAMP(a, min, max) AZA_MAX(min, AZA_MIN(max, a))
+
 static inline float
 azaLinstepf(float a, float min, float max) {
 	return azaClampf((a - min) / (max - min), 0.0f, 1.0f);
@@ -144,6 +150,12 @@ azaWrapi(int a, int max) {
 	} else {
 		return 0;
 	}
+}
+
+// Like azaWrapi except the answer is wrapped in the range [min; max)
+static inline int
+azaWrapi2(int a, int min, int max) {
+	return azaWrapi(a - min, max - min) + min;
 }
 
 float azaCubicf(float a, float b, float c, float d, float x);

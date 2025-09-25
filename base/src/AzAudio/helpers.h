@@ -1,7 +1,7 @@
 /*
 	File: helpers.h
 	Author: Philip Haynes
-	Just some utility functions. Not to be included in headers.
+	Just some utility functions.
 */
 
 #ifndef AZAUDIO_HELPERS_H
@@ -13,6 +13,8 @@
 #include <stddef.h> // size_t
 #include <stdbool.h>
 
+#include "math.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -23,12 +25,6 @@ size_t aza_align_non_power_of_two(size_t size, size_t alignment);
 
 // Grows the size by 3/2 repeatedly until it's at least as big as minSize
 size_t aza_grow(size_t size, size_t minSize, size_t alignment);
-
-#define AZA_MAX(a, b) ((a) > (b) ? (a) : (b))
-
-#define AZA_MIN(a, b) ((a) < (b) ? (a) : (b))
-
-#define AZA_CLAMP(a, min, max) AZA_MAX(min, AZA_MIN(max, a))
 
 // Guarantees dst is null-terminated, and that no more than dstSize-1 bytes are copied. Returns src size.
 static inline size_t aza_strcpy(char *dst, const char *src, size_t dstSize) {

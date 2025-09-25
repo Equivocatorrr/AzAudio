@@ -8,7 +8,7 @@
 #define AZAUDIO_DSP_H
 
 #include "header_utils.h"
-#include "math.h"
+#include "helpers.h"
 #include "channel_layout.h"
 #include "utility.h"
 #include "backend/threads.h"
@@ -648,7 +648,9 @@ typedef struct azaSamplerConfig {
 	float speedTransitionTimeMs;
 	// If gain changes this is how long it takes to lerp to the new value in ms (lerp happens in amp space)
 	float volumeTransitionTimeMs;
+	// Whether instances loop around (must be true for pingpong to be respected)
 	bool loop;
+	// When we hit a loop point, this will make us reverse instead of wrapping around.
 	bool pingpong;
 	// Start of the looping region in frames
 	// If this value is >= buffer->frames, we treat this value as 0
@@ -829,9 +831,8 @@ typedef struct azaDelayDynamicChannelConfig {
 
 typedef struct azaDelayDynamicChannelData {
 	float *buffer;
-	// Calculate this when processing
-	// float delaySamples;
-	// float index;
+	// Keep track of the rate in the previous iteration so we can lerp them and avoid popping caused by changing rates suddenly.
+	float ratePrevious;
 	azaDelayDynamicChannelConfig config;
 } azaDelayDynamicChannelData;
 
@@ -878,11 +879,11 @@ typedef struct azaKernel {
 	uint32_t sampleZero;
 	// How many sub-samples there are between each sample
 	uint32_t scale;
-	// total size of table, which is length * scale
+	// total size of the useful part of table, which is length * scale. If padding exists from alignment, it is zeroed.
 	uint32_t size;
 	// Standard layout where kernel samples are in order. This is where you write the kernel before calling azaKernelPack.
 	float *table;
-	// An alternate layout of the table optimized for sampling
+	// An alternate layout of the table optimized for sampling (only works for sampling with rate=1.0f)
 	// The following is a semantic representation of the layout:
 	// struct {
 	// 	float samples[length];
@@ -890,7 +891,18 @@ typedef struct azaKernel {
 	float *packed;
 } azaKernel;
 
-extern azaKernel azaKernelDefaultLanczos;
+// Given a kernel length and scale, returns how many bytes are needed to store the tables.
+// If dstTableLen is not NULL, we provide the exact size in bytes of table (which is the offset to packed).
+// Both table sizes are aligned on a 16-byte boundary.
+inline size_t azaKernelGetDynAllocSize(size_t length, size_t scale, size_t *dstTableLen) {
+	size_t tableLen = aza_align(length * scale * sizeof(float), 16);
+	if (dstTableLen) {
+		*dstTableLen = tableLen;
+	}
+	size_t packedLen = aza_align(length * (scale + 1) * sizeof(float), 16);
+	size_t result = tableLen + packedLen;
+	return result;
+}
 
 // Creates a blank kernel
 // Will allocate memory for the table (may return AZA_ERROR_OUT_OF_MEMORY)
@@ -900,9 +912,49 @@ void azaKernelDeinit(azaKernel *kernel);
 // Must be called after kernel->table is populated, and before using the kernel for any sampling.
 void azaKernelPack(azaKernel *kernel);
 
-float azaKernelSample(azaKernel *kernel, int i, float pos);
+// Takes a single sample from the kernel itself
+// pos is the location in the kernel in samples (not sub-samples)
+float azaKernelSample(azaKernel *kernel, float pos);
 
-float azaSampleWithKernel(float *src, int stride, int minFrame, int maxFrame, azaKernel *kernel, float pos);
+// Uses the kernel to sample a single frame from the signal in src, where src[0] represents frame 0
+// dst is an array of size dstChannels where the result will be placed
+// srcStride is how many indices to skip for each sample in src (also the maximum channels that can be sampled at once)
+// minFrame can be negative, and represents the lower bound of the useable range of src (inclusive, src[minFrame*srcStride] must be valid)
+// maxFrame represents the upper bound of the useable range of src (exclusive, src[(maxFrame-1)*srcStride] must be valid)
+// wrap determines whether the range wraps around, eg. such that a frame towards the end of the range may use samples at the beginning and vice-versa.
+// frame is the sampling location in terms of frames.
+// fraction is the fractional part of the sampling location in the range 0.0f to 1.0f
+// rate determines how quickly we traverse the kernel in the range 0.0f to 1.0f. This is used, for example, for low-passing with a lanczos kernel below the source signal's nyquist frequency, such as to avoid aliasing in the destination. Note that the computational cost of this function scales by 1/rate, as more total samples will be needed to traverse the whole kernel when rate is lower. It's recommended to either use smaller kernels for lower rates, or perhaps even downsample the source first, if applicable.
+void azaSampleWithKernel(float *dst, int dstChannels, azaKernel *kernel, float *src, int srcStride, int minFrame, int maxFrame, bool wrap, int32_t frame, float fraction, float rate);
+
+// 1-channel version of the above to be more like the old interface.
+static inline float azaSampleWithKernel1Ch(azaKernel *kernel, float *src, int srcStride, int minFrame, int maxFrame, bool wrap, int32_t frame, float fraction, float rate) {
+	float result;
+	azaSampleWithKernel(&result, 1, kernel, src, srcStride, minFrame, maxFrame, wrap, frame, fraction, rate);
+	return result;
+}
+
+// How many total kernel samples have been taken as scalars (to measure SIMD efficacy)
+extern uint64_t azaKernelScalarSamples;
+// How many total kernel samples have been taken as vectors (to measure SIMD efficacy)
+extern uint64_t azaKernelVectorSamples;
+
+// Maximum radius
+enum { AZA_KERNEL_DEFAULT_LANCZOS_COUNT = 128 };
+// Lanczos kernels indexed by radius-1
+extern azaKernel azaKernelDefaultLanczos[AZA_KERNEL_DEFAULT_LANCZOS_COUNT];
+
+// asserts radius is between 1 and AZA_KERNEL_DEFAULT_LANCZOS_COUNT inclusive
+static inline azaKernel* azaKernelGetDefaultLanczos(uint32_t radius) {
+	assert(radius >= 1);
+	assert(radius <= AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
+	return &azaKernelDefaultLanczos[radius-1];
+}
+
+static inline uint32_t azaKernelGetRadiusForRate(float rate, uint32_t maxRadius) {
+	uint32_t radius = AZA_CLAMP((uint32_t)floorf(rate*(float)maxRadius), 1, maxRadius);
+	return radius;
+}
 
 // Makes a lanczos kernel. resolution is the number of samples between zero crossings
 // May return AZA_ERROR_OUT_OF_MEMORY

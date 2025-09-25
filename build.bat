@@ -4,6 +4,7 @@ setlocal enabledelayedexpansion
 
 set BuildDebug=0
 set BuildRelease=0
+set BuildRelDbg=0
 set has_args=0
 set run_arg=0
 set run=0
@@ -44,9 +45,13 @@ goto Arg
 :ArgAll
 	set BuildDebug=1
 	set BuildRelease=1
+	set BuildRelDbg=1
 	goto Done
 :ArgRelease
 	set BuildRelease=1
+	goto Done
+:ArgRelDbg
+	set BuildRelDbg=1
 	goto Done
 :ArgDebug
 	set BuildDebug=1
@@ -103,6 +108,26 @@ if %BuildDebug% == 1 (
 	)
 	if %install% == 1 (
 		cmake --install . %verbose% --config Debug
+	)
+	cd ..
+)
+
+if %BuildRelDbg% == 1 (
+	echo "Building Win32 RelDbg"
+	md build
+	cd build
+	cmake %trace% ..
+	if ERRORLEVEL 1 (
+		echo "CMake configure failed! Aborting..."
+		goto EndOfScript
+	)
+	cmake --build . %verbose% -j %number_of_processors% --config RelWithDebInfo
+	if ERRORLEVEL 1 (
+		echo "CMake build failed! Aborting..."
+		goto EndOfScript
+	)
+	if %install% == 1 (
+		cmake --install . %verbose% --config RelWithDebInfo
 	)
 	cd ..
 )

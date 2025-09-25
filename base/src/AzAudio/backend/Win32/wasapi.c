@@ -527,7 +527,7 @@ static void azaStreamProcess(azaStreamData *data) {
 		CHECK_RESULT("IAudioRenderClient::GetCurrentPadding", return);
 		numFramesNative = data->deviceBufferFrames - numFramesUnread;
 		if (numFramesNative == 0) return;
-		AZA_LOG_TRACE("Processing %u output frames\n", numFramesNative);
+		// AZA_LOG_TRACE("Processing %u output frames\n", numFramesNative);
 		hResult = data->pRenderClient->lpVtbl->GetBuffer(data->pRenderClient, numFramesNative, &data->deviceBufferRaw);
 		CHECK_RESULT("IAudioRenderClient::GetBuffer", return);
 		numFrames = GetResampledFramecount(data->processingBuffer.samplerate, data->waveFormatExtensible.Format.nSamplesPerSec, numFramesNative);
@@ -550,7 +550,7 @@ static void azaStreamProcess(azaStreamData *data) {
 		DWORD flags;
 		hResult = data->pCaptureClient->lpVtbl->GetBuffer(data->pCaptureClient, &data->deviceBufferRaw, &numFramesNative, &flags, NULL, NULL);
 		CHECK_RESULT("IAudioCaptureClient::GetBuffer", return);
-		AZA_LOG_TRACE("Processing %u input frames\n", numFramesNative);
+		// AZA_LOG_TRACE("Processing %u input frames\n", numFramesNative);
 		numFrames = GetResampledFramecount(data->processingBuffer.samplerate, data->waveFormatExtensible.Format.nSamplesPerSec, numFramesNative);
 		if (data->processingBuffer.samples) {
 			azaStreamConvertFromNative(data, numFramesNative, numFrames);

@@ -373,17 +373,19 @@ int main(int argumentCount, char** argumentValues) {
 		.decay = 500.0f,
 		.gain = 6.0f,
 	}, outputChannelCount);
-
+	azaDSPMetadataSetBypass(&compressor->header.metadata, true);
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)compressor);
 
 	azaMonitorSpectrum *monitorSpectrum = (azaMonitorSpectrum*)azaMakeDefaultMonitorSpectrum(2);
+	monitorSpectrum->config.ceiling = 0;
+	// azaDSPMetadataSetBypass(&monitorSpectrum->header.metadata, true);
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)monitorSpectrum);
 
 	azaLookaheadLimiter *limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
 		.gainInput  =  0.0f,
 		.gainOutput = -0.1f,
 	}, outputChannelCount);
-
+	// azaDSPMetadataSetBypass(&limiter->header.metadata, true);
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)limiter);
 
 	mixer.master.gain = -12.0f;
@@ -394,7 +396,7 @@ int main(int argumentCount, char** argumentValues) {
 	azaMixerStreamSetActive(&mixer, true);
 
 
-	printf("Type Q to stop, M to open the mixer GUI, P to play, and S to stop, + to increase speed, - to decrease speed, = to reset speed\n");
+	printf("Type Q to stop, M to open the mixer GUI, P to play, and S to stop, + to increase speed, - to decrease speed, = to reset speed, ? to print some stats\n");
 	uint32_t lastId = 0;
 	azaMixerGUIOpen(&mixer, /* onTop */ false);
 	static const float semitone = 1.05946309436f;
@@ -412,6 +414,8 @@ int main(int argumentCount, char** argumentValues) {
 			azaSamplerSetSpeed(samplerCat, lastId, azaSamplerGetSpeedTarget(samplerCat, lastId) / semitone);
 		} else if (c == '=') {
 			azaSamplerSetSpeed(samplerCat, lastId, 1.0f);
+		} else if (c == '?') {
+			printf("azaKernel stats:\n\tscalar samples: %llu\n\tvector samples: %llu\n", azaKernelScalarSamples, azaKernelVectorSamples);
 		} else if (c == 'Q' || c == 'q') {
 			break;
 		}
