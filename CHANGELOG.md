@@ -32,6 +32,11 @@ typedef struct azaFilterConfig {
 ```
 - azaMake... functions no longer set the owned bit. Instead, it's set when created through the Mixer GUI specifically. This puts the responsibility of freeing things back into the hands of whoever called azaMake, as the examples were assuming already, resulting in double frees whenever something was removed.
 - Do a better job about actually freeing things. Deinitting an azaTrack now frees any owned DSP on it.
+- AZA_MIN, AZA_MAX, and AZA_CLAMP macros were moved from helpers.h to math.h
+- azaSampleWithKernel was almost completely redone to allow for arbitrary rates, as is needed in the general case to avoid aliasing in azaSampler and azaDelayDynamic (and by extension azaSpatialize). Some serious SIMD performance work was done to make this highly dynamic, high-quality, and low performance cost.
+	- There is further specialization opportunities for deinterlaced (and/or single-channel) sources which may come in handy for many sampler instances.
+	- Some code paths may be pruned later to reduce duplication, as they're not all particularly worthwhile (looking at you sse3), pending some more testing. For now, unless a bug is found in this code, it should be okay to leave it be for a while as I'm fairly happy with the outcome.
+	- There remains a minor issue with azaSampler and azaDelayDynamic where the swapping of lanczos kernel sizes (to follow changing rates at an almost constant performance cost) causes very quiet (think -72dB) pops in the output. This may be difficult to hear with a rich audio source, but if the source is low-pitched or narrow-band I imagine it would become audible to a careful listener. I'm not quite sure what the best course of action is to handle this, as interpolating would double our kernel sampling costs (I worked hard for that performance dammit!). Doing such an interpolation optimally would likely increase the code complexity a good amount, and it's already a lot to look at (1200 lines of specialization code for a 50-line function is already a lot!).
 
 ### Added
 - ADSR envelopes
