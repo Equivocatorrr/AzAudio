@@ -91,6 +91,11 @@ azaSampler *samplerCat = NULL;
 azaSpatialize **spatializeCat = NULL;
 azaDSPUser dspCat;
 
+// Will adjust the rate that the spatialized sound sources move around
+const float objectTimeScale = 1.0f;
+// Will adjust how far the spatialized sound sources will travel
+const float objectDistanceScale = 1.0f;
+
 #define PRINT_OBJECT_INFO 0
 
 typedef struct Object {
@@ -132,6 +137,7 @@ float randomf(float min, float max) {
 
 void updateObjects(uint32_t count, float timeDelta) {
 	if (count == 0) return;
+	timeDelta *= objectTimeScale;
 	float angleSize = AZA_TAU / (float)count;
 	for (uint32_t i = 0; i < count; i++) {
 		Object *object = &objects[i];
@@ -153,9 +159,9 @@ void updateObjects(uint32_t count, float timeDelta) {
 			float ec = cosf(elevation), es = sinf(elevation);
 			float distance = sqrtf(randomf(0.0f, 1.0f));
 			object->target = (azaVec3) {
-				as * ec * distance * 10.0f,
-				es * distance * 2.0f,
-				ac * ec * distance * 5.0f,
+				as * ec * distance * 10.0f * objectDistanceScale,
+				es *      distance * 2.0f  * objectDistanceScale,
+				ac * ec * distance * 5.0f  * objectDistanceScale,
 			};
 		}
 		azaVec3 force = azaVec3NormalizedDef(azaSubVec3(object->target, object->pos), 0.001f, (azaVec3) { 0.0f, 1.0f, 0.0f });
@@ -245,6 +251,7 @@ int main(int argumentCount, char** argumentValues) {
 	}
 #endif
 
+	// azaLogLevel = AZA_LOG_LEVEL_TRACE;
 	int err = azaInit();
 	if (err) {
 		char buffer[64];
