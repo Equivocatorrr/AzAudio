@@ -415,7 +415,7 @@ int main(int argumentCount, char** argumentValues) {
 		} else if (c == '=') {
 			azaSamplerSetSpeed(samplerCat, lastId, 1.0f);
 		} else if (c == '?') {
-			printf("azaKernel stats:\n\tscalar samples: %llu\n\tvector samples: %llu\n", azaKernelScalarSamples, azaKernelVectorSamples);
+			printf("azaKernel stats:\n\tscalar samples: %llu\n\tvector samples: %llu\n", (unsigned long long)azaKernelScalarSamples, (unsigned long long)azaKernelVectorSamples);
 		} else if (c == 'Q' || c == 'q') {
 			break;
 		}

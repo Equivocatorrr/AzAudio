@@ -18,6 +18,11 @@
 
 #include "mixer.h"
 
+#if defined(__GNUC__)
+// Suppress some unused function warnings
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif
+
 static void azaRaylibTraceLogCallback(int logLevel, const char *text, va_list args) {
 	AzaLogLevel myLevel = AZA_LOG_LEVEL_INFO;
 	switch (logLevel) {

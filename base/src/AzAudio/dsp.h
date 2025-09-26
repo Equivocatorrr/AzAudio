@@ -894,7 +894,7 @@ typedef struct azaKernel {
 // Given a kernel length and scale, returns how many bytes are needed to store the tables.
 // If dstTableLen is not NULL, we provide the exact size in bytes of table (which is the offset to packed).
 // Both table sizes are aligned on a 16-byte boundary.
-inline size_t azaKernelGetDynAllocSize(size_t length, size_t scale, size_t *dstTableLen) {
+static inline size_t azaKernelGetDynAllocSize(size_t length, size_t scale, size_t *dstTableLen) {
 	size_t tableLen = aza_align(length * scale * sizeof(float), 16);
 	if (dstTableLen) {
 		*dstTableLen = tableLen;
