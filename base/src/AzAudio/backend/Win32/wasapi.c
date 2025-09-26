@@ -570,7 +570,7 @@ static void azaStreamProcess(azaStreamData *data) {
 	});
 	if (err) {
 		char buffer[64];
-		data->isActive = AZA_FALSE;
+		data->isActive = false;
 		AZA_LOG_ERR("Processing stream for device \"%s\" had an error (%s). Disabling stream...\n", data->deviceInfo->name, azaErrorString(err, buffer, sizeof(buffer)));
 	}
 
@@ -984,8 +984,8 @@ static void azaStreamDeinitWASAPI(azaStream *stream) {
 	SAFE_RELEASE(data->pAudioClient);
 	SAFE_RELEASE(data->pRenderClient);
 	azaStreamDataFree(data);
-	data->isInUse = AZA_FALSE;
-	data->isActive = AZA_FALSE;
+	data->isInUse = false;
+	data->isActive = false;
 	azaMutexUnlock(&mutex);
 }
 

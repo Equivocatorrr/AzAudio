@@ -12,6 +12,7 @@
 #include <dlfcn.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stdbool.h>
 
 #include <spa/param/audio/format-utils.h>
 #include <pipewire/pipewire.h>
@@ -99,11 +100,11 @@ static struct pw_registry *registry;
 static struct spa_hook registry_listener;
 
 static int flushSeq;
-static int flushSynced = AZA_FALSE;
+static int flushSynced = false;
 
 static void azaCoreDone(void *data, uint32_t id, int seq) {
 	if (id == PW_ID_CORE && seq == flushSeq) {
-		flushSynced = AZA_TRUE;
+		flushSynced = true;
 	}
 }
 
@@ -115,7 +116,7 @@ static void azaPipewireFlush() {
 	struct spa_hook core_listener;
 
 	fp_pw_thread_loop_lock(loop);
-	flushSynced = AZA_FALSE;
+	flushSynced = false;
 
 	pw_core_add_listener(core, &core_listener, &core_events, NULL);
 	flushSeq = pw_core_sync(core, PW_ID_CORE, 0);
@@ -210,7 +211,7 @@ static void azaNodeEmplace(struct azaNodeInfo arr[], size_t *count, struct azaNo
 static void azaNodeInfo(void *data, const struct pw_node_info *info) {
 	const struct spa_dict_item *item;
 	struct azaNodeInfo nodeInfo = {0};
-	int isOutput = AZA_FALSE, isInput = AZA_FALSE;
+	int isOutput = false, isInput = false;
 	nodeInfo.object_id = info->id;
 	AZA_LOG_TRACE("node: id:%u\n", info->id);
 	AZA_LOG_TRACE("\tprops:\n");
@@ -233,9 +234,9 @@ static void azaNodeInfo(void *data, const struct pw_node_info *info) {
 			nodeInfo.object_serial = item->value;
 		} else if (strcmp(item->key, PW_KEY_MEDIA_CLASS) == 0) {
 			if (strcmp(item->value, "Audio/Sink") == 0) {
-				isOutput = AZA_TRUE;
+				isOutput = true;
 			} else if (strcmp(item->value, "Audio/Source") == 0) {
-				isInput = AZA_TRUE;
+				isInput = true;
 			}
 		}
 		AZA_LOG_TRACE("\t\t%s: \"%s\"\n", item->key, item->value);
@@ -304,7 +305,7 @@ static const struct pw_client_events client_events = {
 
 static void azaRegistryEventGlobal(void *data, uint32_t id, uint32_t permissions, const char *type, uint32_t version, const struct spa_dict *props) {
 	AZA_LOG_TRACE("object: id:%u type:%s/%d\n", id, type, version);
-	int addedListener = AZA_FALSE;
+	int addedListener = false;
 	/*
 	if (strcmp(type, PW_TYPE_INTERFACE_Client) == 0) {
 		clients[next_client] = pw_registry_bind(registry, id, type, PW_VERSION_CLIENT, 0);
@@ -326,7 +327,7 @@ static void azaRegistryEventGlobal(void *data, uint32_t id, uint32_t permissions
 			node[next_node] = pw_registry_bind(registry, id, type, PW_VERSION_NODE, 0);
 			pw_node_add_listener(node[next_node], &node_listener[next_node], &node_events, NULL);
 			next_node++;
-			addedListener = AZA_TRUE;
+			addedListener = true;
 		}
 	}
 	/*

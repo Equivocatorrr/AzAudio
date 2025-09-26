@@ -10,6 +10,9 @@ As a bonus, we may try to document porting steps for users of this library that 
 
 ## [Unreleased]
 
+### Removed
+- AZA_TRUE and AZA_FALSE defines from AzAudio.h, instead choosing to opt for stdbool.h
+
 ### Changed
 - azaSampler interface
 	- azaSamplerConfig is almost completely different

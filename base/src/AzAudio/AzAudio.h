@@ -62,9 +62,6 @@ static inline void aza_free(void *block) {
 #define AZA_CHANNELS_DEFAULT 2
 #endif
 
-#define AZA_TRUE 1
-#define AZA_FALSE 0
-
 // Setup / Errors
 
 int azaInit();
