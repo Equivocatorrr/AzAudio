@@ -10,6 +10,10 @@ As a bonus, we may try to document porting steps for users of this library that 
 
 ## [Unreleased]
 
+Nothing yet...
+
+## [v0.3.0](https://github.com/Equivocatorrr/AzAudio/releases/tag/v0.3.0)
+
 ### Removed
 - AZA_TRUE and AZA_FALSE defines from AzAudio.h, instead choosing to opt for stdbool.h
 
