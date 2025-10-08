@@ -29,4 +29,6 @@ endif()
 
 add_subdirectory(base)
 
+add_subdirectory(tools)
+
 add_subdirectory(tests)
