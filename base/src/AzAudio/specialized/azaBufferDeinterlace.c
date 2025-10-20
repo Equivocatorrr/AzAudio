@@ -5,15 +5,15 @@
 	azaBufferDeinterlace(2) is declared in dsp.h
 */
 
-#include "../dsp.h"
+#include "../dsp/azaBuffer.h"
 #include "../simd.h"
 
 // Fully dynamic fallback
 
-void azaBufferDeinterlace_dynamic(azaBuffer dst, azaBuffer src) {
-	for (uint32_t i = 0; i < dst.frames; i++) {
-		for (uint32_t c = 0; c < dst.channelLayout.count; c++) {
-			dst.samples[c * dst.frames + i] = src.samples[i * src.stride + c];
+void azaBufferDeinterlace_dynamic(azaBuffer *dst, azaBuffer *src) {
+	for (uint32_t i = 0; i < dst->frames; i++) {
+		for (uint32_t c = 0; c < dst->channelLayout.count; c++) {
+			dst->pSamples[c * dst->frames + i] = src->pSamples[i * src->stride + c];
 		}
 	}
 }
@@ -21,23 +21,23 @@ void azaBufferDeinterlace_dynamic(azaBuffer dst, azaBuffer src) {
 // 2 channel specialized deinterlace
 
 // NOTE: SSE+SSE2 are guaranteed to be available on x86_64. Is there still any demand for 32-bit x86 support? I guess it doesn't cost us any more than we're already paying to support it.
-void azaBufferDeinterlace2Ch_scalar(azaBuffer dst, azaBuffer src) {
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	for (uint32_t i = 0, f = 0; i < dst.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
+void azaBufferDeinterlace2Ch_scalar(azaBuffer *dst, azaBuffer *src) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	for (uint32_t i = 0, f = 0; i < dst->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
 	}
 }
 
 AZA_SIMD_FEATURES("sse")
-void azaBufferDeinterlace2Ch_sse(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace2Ch_sse(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	for (; i <= (int32_t)src.frames-4; i += 4) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	for (; i <= (int32_t)src->frames-4; i += 4) {
 		int32_t f = i << 1;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		// _mm_prefetch((const char*)(src_samples + 32), _MM_HINT_NTA);
 		__m128 A0_B0_A1_B1 = _mm_loadu_ps(src_samples);
 		src_samples += 4;
@@ -53,20 +53,20 @@ void azaBufferDeinterlace2Ch_sse(azaBuffer dst, azaBuffer src) {
 		_mm_storeu_ps(dst_samples_a + i, A0_A1_A2_A3);
 		_mm_storeu_ps(dst_samples_b + i, B0_B1_B2_B3);
 	}
-	for (int32_t f = i << 1; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
+	for (int32_t f = i << 1; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
 	}
 }
 
 AZA_SIMD_FEATURES("avx")
-void azaBufferDeinterlace2Ch_avx(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace2Ch_avx(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	for (; i <= (int32_t)src.frames-8; i += 8) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	for (; i <= (int32_t)src->frames-8; i += 8) {
 		int32_t f = i << 1;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m256 A0_B0_A1_B1_A2_B2_A3_B3 = _mm256_loadu_ps(src_samples);
 		src_samples += 8;
 		__m256 A4_B4_A5_B5_A6_B6_A7_B7 = _mm256_loadu_ps(src_samples);
@@ -85,22 +85,22 @@ void azaBufferDeinterlace2Ch_avx(azaBuffer dst, azaBuffer src) {
 		_mm256_storeu_ps(dst_samples_a + i, A0_A1_A2_A3_A4_A5_A6_A7);
 		_mm256_storeu_ps(dst_samples_b + i, B0_B1_B2_B3_B4_B5_B6_B7);
 	}
-	for (int32_t f = i << 1; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
+	for (int32_t f = i << 1; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
 	}
 }
 
 // TODO: delete this because the avx one is simpler and faster
 AZA_SIMD_FEATURES("avx2")
-void azaBufferDeinterlace2Ch_avx2(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace2Ch_avx2(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
 	__m256i permute = _mm256_setr_epi32(0, 2, 4, 6, 1, 3, 5, 7);
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	for (; i <= (int32_t)src.frames-8; i += 8) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	for (; i <= (int32_t)src->frames-8; i += 8) {
 		int32_t f = i << 1;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m256 A0_B0_A1_B1_A2_B2_A3_B3 = _mm256_loadu_ps(src_samples);
 		src_samples += 8;
 		__m256 A4_B4_A5_B5_A6_B6_A7_B7 = _mm256_loadu_ps(src_samples);
@@ -117,15 +117,15 @@ void azaBufferDeinterlace2Ch_avx2(azaBuffer dst, azaBuffer src) {
 		_mm256_storeu_ps(dst_samples_a + i, A0_A1_A2_A3_A4_A5_A6_A7);
 		_mm256_storeu_ps(dst_samples_b + i, B0_B1_B2_B3_B4_B5_B6_B7);
 	}
-	for (int32_t f = i << 1; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
+	for (int32_t f = i << 1; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
 	}
 }
 
-void azaBufferDeinterlace2Ch_dispatch(azaBuffer, azaBuffer);
-void (*azaBufferDeinterlace2Ch)(azaBuffer dst, azaBuffer src) = azaBufferDeinterlace2Ch_dispatch;
-void azaBufferDeinterlace2Ch_dispatch(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace2Ch_dispatch(azaBuffer*, azaBuffer*);
+void (*azaBufferDeinterlace2Ch)(azaBuffer *dst, azaBuffer *src) = azaBufferDeinterlace2Ch_dispatch;
+void azaBufferDeinterlace2Ch_dispatch(azaBuffer *dst, azaBuffer *src) {
 	assert(azaCPUID.initted);
 	if (AZA_AVX) {
 		azaBufferDeinterlace2Ch = azaBufferDeinterlace2Ch_avx;
@@ -139,26 +139,26 @@ void azaBufferDeinterlace2Ch_dispatch(azaBuffer dst, azaBuffer src) {
 
 // 3 channel specialized deinterlace
 
-void azaBufferDeinterlace3Ch_scalar(azaBuffer dst, azaBuffer src) {
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	float *const dst_samples_c = dst_samples_b + dst.frames;
-	for (uint32_t i = 0, f = 0; i < dst.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
+void azaBufferDeinterlace3Ch_scalar(azaBuffer *dst, azaBuffer *src) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	float *const dst_samples_c = dst_samples_b + dst->frames;
+	for (uint32_t i = 0, f = 0; i < dst->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
 	}
 }
 
 AZA_SIMD_FEATURES("sse")
-void azaBufferDeinterlace3Ch_sse(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace3Ch_sse(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	float *const dst_samples_c = dst_samples_b + dst.frames;
-	for (; i <= (int32_t)src.frames-4; i += 4) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	float *const dst_samples_c = dst_samples_b + dst->frames;
+	for (; i <= (int32_t)src->frames-4; i += 4) {
 		int32_t f = i * 3;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m128 A0_B0_C0_A1 = _mm_loadu_ps(src_samples);
 		src_samples += 4;
 		__m128 B1_C1_A2_B2 = _mm_loadu_ps(src_samples);
@@ -185,23 +185,23 @@ void azaBufferDeinterlace3Ch_sse(azaBuffer dst, azaBuffer src) {
 		_mm_storeu_ps(dst_samples_b + i, B0_B1_B2_B3);
 		_mm_storeu_ps(dst_samples_c + i, C0_C1_C2_C3);
 	}
-	for (int32_t f = i * 3; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
+	for (int32_t f = i * 3; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
 	}
 }
 
 // TODO: Determine whether to keep this version as its performance is just BARELY better on a ryzen 9 5900x vs sse (wouldn't be too surprised to see regressions on other CPUs)
 AZA_SIMD_FEATURES("sse4.1")
-void azaBufferDeinterlace3Ch_sse4_1(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace3Ch_sse4_1(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	float *const dst_samples_c = dst_samples_b + dst.frames;
-	for (; i <= (int32_t)src.frames-4; i += 4) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	float *const dst_samples_c = dst_samples_b + dst->frames;
+	for (; i <= (int32_t)src->frames-4; i += 4) {
 		int32_t f = i * 3;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m128 A0_B0_C0_A1 = _mm_loadu_ps(src_samples);
 		src_samples += 4;
 		__m128 B1_C1_A2_B2 = _mm_loadu_ps(src_samples);
@@ -234,22 +234,22 @@ void azaBufferDeinterlace3Ch_sse4_1(azaBuffer dst, azaBuffer src) {
 		_mm_storeu_ps(dst_samples_b + i, B0_B1_B2_B3);
 		_mm_storeu_ps(dst_samples_c + i, C0_C1_C2_C3);
 	}
-	for (int32_t f = i * 3; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
+	for (int32_t f = i * 3; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
 	}
 }
 
 AZA_SIMD_FEATURES("avx")
-void azaBufferDeinterlace3Ch_avx(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace3Ch_avx(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	float *const dst_samples_c = dst_samples_b + dst.frames;
-	for (; i <= (int32_t)src.frames-8; i += 8) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	float *const dst_samples_c = dst_samples_b + dst->frames;
+	for (; i <= (int32_t)src->frames-8; i += 8) {
 		int32_t f = i * 3;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m256 A0_B0_C0_A1_B1_C1_A2_B2 = _mm256_loadu_ps(src_samples);
 		src_samples += 8;
 		__m256 C2_A3_B3_C3_A4_B4_C4_A5 = _mm256_loadu_ps(src_samples);
@@ -293,23 +293,23 @@ void azaBufferDeinterlace3Ch_avx(azaBuffer dst, azaBuffer src) {
 		_mm256_storeu_ps(dst_samples_b + i, B0_B1_B2_B3_B4_B5_B6_B7);
 		_mm256_storeu_ps(dst_samples_c + i, C0_C1_C2_C3_C4_C5_C6_C7);
 	}
-	for (int32_t f = i * 3; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
+	for (int32_t f = i * 3; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
 	}
 }
 
 // TODO: Delete this, since the above gets the same or better performance without needing AVX2
 AZA_SIMD_FEATURES("avx2")
-void azaBufferDeinterlace3Ch_avx2(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace3Ch_avx2(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst.samples + dst.frames;
-	float *const dst_samples_c = dst.samples + (dst.frames<<1);
-	for (; i <= (int32_t)src.frames-8; i += 8) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst->pSamples + dst->frames;
+	float *const dst_samples_c = dst->pSamples + (dst->frames<<1);
+	for (; i <= (int32_t)src->frames-8; i += 8) {
 		int32_t f = i * 3;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m256 A0_B0_C0_A1_B1_C1_A2_B2 = _mm256_loadu_ps(src_samples);
 		src_samples += 8;
 		__m256 C2_A3_B3_C3_A4_B4_C4_A5 = _mm256_loadu_ps(src_samples);
@@ -348,16 +348,16 @@ void azaBufferDeinterlace3Ch_avx2(azaBuffer dst, azaBuffer src) {
 		_mm256_storeu_ps(dst_samples_b + i, B0_B1_B2_B3_B4_B5_B6_B7);
 		_mm256_storeu_ps(dst_samples_c + i, C0_C1_C2_C3_C4_C5_C6_C7);
 	}
-	for (int32_t f = i * 3; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
+	for (int32_t f = i * 3; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
 	}
 }
 
-void azaBufferDeinterlace3Ch_dispatch(azaBuffer, azaBuffer);
-void (*azaBufferDeinterlace3Ch)(azaBuffer dst, azaBuffer src) = azaBufferDeinterlace3Ch_dispatch;
-void azaBufferDeinterlace3Ch_dispatch(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace3Ch_dispatch(azaBuffer*, azaBuffer*);
+void (*azaBufferDeinterlace3Ch)(azaBuffer *dst, azaBuffer *src) = azaBufferDeinterlace3Ch_dispatch;
+void azaBufferDeinterlace3Ch_dispatch(azaBuffer *dst, azaBuffer *src) {
 	assert(azaCPUID.initted);
 	if (AZA_AVX) {
 		azaBufferDeinterlace3Ch = azaBufferDeinterlace3Ch_avx;
@@ -373,29 +373,29 @@ void azaBufferDeinterlace3Ch_dispatch(azaBuffer dst, azaBuffer src) {
 
 // 4 channel specialized deinterlace
 
-void azaBufferDeinterlace4Ch_scalar(azaBuffer dst, azaBuffer src) {
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	float *const dst_samples_c = dst_samples_b + dst.frames;
-	float *const dst_samples_d = dst_samples_c + dst.frames;
-	for (uint32_t i = 0, f = 0; i < dst.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
-		dst_samples_d[i] = src.samples[f++];
+void azaBufferDeinterlace4Ch_scalar(azaBuffer *dst, azaBuffer *src) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	float *const dst_samples_c = dst_samples_b + dst->frames;
+	float *const dst_samples_d = dst_samples_c + dst->frames;
+	for (uint32_t i = 0, f = 0; i < dst->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
+		dst_samples_d[i] = src->pSamples[f++];
 	}
 }
 
 AZA_SIMD_FEATURES("sse")
-void azaBufferDeinterlace4Ch_sse(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace4Ch_sse(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	float *const dst_samples_c = dst_samples_b + dst.frames;
-	float *const dst_samples_d = dst_samples_c + dst.frames;
-	for (; i <= (int32_t)src.frames-4; i += 4) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	float *const dst_samples_c = dst_samples_b + dst->frames;
+	float *const dst_samples_d = dst_samples_c + dst->frames;
+	for (; i <= (int32_t)src->frames-4; i += 4) {
 		int32_t f = i << 2;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m128 A0_B0_C0_D0 = _mm_loadu_ps(src_samples);
 		src_samples += 4;
 		__m128 A1_B1_C1_D1 = _mm_loadu_ps(src_samples);
@@ -426,24 +426,24 @@ void azaBufferDeinterlace4Ch_sse(azaBuffer dst, azaBuffer src) {
 		_mm_storeu_ps(dst_samples_c + i, C0_C1_C2_C3);
 		_mm_storeu_ps(dst_samples_d + i, D0_D1_D2_D3);
 	}
-	for (int32_t f = i << 2; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
-		dst_samples_d[i] = src.samples[f++];
+	for (int32_t f = i << 2; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
+		dst_samples_d[i] = src->pSamples[f++];
 	}
 }
 
 AZA_SIMD_FEATURES("avx")
-void azaBufferDeinterlace4Ch_avx(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace4Ch_avx(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	float *const dst_samples_c = dst_samples_b + dst.frames;
-	float *const dst_samples_d = dst_samples_c + dst.frames;
-	for (; i <= (int32_t)src.frames-8; i += 8) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	float *const dst_samples_c = dst_samples_b + dst->frames;
+	float *const dst_samples_d = dst_samples_c + dst->frames;
+	for (; i <= (int32_t)src->frames-8; i += 8) {
 		int32_t f = i << 2;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m256 A0_B0_C0_D0_A1_B1_C1_D1 = _mm256_loadu_ps(src_samples);
 		src_samples += 8;
 		__m256 A2_B2_C2_D2_A3_B3_C3_D3 = _mm256_loadu_ps(src_samples);
@@ -488,25 +488,25 @@ void azaBufferDeinterlace4Ch_avx(azaBuffer dst, azaBuffer src) {
 		_mm256_storeu_ps(dst_samples_c + i, C0_C1_C2_C3_C4_C5_C6_C7);
 		_mm256_storeu_ps(dst_samples_d + i, D0_D1_D2_D3_D4_D5_D6_D7);
 	}
-	for (int32_t f = i << 2; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
-		dst_samples_d[i] = src.samples[f++];
+	for (int32_t f = i << 2; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
+		dst_samples_d[i] = src->pSamples[f++];
 	}
 }
 
 // TODO: delete this, since the avx one is simpler and faster
 AZA_SIMD_FEATURES("avx2")
-void azaBufferDeinterlace4Ch_avx2(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace4Ch_avx2(azaBuffer *dst, azaBuffer *src) {
 	int32_t i = 0;
-	float *const dst_samples_a = dst.samples;
-	float *const dst_samples_b = dst_samples_a + dst.frames;
-	float *const dst_samples_c = dst_samples_b + dst.frames;
-	float *const dst_samples_d = dst_samples_c + dst.frames;
-	for (; i <= (int32_t)src.frames-8; i += 8) {
+	float *const dst_samples_a = dst->pSamples;
+	float *const dst_samples_b = dst_samples_a + dst->frames;
+	float *const dst_samples_c = dst_samples_b + dst->frames;
+	float *const dst_samples_d = dst_samples_c + dst->frames;
+	for (; i <= (int32_t)src->frames-8; i += 8) {
 		int32_t f = i << 2;
-		float *src_samples = src.samples + f;
+		float *src_samples = src->pSamples + f;
 		__m256 A0_B0_C0_D0_A1_B1_C1_D1 = _mm256_loadu_ps(src_samples);
 		src_samples += 8;
 		__m256 A2_B2_C2_D2_A3_B3_C3_D3 = _mm256_loadu_ps(src_samples);
@@ -572,17 +572,17 @@ void azaBufferDeinterlace4Ch_avx2(azaBuffer dst, azaBuffer src) {
 		_mm256_storeu_ps(dst_samples_c + i, C0_C1_C2_C3_C4_C5_C6_C7);
 		_mm256_storeu_ps(dst_samples_d + i, D0_D1_D2_D3_D4_D5_D6_D7);
 	}
-	for (int32_t f = i << 2; i < (int32_t)src.frames; i++) {
-		dst_samples_a[i] = src.samples[f++];
-		dst_samples_b[i] = src.samples[f++];
-		dst_samples_c[i] = src.samples[f++];
-		dst_samples_d[i] = src.samples[f++];
+	for (int32_t f = i << 2; i < (int32_t)src->frames; i++) {
+		dst_samples_a[i] = src->pSamples[f++];
+		dst_samples_b[i] = src->pSamples[f++];
+		dst_samples_c[i] = src->pSamples[f++];
+		dst_samples_d[i] = src->pSamples[f++];
 	}
 }
 
-void azaBufferDeinterlace4Ch_dispatch(azaBuffer, azaBuffer);
-void (*azaBufferDeinterlace4Ch)(azaBuffer dst, azaBuffer src) = azaBufferDeinterlace4Ch_dispatch;
-void azaBufferDeinterlace4Ch_dispatch(azaBuffer dst, azaBuffer src) {
+void azaBufferDeinterlace4Ch_dispatch(azaBuffer*, azaBuffer*);
+void (*azaBufferDeinterlace4Ch)(azaBuffer *dst, azaBuffer *src) = azaBufferDeinterlace4Ch_dispatch;
+void azaBufferDeinterlace4Ch_dispatch(azaBuffer *dst, azaBuffer *src) {
 	assert(azaCPUID.initted);
 	if (AZA_AVX) {
 		azaBufferDeinterlace4Ch = azaBufferDeinterlace4Ch_avx;
@@ -596,13 +596,13 @@ void azaBufferDeinterlace4Ch_dispatch(azaBuffer dst, azaBuffer src) {
 
 // Specialization dispatch
 
-void azaBufferDeinterlace(azaBuffer dst, azaBuffer src) {
-	assert(dst.frames == src.frames);
-	// We don't actually have to worry about dst.stride because we just kinda ignore it anyway
-	// assert(dst.stride == dst.channelLayout.count);
-	assert(dst.channelLayout.count == src.channelLayout.count);
-	if (src.stride == src.channelLayout.count) {
-		switch (dst.channelLayout.count) {
+void azaBufferDeinterlace(azaBuffer *dst, azaBuffer *src) {
+	assert(dst->frames == src->frames);
+	// We don't actually have to worry about dst->stride because we just kinda ignore it anyway
+	// assert(dst->stride == dst->channelLayout.count);
+	assert(dst->channelLayout.count == src->channelLayout.count);
+	if (src->stride == src->channelLayout.count) {
+		switch (dst->channelLayout.count) {
 			case 0:
 			case 1:
 				azaBufferCopy(dst, src);
@@ -623,7 +623,7 @@ void azaBufferDeinterlace(azaBuffer dst, azaBuffer src) {
 				return;
 		}
 	}
-	if (dst.channelLayout.count <= 1) {
+	if (dst->channelLayout.count <= 1) {
 		azaBufferCopy(dst, src);
 	} else {
 		azaBufferDeinterlace_dynamic(dst, src);

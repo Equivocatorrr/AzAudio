@@ -6,6 +6,11 @@ build*/
 *compile_commands.json*
 switchto*
 
+# There might be some loose reaper projects around for analysis purposes
+reaper/
+
 # don't include generated binaries
 bin/
 obj/
+tools/
+misc/

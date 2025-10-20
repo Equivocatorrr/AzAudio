@@ -5,25 +5,26 @@
 
 #include "mixer.h"
 #include "AzAudio.h"
+#include "math.h"
 #include "error.h"
-#include "helpers.h"
 
 #include "backend/timer.h"
 
 #include <string.h>
 
 int azaTrackInit(azaTrack *data, uint32_t bufferFrames, azaChannelLayout bufferChannelLayout) {
-	return azaBufferInit(&data->buffer, bufferFrames, bufferChannelLayout);
+	return azaBufferInit(&data->buffer, bufferFrames, 0, 0, bufferChannelLayout);
 }
 
 void azaTrackDeinit(azaTrack *data) {
-	azaBufferDeinit(&data->buffer);
+	azaBufferDeinit(&data->buffer, true);
 	azaDSP *dsp = data->dsp;
 	while (dsp) {
 		azaDSP *nextDSP = dsp->pNext;
-		if (azaDSPMetadataGetOwned(dsp->metadata)) {
+		if (dsp->owned) {
 			if (!azaFreeDSP(dsp)) {
-				AZA_LOG_ERR("Failed to free \"%s\" because a free function doesn't exist in the registry.\n", azaGetDSPName(dsp));
+				// TODO: Move this error into the GUI as well
+				AZA_LOG_ERR("Failed to free \"%s\" because a free function is not given.\n", dsp->name);
 				dsp->pNext = NULL;
 			}
 		}
@@ -128,8 +129,8 @@ azaTrackRoute* azaTrackGetReceive(azaTrack *from, azaTrack *to) {
 int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 	if (data->processed) return AZA_SUCCESS;
 	data->buffer.samplerate = samplerate;
-	azaBuffer buffer = azaBufferSlice(data->buffer, 0, frames);
-	azaBufferZero(buffer);
+	azaBuffer buffer = azaBufferSlice(&data->buffer, 0, frames);
+	azaBufferZero(&buffer);
 	if (data->gain == -INFINITY || data->mute) {
 		return AZA_SUCCESS;
 	}
@@ -140,22 +141,24 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 		err = azaTrackProcess(frames, samplerate, route->track);
 		if (err) return err;
 		// TODO: Latency compensation
-		azaBufferMixMatrix(buffer, 1.0f, azaBufferSlice(route->track->buffer, 0, frames), aza_db_to_ampf(route->gain), &route->channelMatrix);
+		azaBuffer srcBuffer = azaBufferSlice(&route->track->buffer, 0, frames);
+		azaBufferMixMatrix(&buffer, 1.0f, &srcBuffer, aza_db_to_ampf(route->gain), &route->channelMatrix);
 	}
 	if (data->dsp) {
-		err = azaDSPProcessSingle(data->dsp, buffer);
+		// TODO: Check when track configuration changed so we can pass the appropriate flag
+		err = azaDSPProcess(data->dsp, &buffer, &buffer, 0);
 		if (err) return err;
 	}
 	if (data->gain != 0.0f) {
 		float amp = aza_db_to_ampf(data->gain);
 		for (uint32_t i = 0; i < buffer.frames; i++) {
 			for (uint32_t c = 0; c < buffer.channelLayout.count; c++) {
-				buffer.samples[i * buffer.stride + c] *= amp;
+				buffer.pSamples[i * buffer.stride + c] *= amp;
 			}
 		}
 	}
 	if (azaMixerGUIIsOpen()) {
-		azaMetersUpdate(&data->meters, buffer, 1.0f);
+		azaMetersUpdate(&data->meters, &buffer, 1.0f);
 	}
 	data->processed = true;
 	return AZA_SUCCESS;
@@ -285,15 +288,18 @@ error:
 	return err;
 }
 
-int azaMixerCallback(void *userdata, azaBuffer buffer) {
+int azaMixerCallback(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	azaMixer *mixer = (azaMixer*)userdata;
 	azaBuffer stash = mixer->master.buffer;
-	mixer->master.buffer = buffer;
-	int err = azaMixerProcess(buffer.frames, buffer.samplerate, mixer);
+	mixer->master.buffer = *dst;
+	if (dst != src) {
+		azaBufferCopy(dst, src);
+	}
+	int err = azaMixerProcess(dst->frames, dst->samplerate, mixer);
 	if (err == AZA_ERROR_MIXER_ROUTING_CYCLE) {
 		// Gracefully zero out audio since a cycle can be remedied with the mixer GUI now
 		mixer->hasCircularRouting = true;
-		azaBufferZero(buffer);
+		azaBufferZero(dst);
 		err = AZA_SUCCESS;
 	} else {
 		mixer->hasCircularRouting = false;

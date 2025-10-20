@@ -7,7 +7,7 @@
 #ifndef AZAUDIO_MIXER_H
 #define AZAUDIO_MIXER_H
 
-#include "dsp.h"
+#include "dsp/azaMeters.h"
 #include "backend/interface.h"
 #include "backend/threads.h"
 
@@ -122,7 +122,7 @@ int azaMixerGetTrackSendCount(azaMixer *data, azaTrack *track);
 int azaMixerProcess(uint32_t frames, uint32_t samplerate, azaMixer *data);
 
 // Builtin callback for processing the mixer on a stream
-int azaMixerCallback(void *userdata, azaBuffer buffer);
+int azaMixerCallback(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 // if onTop is true then the window will always be on top even if it loses focus
 void azaMixerGUIOpen(azaMixer *mixer, bool onTop);

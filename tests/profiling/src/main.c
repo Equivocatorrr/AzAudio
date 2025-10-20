@@ -14,58 +14,58 @@
 #define TEST_BUFFERS_FRAME_COUNT 1234
 #define TEST_ITERATIONS 10000ull
 
-void azaBufferDeinterlace_dynamic(azaBuffer dst, azaBuffer src);
+void azaBufferDeinterlace_dynamic(azaBuffer *dst, azaBuffer *src);
 
-void azaBufferDeinterlace2Ch_scalar(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace2Ch_sse(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace2Ch_avx(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace2Ch_avx2(azaBuffer dst, azaBuffer src);
+void azaBufferDeinterlace2Ch_scalar(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace2Ch_sse(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace2Ch_avx(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace2Ch_avx2(azaBuffer *dst, azaBuffer *src);
 
-void azaBufferDeinterlace3Ch_scalar(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace3Ch_sse(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace3Ch_sse4_1(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace3Ch_avx(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace3Ch_avx2(azaBuffer dst, azaBuffer src);
+void azaBufferDeinterlace3Ch_scalar(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace3Ch_sse(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace3Ch_sse4_1(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace3Ch_avx(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace3Ch_avx2(azaBuffer *dst, azaBuffer *src);
 
-void azaBufferDeinterlace4Ch_scalar(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace4Ch_sse(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace4Ch_avx(azaBuffer dst, azaBuffer src);
-void azaBufferDeinterlace4Ch_avx2(azaBuffer dst, azaBuffer src);
+void azaBufferDeinterlace4Ch_scalar(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace4Ch_sse(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace4Ch_avx(azaBuffer *dst, azaBuffer *src);
+void azaBufferDeinterlace4Ch_avx2(azaBuffer *dst, azaBuffer *src);
 
 
-void azaBufferReinterlace_dynamic(azaBuffer dst, azaBuffer src);
-void azaBufferReinterlace2Ch_scalar(azaBuffer dst, azaBuffer src);
-void azaBufferReinterlace2Ch_sse(azaBuffer dst, azaBuffer src);
-void azaBufferReinterlace2Ch_avx(azaBuffer dst, azaBuffer src);
+void azaBufferReinterlace_dynamic(azaBuffer *dst, azaBuffer *src);
+void azaBufferReinterlace2Ch_scalar(azaBuffer *dst, azaBuffer *src);
+void azaBufferReinterlace2Ch_sse(azaBuffer *dst, azaBuffer *src);
+void azaBufferReinterlace2Ch_avx(azaBuffer *dst, azaBuffer *src);
 
-void azaBufferReinterlace3Ch_scalar(azaBuffer dst, azaBuffer src);
-void azaBufferReinterlace3Ch_sse(azaBuffer dst, azaBuffer src);
-void azaBufferReinterlace3Ch_avx(azaBuffer dst, azaBuffer src);
+void azaBufferReinterlace3Ch_scalar(azaBuffer *dst, azaBuffer *src);
+void azaBufferReinterlace3Ch_sse(azaBuffer *dst, azaBuffer *src);
+void azaBufferReinterlace3Ch_avx(azaBuffer *dst, azaBuffer *src);
 
-void azaBufferReinterlace4Ch_scalar(azaBuffer dst, azaBuffer src);
-void azaBufferReinterlace4Ch_sse(azaBuffer dst, azaBuffer src);
-void azaBufferReinterlace4Ch_avx(azaBuffer dst, azaBuffer src);
+void azaBufferReinterlace4Ch_scalar(azaBuffer *dst, azaBuffer *src);
+void azaBufferReinterlace4Ch_sse(azaBuffer *dst, azaBuffer *src);
+void azaBufferReinterlace4Ch_avx(azaBuffer *dst, azaBuffer *src);
 
 // For the purpose of testing the theoretical maximum throughput (this is by no means a realistic goal, but provides some context)
-void azaBufferDeinterlace_memcpy(azaBuffer dst, azaBuffer src) {
-	memcpy(dst.samples, src.samples, dst.frames * dst.channelLayout.count);
+void azaBufferDeinterlace_memcpy(azaBuffer *dst, azaBuffer *src) {
+	memcpy(dst->pSamples, src->pSamples, sizeof(float) * dst->frames * dst->channelLayout.count);
 }
 
 // Returns the average time per iteration in nanoseconds
-int64_t TestDeinterlace(void(*fp_deinterlace)(azaBuffer,azaBuffer), uint8_t channelCount, const char *name) {
+int64_t TestDeinterlace(void(*fp_deinterlace)(azaBuffer*,azaBuffer*), uint8_t channelCount, const char *name) {
 	azaBuffer interlaced, deinterlaced;
-	azaBufferInit(&interlaced, TEST_BUFFERS_FRAME_COUNT, azaChannelLayoutStandardFromCount(channelCount));
+	azaBufferInit(&interlaced, TEST_BUFFERS_FRAME_COUNT, 0, 0, azaChannelLayoutStandardFromCount(channelCount));
 	for (uint32_t i = 0; i < interlaced.frames; i++) {
 		for (uint32_t c = 0; c < channelCount; c++) {
-			interlaced.samples[i * interlaced.stride + c] = (float)(i + c * interlaced.frames);
+			interlaced.pSamples[i * interlaced.stride + c] = (float)(i + c * interlaced.frames);
 		}
 	}
-	azaBufferInit(&deinterlaced, TEST_BUFFERS_FRAME_COUNT, azaChannelLayoutStandardFromCount(channelCount));
+	azaBufferInit(&deinterlaced, TEST_BUFFERS_FRAME_COUNT, 0, 0, azaChannelLayoutStandardFromCount(channelCount));
 
 	int64_t start = azaGetTimestamp();
 
 	for (uint32_t i = 0; i < TEST_ITERATIONS; i++) {
-		fp_deinterlace(deinterlaced, interlaced);
+		fp_deinterlace(&deinterlaced, &interlaced);
 	}
 
 	int64_t end = azaGetTimestamp();
@@ -74,7 +74,7 @@ int64_t TestDeinterlace(void(*fp_deinterlace)(azaBuffer,azaBuffer), uint8_t chan
 	bool error = false;
 	for (uint32_t i = 0; i < deinterlaced.frames; i++) {
 		for (uint32_t c = 0; c < channelCount; c++) {
-			if (deinterlaced.samples[i + c * deinterlaced.frames] != (float)(i + c * deinterlaced.frames)) error = true;
+			if (deinterlaced.pSamples[i + c * deinterlaced.frames] != (float)(i + c * deinterlaced.frames)) error = true;
 		}
 	}
 	if (error) {
@@ -82,28 +82,28 @@ int64_t TestDeinterlace(void(*fp_deinterlace)(azaBuffer,azaBuffer), uint8_t chan
 	} else {
 		printf("%s: \033[92mCORRECTE\033[0m\n", name);
 	}
-	azaBufferDeinit(&interlaced);
-	azaBufferDeinit(&deinterlaced);
+	azaBufferDeinit(&interlaced, true);
+	azaBufferDeinit(&deinterlaced, true);
 	float gibps = 2.0f * (float)(((double)(TEST_ITERATIONS * TEST_BUFFERS_FRAME_COUNT * sizeof(float)) / (double)(1024 * 1024 * 1024)) * (double)channelCount / ((double)nanoseconds / 1000000000.0));
 	float gbps = 2.0f * (float)(((double)(TEST_ITERATIONS * TEST_BUFFERS_FRAME_COUNT * sizeof(float)) / (double)(1000000000)) * (double)channelCount / ((double)nanoseconds / 1000000000.0));
 	printf("\ttook %6lld nanoseconds on average\tprocessed %.1f GiB/s (%.1f GB/s)\n", nanoseconds / TEST_ITERATIONS, gibps, gbps);
 	return nanoseconds;
 }
 
-int64_t TestReinterlace(void(*fp_reinterlace)(azaBuffer,azaBuffer), uint8_t channelCount, const char *name) {
+int64_t TestReinterlace(void(*fp_reinterlace)(azaBuffer*,azaBuffer*), uint8_t channelCount, const char *name) {
 	azaBuffer interlaced, deinterlaced;
-	azaBufferInit(&deinterlaced, TEST_BUFFERS_FRAME_COUNT, azaChannelLayoutStandardFromCount(channelCount));
+	azaBufferInit(&deinterlaced, TEST_BUFFERS_FRAME_COUNT, 0, 0, azaChannelLayoutStandardFromCount(channelCount));
 	for (uint32_t i = 0; i < deinterlaced.frames; i++) {
 		for (uint32_t c = 0; c < channelCount; c++) {
-			deinterlaced.samples[i + c * deinterlaced.frames] = (float)(i + c * deinterlaced.frames);
+			deinterlaced.pSamples[i + c * deinterlaced.frames] = (float)(i + c * deinterlaced.frames);
 		}
 	}
-	azaBufferInit(&interlaced, TEST_BUFFERS_FRAME_COUNT, azaChannelLayoutStandardFromCount(channelCount));
+	azaBufferInit(&interlaced, TEST_BUFFERS_FRAME_COUNT, 0, 0, azaChannelLayoutStandardFromCount(channelCount));
 
 	int64_t start = azaGetTimestamp();
 
 	for (uint32_t i = 0; i < TEST_ITERATIONS; i++) {
-		fp_reinterlace(interlaced, deinterlaced);
+		fp_reinterlace(&interlaced, &deinterlaced);
 	}
 
 	int64_t end = azaGetTimestamp();
@@ -112,7 +112,7 @@ int64_t TestReinterlace(void(*fp_reinterlace)(azaBuffer,azaBuffer), uint8_t chan
 	bool error = false;
 	for (uint32_t i = 0; i < interlaced.frames; i++) {
 		for (uint32_t c = 0; c < channelCount; c++) {
-			if (interlaced.samples[i * interlaced.stride + c] != (float)(i + c * interlaced.frames)) error = true;
+			if (interlaced.pSamples[i * interlaced.stride + c] != (float)(i + c * interlaced.frames)) error = true;
 		}
 	}
 	if (error) {
@@ -120,8 +120,8 @@ int64_t TestReinterlace(void(*fp_reinterlace)(azaBuffer,azaBuffer), uint8_t chan
 	} else {
 		printf("%s: \033[92mCORRECTE\033[0m\n", name);
 	}
-	azaBufferDeinit(&deinterlaced);
-	azaBufferDeinit(&interlaced);
+	azaBufferDeinit(&deinterlaced, true);
+	azaBufferDeinit(&interlaced, true);
 	float gibps = 2.0f * (float)(((double)(TEST_ITERATIONS * TEST_BUFFERS_FRAME_COUNT * sizeof(float)) / (double)(1024 * 1024 * 1024)) * (double)channelCount / ((double)nanoseconds / 1000000000.0));
 	float gbps = 2.0f * (float)(((double)(TEST_ITERATIONS * TEST_BUFFERS_FRAME_COUNT * sizeof(float)) / (double)(1000000000)) * (double)channelCount / ((double)nanoseconds / 1000000000.0));
 	printf("\ttook %6lld nanoseconds on average\tprocessed %.1f GiB/s (%.1f GB/s)\n", nanoseconds / TEST_ITERATIONS, gibps, gbps);

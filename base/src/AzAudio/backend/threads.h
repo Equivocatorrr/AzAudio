@@ -6,9 +6,7 @@
 #ifndef AZAUDIO_THREADS_H
 #define AZAUDIO_THREADS_H
 
-#include <stdint.h>
-#include <stdalign.h>
-#include <stdbool.h>
+#include "../aza_c_std.h"
 
 // This feels super lame but until I can think of a reasonable alternative that doesn't require heap allocations this is what we got.
 #ifdef __unix

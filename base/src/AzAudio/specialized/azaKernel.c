@@ -8,9 +8,8 @@
 		- azaSampleWithKernel(11)
 */
 
-#include "../dsp.h"
+#include "../dsp/azaKernel.h"
 #include "../simd.h"
-#include "../helpers.h"
 #include "../AzAudio.h"
 
 uint64_t azaKernelScalarSamples = 0;

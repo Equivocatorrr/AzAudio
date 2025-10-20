@@ -6,7 +6,7 @@
 #ifndef AZAUDIO_CPUID_H
 #define AZAUDIO_CPUID_H
 
-#include <stdbool.h>
+#include "aza_c_std.h"
 
 #ifdef __cplusplus
 extern "C" {

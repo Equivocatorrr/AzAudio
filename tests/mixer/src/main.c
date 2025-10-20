@@ -11,8 +11,12 @@
 #include "AzAudio/mixer.h"
 #include "AzAudio/error.h"
 #include "AzAudio/math.h"
+#include "AzAudio/dsp.h"
+#include "AzAudio/backend/threads.h"
 
 #include <stb_vorbis.c>
+
+
 
 // Master
 
@@ -21,17 +25,17 @@ azaMixer mixer;
 // Track 0
 
 typedef struct Synth {
-	azaDSPUser header;
+	azaDSP header;
 	azaFilter *filter;
 	float gen[1];
 	float lfo;
 	int32_t impulseFrame;
 } Synth;
 
-int synthProcess(void *userdata, azaBuffer buffer) {
+int synthProcess(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	Synth *synth = userdata;
-	float timestep = 1.0f / (float)buffer.samplerate;
-	for (uint32_t i = 0; i < buffer.frames; i++) {
+	float timestep = 1.0f / (float)dst->samplerate;
+	for (uint32_t i = 0; i < dst->frames; i++) {
 		float sample = 0.0f;
 		// float freqMul = (1.0f + (azaOscTriangle(synth->lfo) * 0.5f + 0.5f) * 9.0f);
 		for (uint32_t o = 0; o < sizeof(synth->gen) / sizeof(float); o++) {
@@ -49,26 +53,44 @@ int synthProcess(void *userdata, azaBuffer buffer) {
 		if ((int32_t)i == synth->impulseFrame) {
 			sample = 10.0f;
 		}
-		for (uint8_t c = 0; c < buffer.channelLayout.count; c++) {
-			buffer.samples[i * buffer.stride + c] = sample;
+		for (uint8_t c = 0; c < dst->channelLayout.count; c++) {
+			dst->pSamples[i * dst->stride + c] = sample;
 		}
 	}
-	synth->impulseFrame -= buffer.frames;
+	synth->impulseFrame -= dst->frames;
 	if (synth->impulseFrame < 0) {
 		synth->impulseFrame += 100000;
 	}
 	return AZA_SUCCESS;
 }
 
-azaDSP* MakeDefaultSynth(uint8_t channelCountInline) {
+void FreeSynth(void *dsp) {
+	Synth *data = dsp;
+	azaFreeFilter(data->filter);
+	aza_free(data);
+}
+
+static const azaDSP SynthHeader = {
+	/* .size         = */ sizeof(Synth),
+	/* .version      = */ 1,
+	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
+	/* ._reserved    = */ {0},
+	/* .name         = */ "Synth",
+	/* fp_getSpecs   = */ NULL,
+	/* fp_process    = */ synthProcess,
+	/* fp_free       = */ FreeSynth,
+	NULL, NULL,
+};
+
+azaDSP* MakeDefaultSynth() {
 	Synth *result = aza_calloc(1, sizeof(Synth));
 	if (!result) return NULL;
-	azaDSPUserInitSingle(&result->header, sizeof(*result), "Synth", result, synthProcess);
+	result->header = SynthHeader;
 	result->filter = azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_LOW_PASS,
 		.frequency = 500.0f,
-	}, channelCountInline);
-	result->header.header.pNext = (azaDSP*)result->filter;
+	});
+	result->header.pNext = (azaDSP*)result->filter;
 	if (!result->filter) goto fail;
 	result->gen[0] = 0.0f;
 	result->lfo = 0.25f;
@@ -79,17 +101,11 @@ fail:
 	return NULL;
 }
 
-void FreeSynth(Synth *data) {
-	azaFreeFilter(data->filter);
-	aza_free(data);
-}
-
 // Track 1
 
 azaBuffer bufferCat = {0};
 azaSampler *samplerCat = NULL;
-azaSpatialize **spatializeCat = NULL;
-azaDSPUser dspCat;
+azaSpatialize *spatializeCat = NULL;
 
 // Will adjust the rate that the spatialized sound sources move around
 const float objectTimeScale = 1.0f;
@@ -122,8 +138,8 @@ int loadSoundFileIntoBuffer(azaBuffer *buffer, const char *filename) {
 	printf("Sound \"%s\" has %u channels and a samplerate of %u\n", filename, info.channels, info.sample_rate);
 	buffer->channelLayout.count = info.channels;
 	buffer->samplerate = info.sample_rate;
-	azaBufferInit(buffer, buffer->frames, buffer->channelLayout);
-	stb_vorbis_get_samples_float_interleaved(vorbis, buffer->channelLayout.count, buffer->samples, buffer->frames * buffer->channelLayout.count);
+	azaBufferInit(buffer, buffer->frames, 0, 0, buffer->channelLayout);
+	stb_vorbis_get_samples_float_interleaved(vorbis, buffer->channelLayout.count, buffer->pSamples, buffer->frames * buffer->channelLayout.count);
 	stb_vorbis_close(vorbis);
 	return 0;
 }
@@ -139,8 +155,8 @@ void updateObjects(uint32_t count, float timeDelta) {
 	if (count == 0) return;
 	timeDelta *= objectTimeScale;
 	float angleSize = AZA_TAU / (float)count;
-	for (uint32_t i = 0; i < count; i++) {
-		Object *object = &objects[i];
+	for (uint8_t c = 0; c < count; c++) {
+		Object *object = &objects[c];
 #if PRINT_OBJECT_INFO
 		if (object->timer <= 0.0f) {
 			printf("target = { %f, %f, %f }\n", object->target.x, object->target.y, object->target.z);
@@ -151,8 +167,8 @@ void updateObjects(uint32_t count, float timeDelta) {
 		object->timer -= timeDelta;
 #endif
 		if (azaVec3NormSqr(azaSubVec3(object->pos, object->target)) < azaSqrf(0.1f)) {
-			float angleMin = angleSize * (float)i;
-			float angleMax = angleSize * (float)(i+1);
+			float angleMin = angleSize * (float)c;
+			float angleMax = angleSize * (float)(c+1);
 			float azimuth = randomf(angleMin, angleMax);
 			float ac = cosf(azimuth), as = sinf(azimuth);
 			float elevation = randomf(-AZA_TAU/4.0f, AZA_TAU/4.0f);
@@ -169,15 +185,24 @@ void updateObjects(uint32_t count, float timeDelta) {
 		object->vel = azaMulVec3Scalar(object->vel, azaClampf(powf(2.0f, -timeDelta * 2.0f), 0.0f, 1.0f));
 		object->posPrev = object->pos;
 		object->pos = azaAddVec3(object->pos, azaMulVec3Scalar(object->vel, timeDelta));
-	}
-}
 
-int catProcess(void *userdata, azaBuffer buffer) {
-	float timeDelta = (float)buffer.frames / (float)buffer.samplerate;
+	}
+	// Set spatializer targets
+	azaMutexLock(&mixer.mutex);
+	for (uint8_t c = 0; c < count; c++) {
+		spatializeCat->config.channels[c].target.amplitude = azaClampf(3.0f / azaVec3Norm(objects[c].pos), 0.0f, 1.0f);
+		spatializeCat->config.channels[c].target.position = objects[c].pos;
+	}
+	azaMutexUnlock(&mixer.mutex);
+}
+/*
+// OLD WAY
+int catProcess(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
+	float timeDelta = (float)dst->frames / (float)dst->samplerate;
 	int err = AZA_SUCCESS;
 	updateObjects(bufferCat.channelLayout.count, timeDelta);
-	azaBufferZero(buffer);
-	azaBuffer sampledBuffer = azaPushSideBufferZero(buffer.frames, samplerCat->config.buffer->channelLayout.count, buffer.samplerate);
+	azaBufferZero(dst);
+	azaBuffer sampledBuffer = azaPushSideBufferZero(dst->frames, samplerCat->config.buffer->channelLayout.count, dst->samplerate);
 
 #if 1
 	if ((err = azaSamplerProcess(samplerCat, sampledBuffer))) {
@@ -213,6 +238,59 @@ done:
 	azaPopSideBuffer();
 	return err;
 }
+*/
+
+
+
+// Thread for handling console input (hacking it into a non-blocking input method, also mimicking how a game engine would behave)
+
+
+
+azaMutex inputMutex;
+azaThread inputThread;
+bool shouldExit = false;
+
+AZA_THREAD_PROC_DEF(inputThreadProc, userdata) {
+	static const float semitone = 1.05946309436f;
+	uint32_t lastId = 0;
+	azaMixerGUIOpen(&mixer, /* onTop */ false);
+	printf("Type Q to stop, M to open the mixer GUI, P to play, and S to stop, + to increase speed, - to decrease speed, = to reset speed, ? to print some stats\n");
+	while (!shouldExit) {
+		int c = getc(stdin);
+		if (c == 'M' || c == 'm') {
+			azaMixerGUIOpen(&mixer, /* onTop */ true);
+		} else if (c == 'P' || c == 'p') {
+			lastId = azaSamplerPlay(samplerCat, 1.0f, 0.0f);
+		} else if (c == 'S' || c == 's') {
+			azaSamplerStopAll(samplerCat);
+		} else if (c == '+') {
+			azaSamplerSetSpeed(samplerCat, lastId, azaSamplerGetSpeedTarget(samplerCat, lastId) * semitone);
+		} else if (c == '-') {
+			azaSamplerSetSpeed(samplerCat, lastId, azaSamplerGetSpeedTarget(samplerCat, lastId) / semitone);
+		} else if (c == '=') {
+			azaSamplerSetSpeed(samplerCat, lastId, 1.0f);
+		} else if (c == '?') {
+			printf("azaKernel stats:\n\tscalar samples: %llu\n\tvector samples: %llu\n", (unsigned long long)azaKernelScalarSamples, (unsigned long long)azaKernelVectorSamples);
+		} else if (c == 'Q' || c == 'q') {
+			azaMutexLock(&inputMutex);
+			shouldExit = true;
+			azaMutexUnlock(&inputMutex);
+		}
+
+		azaThreadSleep(10);
+	}
+	return 0;
+}
+
+bool ShouldExit() {
+	bool result;
+	azaMutexLock(&inputMutex);
+	result = shouldExit;
+	azaMutexUnlock(&inputMutex);
+	return result;
+}
+
+
 
 void usage(const char *executableName) {
 	printf(
@@ -267,11 +345,14 @@ int main(int argumentCount, char** argumentValues) {
 		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
 	}
-	uint8_t outputChannelCount = azaStreamGetChannelLayout(&mixer.stream).count;
 
-	// Configure all the DSP functions
 
-	azaDSPAddRegEntry("Synth", MakeDefaultSynth, (void(*)(azaDSP*))FreeSynth);
+
+	// Configure the mixer and all the plugins
+
+
+
+	azaDSPAddRegEntry(SynthHeader, MakeDefaultSynth);
 
 	// Track 0
 
@@ -284,7 +365,7 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	azaTrackSetName(track0, "Synth");
 
-	azaDSP *dspSynth = MakeDefaultSynth(track0->buffer.channelLayout.count);
+	azaDSP *dspSynth = MakeDefaultSynth();
 	azaTrackAppendDSP(track0, dspSynth);
 
 	// We can use this to change the gain on an existing connection
@@ -305,8 +386,6 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	azaTrackSetName(track1, "Spatialized");
 
-	azaDSPUserInitSingle(&dspCat, sizeof(dspCat), "Spatializer", NULL, catProcess);
-
 	samplerCat = azaMakeSampler((azaSamplerConfig) {
 		.buffer = &bufferCat,
 		.speedTransitionTimeMs = 250.0f,
@@ -317,22 +396,26 @@ int main(int argumentCount, char** argumentValues) {
 			.release = 500.0f,
 		}
 	});
+	azaTrackAppendDSP(track1, (azaDSP*)samplerCat);
 
 	objects = calloc(bufferCat.channelLayout.count, sizeof(Object));
 	srand(123456); // We need repeatability for nullability-tests
+	spatializeCat = (azaSpatialize*)azaMakeDefaultSpatialize();
+
+	// spatializeCat->config.doDoppler = false;
+	// spatializeCat->config.usePerChannelDelay = false;
+	// spatializeCat->config.doFilter = false;
+	spatializeCat->config.numSrcChannelsActive = bufferCat.channelLayout.count;
+
 	updateObjects(bufferCat.channelLayout.count, 0.0f);
-	spatializeCat = malloc(sizeof(azaSpatialize*) * bufferCat.channelLayout.count);
+
+	azaTrackAppendDSP(track1, (azaDSP*)spatializeCat);
+
 	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
 		objects[c].pos = objects[c].target;
-		spatializeCat[c] = azaMakeSpatialize((azaSpatializeConfig) {
-			.world       = AZA_WORLD_DEFAULT,
-			.mode        = AZA_SPATIALIZE_ADVANCED,
-			.delayMax    = 0.0f,
-			.earDistance = 0.0f,
-		}, track1->buffer.channelLayout.count);
 	}
 
-	azaTrackAppendDSP(track1, (azaDSP*)&dspCat);
+	// azaTrackAppendDSP(track1, (azaDSP*)&dspCat);
 
 	// azaTrackConnect(track1, &mixer.master, -6.0f, NULL, 0);
 	track1->gain = -6.0f;
@@ -357,16 +440,16 @@ int main(int argumentCount, char** argumentValues) {
 		.kind = AZA_FILTER_HIGH_PASS,
 		.frequency = 50.0f,
 		.dryMix = 0.0f,
-	}, track2->buffer.channelLayout.count);
+	});
 	azaTrackAppendDSP(track2, (azaDSP*)reverbHighpass);
 
 	azaReverb *reverb = azaMakeReverb((azaReverbConfig) {
-		.gain = 0.0f,
+		.gainWet = 0.0f,
 		.muteDry = true,
 		.roomsize = 5.0f,
 		.color = 5.0f,
-		.delay = 0.0f,
-	}, track2->buffer.channelLayout.count);
+		.delay_ms = 0.0f,
+	});
 	azaTrackAppendDSP(track2, (azaDSP*)reverb);
 
 	track2->mute = true;
@@ -376,23 +459,23 @@ int main(int argumentCount, char** argumentValues) {
 	azaCompressor *compressor = azaMakeCompressor((azaCompressorConfig) {
 		.threshold = -24.0f,
 		.ratio = 4.0f,
-		.attack = 10.0f,
-		.decay = 500.0f,
-		.gain = 6.0f,
-	}, outputChannelCount);
-	azaDSPMetadataSetBypass(&compressor->header.metadata, true);
+		.attack_ms = 10.0f,
+		.decay_ms = 500.0f,
+		.gainOutput = 6.0f,
+	});
+	compressor->header.bypass = true;
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)compressor);
 
-	azaMonitorSpectrum *monitorSpectrum = (azaMonitorSpectrum*)azaMakeDefaultMonitorSpectrum(2);
+	azaMonitorSpectrum *monitorSpectrum = (azaMonitorSpectrum*)azaMakeDefaultMonitorSpectrum();
 	monitorSpectrum->config.ceiling = 0;
-	// azaDSPMetadataSetBypass(&monitorSpectrum->header.metadata, true);
+	// monitorSpectrum->header.bypass = true;
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)monitorSpectrum);
 
 	azaLookaheadLimiter *limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
 		.gainInput  =  0.0f,
 		.gainOutput = -0.1f,
-	}, outputChannelCount);
-	// azaDSPMetadataSetBypass(&limiter->header.metadata, true);
+	});
+	// limiter->header.bypass = true;
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)limiter);
 
 	mixer.master.gain = -12.0f;
@@ -403,30 +486,37 @@ int main(int argumentCount, char** argumentValues) {
 	azaMixerStreamSetActive(&mixer, true);
 
 
-	printf("Type Q to stop, M to open the mixer GUI, P to play, and S to stop, + to increase speed, - to decrease speed, = to reset speed, ? to print some stats\n");
-	uint32_t lastId = 0;
-	azaMixerGUIOpen(&mixer, /* onTop */ false);
-	static const float semitone = 1.05946309436f;
-	while (true) {
-		int c = getc(stdin);
-		if (c == 'M' || c == 'm') {
-			azaMixerGUIOpen(&mixer, /* onTop */ true);
-		} else if (c == 'P' || c == 'p') {
-			lastId = azaSamplerPlay(samplerCat, 1.0f, 0.0f);
-		} else if (c == 'S' || c == 's') {
-			azaSamplerStopAll(samplerCat);
-		} else if (c == '+') {
-			azaSamplerSetSpeed(samplerCat, lastId, azaSamplerGetSpeedTarget(samplerCat, lastId) * semitone);
-		} else if (c == '-') {
-			azaSamplerSetSpeed(samplerCat, lastId, azaSamplerGetSpeedTarget(samplerCat, lastId) / semitone);
-		} else if (c == '=') {
-			azaSamplerSetSpeed(samplerCat, lastId, 1.0f);
-		} else if (c == '?') {
-			printf("azaKernel stats:\n\tscalar samples: %llu\n\tvector samples: %llu\n", (unsigned long long)azaKernelScalarSamples, (unsigned long long)azaKernelVectorSamples);
-		} else if (c == 'Q' || c == 'q') {
-			break;
-		}
+
+	// Main loop!!!
+
+
+
+	azaMutexInit(&inputMutex);
+	azaThreadLaunch(&inputThread, inputThreadProc, NULL);
+
+	const float timeDelta = 1.0f / 60.0f;
+
+	// If the mixer processing reaches the target before we give it a new one, we can expect the pitch to abruptly jump to 1.0x instead of smoothly to whatever it needs to be due to the object movement.
+	// As a hacky fix, make sure there's a little extra buffer time because our 60fps update interval doesn't match the mixer's update interval.
+	// This hack will be replaced by scheduling and buffering.
+	const float targetFollowTimeScale = 1.5f;
+
+	spatializeCat->config.targetFollowTime_ms = targetFollowTimeScale * 1000.0f * timeDelta;
+
+	while (!ShouldExit()) {
+		updateObjects(bufferCat.channelLayout.count, timeDelta);
+		azaThreadSleep((uint32_t)(1000.0f * timeDelta));
 	}
+
+	azaThreadJoin(&inputThread);
+	azaMutexDeinit(&inputMutex);
+
+
+
+	// Cleanup
+
+
+
 	azaMixerGUIClose();
 	azaMixerStreamClose(&mixer, false);
 
@@ -434,11 +524,8 @@ int main(int argumentCount, char** argumentValues) {
 
 	free(objects);
 	azaFreeSampler(samplerCat);
-	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
-		azaFreeSpatialize(spatializeCat[c]);
-	}
-	free(spatializeCat);
-	azaBufferDeinit(&bufferCat);
+	azaFreeSpatialize(spatializeCat);
+	azaBufferDeinit(&bufferCat, true);
 
 	azaFreeFilter(reverbHighpass);
 	azaFreeReverb(reverb);

@@ -402,13 +402,14 @@ static void azaStreamProcess(void *userdata) {
 	numFrames = aza_align(numFrames, 16);
 	// AZA_LOG_TRACE("requested %ull numFrames %i\n", pw_buffer->requested, numFrames);
 	if (numFrames) {
-		stream->processCallback(stream->userdata, (azaBuffer){
-			.samples = pcm,
+		azaBuffer processingBuffer = {
+			.pSamples = pcm,
 			.samplerate = data->samplerate,
 			.frames = numFrames,
 			.stride = data->channelLayout.count,
 			.channelLayout = data->channelLayout,
-		});
+		};
+		stream->processCallback(stream->userdata, &processingBuffer, &processingBuffer, 0);
 	}
 
 	buffer->datas[0].chunk->offset = 0;

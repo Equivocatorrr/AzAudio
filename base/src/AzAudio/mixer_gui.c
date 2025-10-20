@@ -9,7 +9,8 @@
 #include "backend/threads.h"
 #include "backend/timer.h"
 #include "AzAudio.h"
-#include "helpers.h"
+#include "math.h"
+#include "dsp.h"
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -1583,15 +1584,13 @@ static void azaContextMenuTrackFX() {
 		azaContextMenuOpen(AZA_CONTEXT_MENU_TRACK_FX_ADD);
 	}
 	if (doRemovePlugin) {
-		if (azaDrawContextMenuButton(1, TextFormat("Remove %s", azaGetDSPName(contextMenuTrackFXDSP)))) {
+		if (azaDrawContextMenuButton(1, TextFormat("Remove %s", contextMenuTrackFXDSP->name))) {
 			azaTrackRemoveDSP(azaContextMenuTrackFromIndex(), contextMenuTrackFXDSP);
 			if (selectedDSP == contextMenuTrackFXDSP) {
 				selectedDSP = NULL;
 			}
-			if (azaDSPMetadataGetOwned(contextMenuTrackFXDSP->metadata)) {
-				azaFreeDSP(contextMenuTrackFXDSP);
-				contextMenuTrackFXDSP = NULL;
-			}
+			azaFreeDSP(contextMenuTrackFXDSP);
+			contextMenuTrackFXDSP = NULL;
 		}
 	}
 
@@ -1610,11 +1609,11 @@ static void azaContextMenuTrackFXAdd() {
 	int choiceIndex = 0;
 	for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
 		if (azaDSPRegistry.data[i].fp_makeDSP == NULL) continue;
-		const char *name = azaDSPRegistry.data[i].name;
+		const char *name = azaDSPRegistry.data[i].base.name;
 		if (azaDrawContextMenuButton(choiceIndex, name)) {
-			azaDSP *newDSP = azaDSPRegistry.data[i].fp_makeDSP(track->buffer.channelLayout.count);
+			azaDSP *newDSP = azaDSPRegistry.data[i].fp_makeDSP();
 			if (newDSP) {
-				azaDSPMetadataSetOwned(&newDSP->metadata);
+				newDSP->owned = true;
 				azaTrackInsertDSP(track, newDSP, contextMenuTrackFXDSP);
 			} else {
 				snprintf(contextMenuError, sizeof(contextMenuError), "Failed to make \"%s\": Out of memory!\n", name);
@@ -1713,12 +1712,12 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 		} else if (azaMouseInRectDepth(muteRect, 0)) {
 			azaTooltipAdd("Bypass", muteRect.x + muteRect.w, muteRect.y, false);
 			if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
-				azaDSPMetadataToggleBypass(&dsp->metadata);
+				dsp->bypass = !dsp->bypass;
 			}
 		}
 		azaDrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
-		azaDrawText(azaGetDSPName(dsp), pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
-		if (azaDSPMetadataGetBypass(dsp->metadata)) {
+		azaDrawText(dsp->name, pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
+		if (dsp->bypass) {
 			azaDrawRect(muteRect, colorFaderMuteButton);
 		} else {
 			azaDrawRectLines(muteRect, colorFaderMuteButton);
@@ -1969,16 +1968,20 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 }
 
 static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
-	int usedWidth = azaDrawMeters(&data->metersInput, bounds, compressorMeterDBRange);
+	int usedWidth;
+	usedWidth = azaDrawFader(bounds, &data->config.gainInput, NULL, "Input Gain", 72, 36);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	usedWidth = azaDrawMeters(&data->metersInput, bounds, compressorMeterDBRange);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
 	usedWidth = azaDrawFader(bounds, &data->config.threshold, NULL, "Threshold", 72, 0);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.ratio, 1.0f, 10.0f, 0.2f, 10.0f, "Ratio", "%.2f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.attack, 1.0f, 1000.0f, 0.2f, 50.0f, "Attack", "%.1fms");
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.attack_ms, 1.0f, 1000.0f, 0.2f, 50.0f, "Attack", "%.1fms");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.decay, 1.0f, 1000.0f, 0.2f, 200.0f, "Release", "%.1fms");
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.decay_ms, 1.0f, 1000.0f, 0.2f, 200.0f, "Release", "%.1fms");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
 	azaRect attenuationRect = {
@@ -2011,7 +2014,7 @@ static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
 		data->minGain = 1.0f;
 	}
 
-	usedWidth = azaDrawFader(bounds, &data->config.gain, NULL, "Output Gain", 72, 36);
+	usedWidth = azaDrawFader(bounds, &data->config.gainOutput, NULL, "Output Gain", 72, 36);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
 	usedWidth = azaDrawMeters(&data->metersOutput, bounds, compressorMeterDBRange);
@@ -2022,12 +2025,12 @@ static void azaDrawDelay(azaDelay *data, azaRect bounds) {
 	int usedWidth = azaDrawMeters(&data->metersInput, bounds, meterDBRange);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
-	usedWidth = azaDrawFader(bounds, &data->config.gain, &data->config.muteWet, "Wet Gain", meterDBRange, faderDBHeadroom);
+	usedWidth = azaDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, "Wet Gain", meterDBRange, faderDBHeadroom);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 	usedWidth = azaDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, "Dry Gain", meterDBRange, faderDBHeadroom);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
-	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.delay, 0.1f, 10000.0f, 0.1f, 300.0f, "Delay", "%.1fms");
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.delay_ms, 0.1f, 10000.0f, 0.1f, 300.0f, "Delay", "%.1fms");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.feedback, 0.0f, 1.0f, 0.02f, 0.5f, "Feedback", "%.3f");
@@ -2036,9 +2039,9 @@ static void azaDrawDelay(azaDelay *data, azaRect bounds) {
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.pingpong, 0.0f, 1.0f, 0.02f, 0.0f, "PingPong", "%.3f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
-	for (uint32_t c = 0; c < (uint32_t)(data->channelData.capInline + data->channelData.capAdditional); c++) {
-		azaDelayChannelConfig *channel = azaDelayGetChannelConfig(data, c);
-		usedWidth = azaDrawSliderFloatLog(bounds, &channel->delay, 0.1f, 10000.0f, 0.1f, 0.0f, TextFormat("Ch %d Delay", (int)c), "%.1fms");
+	for (uint32_t c = 0; c < data->header.prevChannelCountDst; c++) {
+		azaDelayChannelConfig *channel = &data->channelData[c].config;
+		usedWidth = azaDrawSliderFloatLog(bounds, &channel->delay_ms, 0.1f, 10000.0f, 0.1f, 0.0f, TextFormat("Ch %d Delay", (int)c), "%.1fms");
 		azaRectShrinkLeft(&bounds, usedWidth + margin);
 	}
 
@@ -2068,7 +2071,7 @@ static const int monitorSpectrumMaxDynamicRange = 240;
 static const int monitorSpectrumMinDynamicRange = -240;
 
 static void azaDrawReverb(azaReverb *data, azaRect bounds) {
-	int usedWidth = azaDrawFader(bounds, &data->config.gain, &data->config.muteWet, "Wet Gain", 36, 6);
+	int usedWidth = azaDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, "Wet Gain", 36, 6);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 	usedWidth = azaDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, "Dry Gain", 36, 6);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
@@ -2076,7 +2079,7 @@ static void azaDrawReverb(azaReverb *data, azaRect bounds) {
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.color, 1.0f, 5.0f, 0.25f, 2.0f, "Color", "%.2f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
-	usedWidth = azaDrawSliderFloat(bounds, &data->config.delay, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "%.1fms");
+	usedWidth = azaDrawSliderFloat(bounds, &data->config.delay_ms, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "%.1fms");
 }
 
 static int azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, uint32_t width, uint32_t i) {
@@ -2414,39 +2417,21 @@ static void azaDrawSelectedDSP() {
 	if (!selectedDSP) goto done;
 
 	azaRectShrinkMargin(&bounds, margin*2);
-	azaDrawText(azaGetDSPName(selectedDSP), bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
+	azaDrawText(selectedDSP->name, bounds.x + textMargin, bounds.y + textMargin, 20, WHITE);
 	azaRectShrinkTop(&bounds, textMargin * 2 + 20);
-	switch (selectedDSP->kind) {
-		case AZA_DSP_NONE:
-		case AZA_DSP_USER_SINGLE:
-		case AZA_DSP_USER_DUAL:
-		case AZA_DSP_CUBIC_LIMITER:
-		case AZA_DSP_RMS:
-			break;
-		case AZA_DSP_LOOKAHEAD_LIMITER:
-			azaDrawLookaheadLimiter((azaLookaheadLimiter*)selectedDSP, bounds);
-			break;
-		case AZA_DSP_FILTER:
-			azaDrawFilter((azaFilter*)selectedDSP, bounds);
-			break;
-		case AZA_DSP_COMPRESSOR:
-			azaDrawCompressor((azaCompressor*)selectedDSP, bounds);
-			break;
-		case AZA_DSP_DELAY:
-			azaDrawDelay((azaDelay*)selectedDSP, bounds);
-			break;
-		case AZA_DSP_REVERB:
-			azaDrawReverb((azaReverb*)selectedDSP, bounds);
-			break;
-		case AZA_DSP_SAMPLER:
-		case AZA_DSP_GATE:
-		case AZA_DSP_DELAY_DYNAMIC:
-		case AZA_DSP_SPATIALIZE:
-			break;
-		case AZA_DSP_MONITOR_SPECTRUM:
-			azaDrawMonitorSpectrum((azaMonitorSpectrum*)selectedDSP, bounds);
-			break;
-		case AZA_DSP_KIND_COUNT: break;
+	// TODO: Do this properly with a callback
+	if (selectedDSP->fp_process == azaLookaheadLimiterProcess) {
+		azaDrawLookaheadLimiter((azaLookaheadLimiter*)selectedDSP, bounds);
+	} else if (selectedDSP->fp_process == azaFilterProcess) {
+		azaDrawFilter((azaFilter*)selectedDSP, bounds);
+	} else if (selectedDSP->fp_process == azaCompressorProcess) {
+		azaDrawCompressor((azaCompressor*)selectedDSP, bounds);
+	} else if (selectedDSP->fp_process == azaDelayProcess) {
+		azaDrawDelay((azaDelay*)selectedDSP, bounds);
+	} else if (selectedDSP->fp_process == azaReverbProcess) {
+		azaDrawReverb((azaReverb*)selectedDSP, bounds);
+	} else if (selectedDSP->fp_process == azaMonitorSpectrumProcess) {
+		azaDrawMonitorSpectrum((azaMonitorSpectrum*)selectedDSP, bounds);
 	}
 done:
 	azaMutexUnlock(&currentMixer->mutex);

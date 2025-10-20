@@ -34,8 +34,6 @@ enum {
 	AZA_ERROR_INVALID_FRAME_COUNT,
 	// Something wasn't configured right... check stderr
 	AZA_ERROR_INVALID_CONFIGURATION,
-	// A generic azaDSP struct wasn't a valid kind
-	AZA_ERROR_INVALID_DSP_KIND,
 	// Two buffers were expected to have the same number of channels, but they didn't
 	AZA_ERROR_MISMATCHED_CHANNEL_COUNT,
 	// Two buffers were expected to have the same number of frames, but they didn't

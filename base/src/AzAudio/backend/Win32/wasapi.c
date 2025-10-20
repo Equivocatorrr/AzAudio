@@ -4,14 +4,15 @@
 */
 
 #include "../../AzAudio.h"
+#include "../../dsp/azaKernel.h"
 #include "../backend.h"
 #include "../interface.h"
 #include "../../error.h"
-#include "../../helpers.h"
 
 #include "../threads.h"
 #include "platform_util.h"
 
+#define byte MS_byte
 #include <Mmdeviceapi.h>
 #include <mmreg.h>
 #include <functiondiscoverykeys_devpkey.h>
@@ -19,6 +20,7 @@
 #include <Ksmedia.h>
 #include <stringapiset.h>
 #include <Audioclient.h>
+#undef byte
 
 #include <assert.h>
 
@@ -158,8 +160,8 @@ static void azaStreamDataFree(azaStreamData *data) {
 	if (data->isInUse) {
 		data->isInUse = 0;
 		streamCount--;
-		azaBufferDeinit(&data->nativeBuffer);
-		azaBufferDeinit(&data->processingBuffer);
+		azaBufferDeinit(&data->nativeBuffer, true);
+		azaBufferDeinit(&data->processingBuffer, true);
 	}
 }
 
@@ -380,18 +382,18 @@ static void azaStreamConvertFromNative(azaStreamData *data, uint32_t numFramesNa
 	}
 	// Next, use nativeBuffer's contents to do any additional processing needed.
 	if (data->processingBuffer.samplerate == data->waveFormatExtensible.Format.nSamplesPerSec) {
-		data->nativeBufferStart = data->nativeBuffer.samples;
+		data->nativeBufferStart = data->nativeBuffer.pSamples;
 		// No resampling necessary, so we don't need to use the extra buffer space and therefore aren't adding latency.
 		assert(numFrames == numFramesNative);
 		if (data->processingBuffer.channelLayout.count == data->waveFormatExtensible.Format.nChannels) {
-			memcpy(data->processingBuffer.samples, data->nativeBufferStart, sizeof(float) * numFrames * data->processingBuffer.channelLayout.count);
+			memcpy(data->processingBuffer.pSamples, data->nativeBufferStart, sizeof(float) * numFrames * data->processingBuffer.channelLayout.count);
 		} else {
 			// Do channel mixing
-			azaMixChannels(data->processingBuffer.samples, data->processingBuffer.channelLayout.count, data->nativeBufferStart, data->waveFormatExtensible.Format.nChannels, numFrames);
+			azaMixChannels(data->processingBuffer.pSamples, data->processingBuffer.channelLayout.count, data->nativeBufferStart, data->waveFormatExtensible.Format.nChannels, numFrames);
 		}
 	} else {
 		// Move our reference position back by half of the entire resampling kernel window, adding AZA_RESAMPLING_WINDOW samples of latency, but allowing for artifact-free resampling.
-		float *nativeBuffer = data->nativeBuffer.samples + AZA_RESAMPLING_WINDOW * data->waveFormatExtensible.Format.nChannels;
+		float *nativeBuffer = data->nativeBuffer.pSamples + AZA_RESAMPLING_WINDOW * data->waveFormatExtensible.Format.nChannels;
 		float factor = (float)data->waveFormatExtensible.Format.nSamplesPerSec / (float)data->processingBuffer.samplerate;
 		float srcSampleOffset = -data->resamplingHoldoverFrames;
 		data->resamplingHoldoverFrames += (float)numFrames * factor - (float)numFramesNative;
@@ -402,30 +404,30 @@ static void azaStreamConvertFromNative(azaStreamData *data, uint32_t numFramesNa
 			// Just resample
 			uint32_t stride = data->processingBuffer.channelLayout.count;
 			for (uint32_t c = 0; c < data->processingBuffer.channelLayout.count; c++) {
-				float *dst = data->processingBuffer.samples + c;
+				float *dst = data->processingBuffer.pSamples + c;
 				float *src = nativeBuffer + c;
 				azaResample(&lanczosResamplingKernel, factor, dst, stride, numFrames, src, stride, -AZA_RESAMPLING_WINDOW, numFramesNative + AZA_RESAMPLING_WINDOW, srcSampleOffset);
 			}
 		} else {
 			// Resample and do channel mixing
-			azaMixChannelsResampled(&lanczosResamplingKernel, factor, data->processingBuffer.samples, data->processingBuffer.channelLayout.count, numFrames, nativeBuffer, data->waveFormatExtensible.Format.nChannels, -AZA_RESAMPLING_WINDOW, numFramesNative + AZA_RESAMPLING_WINDOW, srcSampleOffset);
+			azaMixChannelsResampled(&lanczosResamplingKernel, factor, data->processingBuffer.pSamples, data->processingBuffer.channelLayout.count, numFrames, nativeBuffer, data->waveFormatExtensible.Format.nChannels, -AZA_RESAMPLING_WINDOW, numFramesNative + AZA_RESAMPLING_WINDOW, srcSampleOffset);
 		}
 		// Finally, copy the end of the buffer to the beginning for the next go around. (This is only necessary when resampling).
-		memcpy(data->nativeBuffer.samples, data->nativeBuffer.samples + (numFramesNative - holdoverFrames) * data->waveFormatExtensible.Format.nChannels, (AZA_RESAMPLING_WINDOW * 2 + holdoverFrames) * data->waveFormatExtensible.Format.nChannels * sizeof(float));
-		data->nativeBufferStart = data->nativeBuffer.samples + (AZA_RESAMPLING_WINDOW * 2 + holdoverFrames) * data->waveFormatExtensible.Format.nChannels;
+		memcpy(data->nativeBuffer.pSamples, data->nativeBuffer.pSamples + (numFramesNative - holdoverFrames) * data->waveFormatExtensible.Format.nChannels, (AZA_RESAMPLING_WINDOW * 2 + holdoverFrames) * data->waveFormatExtensible.Format.nChannels * sizeof(float));
+		data->nativeBufferStart = data->nativeBuffer.pSamples + (AZA_RESAMPLING_WINDOW * 2 + holdoverFrames) * data->waveFormatExtensible.Format.nChannels;
 	}
 }
 
 static void azaStreamConvertToNative(azaStreamData *data, uint32_t numFramesNative, uint32_t numFrames) {
 	if (data->processingBuffer.samplerate == data->waveFormatExtensible.Format.nSamplesPerSec) {
-		data->processingBufferStart = data->processingBuffer.samples;
+		data->processingBufferStart = data->processingBuffer.pSamples;
 		assert(numFrames == numFramesNative);
 		// No resampling necessary, so we don't need to use the extra buffer space and therefore aren't adding latency.
 		if (data->processingBuffer.channelLayout.count == data->waveFormatExtensible.Format.nChannels) {
-			memcpy(data->nativeBuffer.samples, data->processingBufferStart, sizeof(float) * numFrames * data->processingBuffer.channelLayout.count);
+			memcpy(data->nativeBuffer.pSamples, data->processingBufferStart, sizeof(float) * numFrames * data->processingBuffer.channelLayout.count);
 		} else {
 			// Do channel mixing
-			azaMixChannels(data->nativeBuffer.samples, data->waveFormatExtensible.Format.nChannels, data->processingBufferStart, data->processingBuffer.channelLayout.count, numFrames);
+			azaMixChannels(data->nativeBuffer.pSamples, data->waveFormatExtensible.Format.nChannels, data->processingBufferStart, data->processingBuffer.channelLayout.count, numFrames);
 		}
 	} else {
 		float factor = (float)data->processingBuffer.samplerate / (float)data->waveFormatExtensible.Format.nSamplesPerSec;
@@ -434,41 +436,41 @@ static void azaStreamConvertToNative(azaStreamData *data, uint32_t numFramesNati
 		uint32_t holdoverFrames = (uint32_t)ceilf(data->resamplingHoldoverFrames);
 		data->resamplingHoldoverFrames -= (float)holdoverFrames;
 		// Resample
-		float *myBuffer = data->processingBuffer.samples + AZA_RESAMPLING_WINDOW * data->processingBuffer.channelLayout.count;
+		float *myBuffer = data->processingBuffer.pSamples + AZA_RESAMPLING_WINDOW * data->processingBuffer.channelLayout.count;
 		if (data->processingBuffer.channelLayout.count == data->waveFormatExtensible.Format.nChannels) {
 			// Just resample
 			uint32_t stride = data->processingBuffer.channelLayout.count;
 			for (uint32_t c = 0; c < data->processingBuffer.channelLayout.count; c++) {
 				float *src = myBuffer + c;
-				float *dst = data->nativeBuffer.samples + c;
+				float *dst = data->nativeBuffer.pSamples + c;
 				azaResample(&lanczosResamplingKernel, factor, dst, stride, numFramesNative, src, stride, -AZA_RESAMPLING_WINDOW, numFrames + AZA_RESAMPLING_WINDOW, srcSampleOffset);
 			}
 		} else {
 			// Resample and do channel mixing
-			azaMixChannelsResampled(&lanczosResamplingKernel, factor, data->nativeBuffer.samples, data->waveFormatExtensible.Format.nChannels, numFramesNative, myBuffer, data->processingBuffer.channelLayout.count, -AZA_RESAMPLING_WINDOW, numFrames + AZA_RESAMPLING_WINDOW, srcSampleOffset);
+			azaMixChannelsResampled(&lanczosResamplingKernel, factor, data->nativeBuffer.pSamples, data->waveFormatExtensible.Format.nChannels, numFramesNative, myBuffer, data->processingBuffer.channelLayout.count, -AZA_RESAMPLING_WINDOW, numFrames + AZA_RESAMPLING_WINDOW, srcSampleOffset);
 		}
 		// Finally, copy the end of the buffer to the beginning for the next go around. (This is only necessary when resampling).
-		memcpy(data->processingBuffer.samples, data->processingBuffer.samples + (numFrames - holdoverFrames) * data->processingBuffer.channelLayout.count, (AZA_RESAMPLING_WINDOW * 2 + holdoverFrames) * data->processingBuffer.channelLayout.count * sizeof(float));
-		data->processingBufferStart = data->processingBuffer.samples + (AZA_RESAMPLING_WINDOW * 2 + holdoverFrames) * data->processingBuffer.channelLayout.count;
+		memcpy(data->processingBuffer.pSamples, data->processingBuffer.pSamples + (numFrames - holdoverFrames) * data->processingBuffer.channelLayout.count, (AZA_RESAMPLING_WINDOW * 2 + holdoverFrames) * data->processingBuffer.channelLayout.count * sizeof(float));
+		data->processingBufferStart = data->processingBuffer.pSamples + (AZA_RESAMPLING_WINDOW * 2 + holdoverFrames) * data->processingBuffer.channelLayout.count;
 	}
 	if (IsEqualGUID(&data->waveFormatExtensible.SubFormat, &KSDATAFORMAT_SUBTYPE_PCM)) {
 		switch (data->waveFormatExtensible.Format.wBitsPerSample) {
 			case 8: {
 				int8_t *dst = (int8_t*)data->deviceBufferRaw;
 				for (uint32_t i = 0; i < numFramesNative * data->waveFormatExtensible.Format.nChannels; i++) {
-					dst[i] = (int8_t)(data->nativeBuffer.samples[i] * 127.0f);
+					dst[i] = (int8_t)(data->nativeBuffer.pSamples[i] * 127.0f);
 				}
 			} break;
 			case 16: {
 				int16_t *dst = (int16_t*)data->deviceBufferRaw;
 				for (uint32_t i = 0; i < numFramesNative * data->waveFormatExtensible.Format.nChannels; i++) {
-					dst[i] = (int16_t)(data->nativeBuffer.samples[i] * 32767.0f);
+					dst[i] = (int16_t)(data->nativeBuffer.pSamples[i] * 32767.0f);
 				}
 			} break;
 			case 24: {
 				uint8_t *dst = data->deviceBufferRaw;
 				for (uint32_t i = 0; i < numFramesNative * data->waveFormatExtensible.Format.nChannels; i++) {
-					uint32_t value = (uint32_t)(int32_t)(data->nativeBuffer.samples[i] * 8388607.0f);
+					uint32_t value = (uint32_t)(int32_t)(data->nativeBuffer.pSamples[i] * 8388607.0f);
 					dst[i+0] = (value >>  0) & 0xff;
 					dst[i+1] = (value >>  8) & 0xff;
 					dst[i+2] = (value >> 16) & 0xff;
@@ -478,7 +480,7 @@ static void azaStreamConvertToNative(azaStreamData *data, uint32_t numFramesNati
 				// NOTE: This might not be a thing because you might as well just use floats at this point.
 				int32_t *dst = (int32_t*)data->deviceBufferRaw;
 				for (uint32_t i = 0; i < numFramesNative * data->waveFormatExtensible.Format.nChannels; i++) {
-					dst[i] = (int32_t)(data->nativeBuffer.samples[i] * 2147483647.0f);
+					dst[i] = (int32_t)(data->nativeBuffer.pSamples[i] * 2147483647.0f);
 				}
 			} break;
 			default:
@@ -490,13 +492,13 @@ static void azaStreamConvertToNative(azaStreamData *data, uint32_t numFramesNati
 		switch (data->waveFormatExtensible.Format.wBitsPerSample) {
 			case 32: {
 				float *dst = (float*)data->deviceBufferRaw;
-				memcpy(dst, data->nativeBuffer.samples, numFramesNative * data->waveFormatExtensible.Format.nChannels * sizeof(float));
+				memcpy(dst, data->nativeBuffer.pSamples, numFramesNative * data->waveFormatExtensible.Format.nChannels * sizeof(float));
 			} break;
 			case 64: {
 				// NOTE: Is this ever even a thing? This much precision is surely never needed...
 				double *dst = (double*)data->deviceBufferRaw;
 				for (uint32_t i = 0; i < numFramesNative * data->waveFormatExtensible.Format.nChannels; i++) {
-					dst[i] = (double)data->nativeBuffer.samples[i];
+					dst[i] = (double)data->nativeBuffer.pSamples[i];
 				}
 			} break;
 			default:
@@ -531,7 +533,7 @@ static void azaStreamProcess(azaStreamData *data) {
 		hResult = data->pRenderClient->lpVtbl->GetBuffer(data->pRenderClient, numFramesNative, &data->deviceBufferRaw);
 		CHECK_RESULT("IAudioRenderClient::GetBuffer", return);
 		numFrames = GetResampledFramecount(data->processingBuffer.samplerate, data->waveFormatExtensible.Format.nSamplesPerSec, numFramesNative);
-		if (data->processingBuffer.samples) {
+		if (data->processingBuffer.pSamples) {
 			samples = data->processingBufferStart;
 		} else {
 			samples = (float*)data->deviceBufferRaw;
@@ -552,22 +554,24 @@ static void azaStreamProcess(azaStreamData *data) {
 		CHECK_RESULT("IAudioCaptureClient::GetBuffer", return);
 		// AZA_LOG_TRACE("Processing %u input frames\n", numFramesNative);
 		numFrames = GetResampledFramecount(data->processingBuffer.samplerate, data->waveFormatExtensible.Format.nSamplesPerSec, numFramesNative);
-		if (data->processingBuffer.samples) {
+		if (data->processingBuffer.pSamples) {
 			azaStreamConvertFromNative(data, numFramesNative, numFrames);
-			samples = data->processingBuffer.samples;
+			samples = data->processingBuffer.pSamples;
 		} else {
 			samples = (float*)data->deviceBufferRaw;
 		}
 	}
 
-	int err;
-	err = stream->processCallback(stream->userdata, (azaBuffer){
-		.samples = samples,
+
+	azaBuffer processingBuffer = {
+		.pSamples = samples,
 		.samplerate = data->processingBuffer.samplerate,
 		.frames = numFrames,
 		.stride = data->processingBuffer.channelLayout.count,
 		.channelLayout = data->processingBuffer.channelLayout,
-	});
+	};
+	int err;
+	err = stream->processCallback(stream->userdata, &processingBuffer, &processingBuffer, 0);
 	if (err) {
 		char buffer[64];
 		data->isActive = false;
@@ -575,7 +579,7 @@ static void azaStreamProcess(azaStreamData *data) {
 	}
 
 	if (stream->deviceInterface == AZA_OUTPUT) {
-		if (data->processingBuffer.samples) {
+		if (data->processingBuffer.pSamples) {
 			azaStreamConvertToNative(data, numFramesNative, numFrames);
 		}
 		hResult = data->pRenderClient->lpVtbl->ReleaseBuffer(data->pRenderClient, numFramesNative, 0);
@@ -935,14 +939,16 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 
 	if (!exactFormat) {
 		data->processingBuffer.frames = GetResampledFramecount(data->processingBuffer.samplerate, data->waveFormatExtensible.Format.nSamplesPerSec, data->deviceBufferFrames);
-		data->nativeBuffer.samples = aza_calloc((data->deviceBufferFrames + AZA_RESAMPLING_WINDOW*2) * data->waveFormatExtensible.Format.nChannels, sizeof(float));
-		data->nativeBufferStart = data->nativeBuffer.samples + (AZA_RESAMPLING_WINDOW * 2) * data->waveFormatExtensible.Format.nChannels;
+		data->nativeBuffer.pSamples = aza_calloc((data->deviceBufferFrames + AZA_RESAMPLING_WINDOW*2) * data->waveFormatExtensible.Format.nChannels, sizeof(float));
+		data->nativeBuffer.owned = true;
+		data->nativeBufferStart = data->nativeBuffer.pSamples + (AZA_RESAMPLING_WINDOW * 2) * data->waveFormatExtensible.Format.nChannels;
 		data->nativeBuffer.channelLayout = azaGetChannelLayoutFromMask((uint8_t)data->waveFormatExtensible.Format.nChannels, data->waveFormatExtensible.dwChannelMask);
-		data->processingBuffer.samples = aza_calloc((data->processingBuffer.frames + AZA_RESAMPLING_WINDOW*2) * data->processingBuffer.channelLayout.count, sizeof(float));
-		data->processingBufferStart = data->processingBuffer.samples + (AZA_RESAMPLING_WINDOW * 2) * data->processingBuffer.channelLayout.count;
+		data->processingBuffer.pSamples = aza_calloc((data->processingBuffer.frames + AZA_RESAMPLING_WINDOW*2) * data->processingBuffer.channelLayout.count, sizeof(float));
+		data->processingBuffer.owned = true;
+		data->processingBufferStart = data->processingBuffer.pSamples + (AZA_RESAMPLING_WINDOW * 2) * data->processingBuffer.channelLayout.count;
 		data->processingBuffer.channelLayout = azaChannelLayoutStandardFromCount(data->processingBuffer.channelLayout.count);
 	} else {
-		data->processingBuffer.samples = NULL;
+		data->processingBuffer.pSamples = NULL;
 		data->processingBuffer.channelLayout = azaGetChannelLayoutFromMask(data->processingBuffer.channelLayout.count, data->waveFormatExtensible.dwChannelMask);
 	}
 	data->processingBuffer.channelLayout.formFactor = deviceInfo->formFactor;

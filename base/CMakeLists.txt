@@ -48,21 +48,19 @@ add_library(AzAudio STATIC
 	src/AzAudio/cpuid.h
 	src/AzAudio/cpuid.c
 	src/AzAudio/version.c
-	src/AzAudio/dsp.h
-	src/AzAudio/dsp.c
 	src/AzAudio/error.h
 	src/AzAudio/fft.h
 	src/AzAudio/fft.c
-	src/AzAudio/helpers.h
-	src/AzAudio/helpers.c
+	src/AzAudio/aza_c_std.h
+	src/AzAudio/aza_c_std.c
 	src/AzAudio/math.h
 	src/AzAudio/math.c
+	src/AzAudio/easing.h
+	src/AzAudio/easing.c
 	src/AzAudio/mixer.h
 	src/AzAudio/mixer.c
 	src/AzAudio/mixer_gui.c
 	src/AzAudio/simd.h
-	src/AzAudio/utility.h
-	src/AzAudio/utility.c
 	# backend
 	src/AzAudio/backend/backend.h
 	src/AzAudio/backend/interface.h
@@ -75,7 +73,71 @@ add_library(AzAudio STATIC
 	src/AzAudio/specialized/azaBufferReinterlace.c
 	src/AzAudio/specialized/azaBufferMixMatrix.c
 	src/AzAudio/specialized/azaKernel.c
+	# dsp basics
+	src/AzAudio/dsp.h
+	# src/AzAudio/dsp.c
+	src/AzAudio/dsp/utility.h
+	src/AzAudio/dsp/utility.c
+	src/AzAudio/dsp/azaChannelMatrix.h
+	src/AzAudio/dsp/azaChannelMatrix.c
+	src/AzAudio/dsp/azaBuffer.h
+	src/AzAudio/dsp/azaBuffer.c
+	src/AzAudio/dsp/azaDSP.h
+	src/AzAudio/dsp/azaDSP.c
+	src/AzAudio/dsp/azaKernel.h
+	src/AzAudio/dsp/azaKernel.c
+	src/AzAudio/dsp/azaMeters.h
+	src/AzAudio/dsp/azaMeters.c
+	# plugins
+	src/AzAudio/dsp/plugins/azaRMS.h
+	src/AzAudio/dsp/plugins/azaRMS.c
+	src/AzAudio/dsp/plugins/azaCubicLimiter.h
+	src/AzAudio/dsp/plugins/azaCubicLimiter.c
+	src/AzAudio/dsp/plugins/azaLookaheadLimiter.h
+	src/AzAudio/dsp/plugins/azaLookaheadLimiter.c
+	src/AzAudio/dsp/plugins/azaFilter.h
+	src/AzAudio/dsp/plugins/azaFilter.c
+	src/AzAudio/dsp/plugins/azaCompressor.h
+	src/AzAudio/dsp/plugins/azaCompressor.c
+	src/AzAudio/dsp/plugins/azaGate.h
+	src/AzAudio/dsp/plugins/azaGate.c
+	src/AzAudio/dsp/plugins/azaDelay.h
+	src/AzAudio/dsp/plugins/azaDelay.c
+	src/AzAudio/dsp/plugins/azaDelayDynamic.h
+	src/AzAudio/dsp/plugins/azaDelayDynamic.c
+	src/AzAudio/dsp/plugins/azaReverb.h
+	src/AzAudio/dsp/plugins/azaReverb.c
+	src/AzAudio/dsp/plugins/azaSampler.h
+	src/AzAudio/dsp/plugins/azaSampler.c
+	src/AzAudio/dsp/plugins/azaSpatialize.h
+	src/AzAudio/dsp/plugins/azaSpatialize.c
+	src/AzAudio/dsp/plugins/azaMonitorSpectrum.h
+	src/AzAudio/dsp/plugins/azaMonitorSpectrum.c
 )
+
+# # All of these are built in src/AzAudio/dsp.c
+# set_source_files_properties(
+# 	src/AzAudio/dsp/utility.c
+# 	src/AzAudio/dsp/azaChannelMatrix.c
+# 	src/AzAudio/dsp/azaBuffer.c
+# 	src/AzAudio/dsp/azaDSP.c
+# 	src/AzAudio/dsp/azaKernel.c
+# 	src/AzAudio/dsp/azaMeters.c
+# 	# plugins
+# 	src/AzAudio/dsp/plugins/azaRMS.c
+# 	src/AzAudio/dsp/plugins/azaCubicLimiter.c
+# 	src/AzAudio/dsp/plugins/azaLookaheadLimiter.c
+# 	src/AzAudio/dsp/plugins/azaFilter.c
+# 	src/AzAudio/dsp/plugins/azaCompressor.c
+# 	src/AzAudio/dsp/plugins/azaGate.c
+# 	src/AzAudio/dsp/plugins/azaDelay.c
+# 	src/AzAudio/dsp/plugins/azaDelayDynamic.c
+# 	src/AzAudio/dsp/plugins/azaReverb.c
+# 	src/AzAudio/dsp/plugins/azaSampler.c
+# 	src/AzAudio/dsp/plugins/azaSpatialize.c
+# 	src/AzAudio/dsp/plugins/azaMonitorSpectrum.c
+# 	PROPERTIES HEADER_FILE_ONLY TRUE
+# )
 
 set_target_properties(AzAudio PROPERTIES
 	DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX}

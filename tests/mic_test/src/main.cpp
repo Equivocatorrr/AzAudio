@@ -17,6 +17,7 @@
 
 #include "log.hpp"
 #include "AzAudio/AzAudio.h"
+#include "AzAudio/dsp.h"
 #include "AzAudio/error.h"
 
 #ifdef __unix
@@ -77,56 +78,52 @@ float angle = 0.0f;
 float angle2 = 0.0f;
 std::vector<float> endChannelDelays;
 
-int processCallbackOutput(void *userdata, azaBuffer buffer) {
-	static float *processingBuffer = new float[2048];
-	static size_t processingBufferCapacity = 2048;
-	if (processingBufferCapacity < buffer.frames) {
-		if (processingBuffer) delete[] processingBuffer;
-		processingBufferCapacity = buffer.frames;
-		processingBuffer = new float[processingBufferCapacity];
+struct SideBufferPopper {
+	int count = 0;
+	~SideBufferPopper() {
+		azaPopSideBuffers(count);
 	}
+};
+
+int processCallbackOutput(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
+	SideBufferPopper popper{1};
+	azaBuffer srcBuffer = azaPushSideBufferZero(dst->frames, 0, 0, 1, dst->samplerate);
 	numOutputBuffers++;
-	if (micBuffer.size() == lastMicBufferSize && micBuffer.size() > buffer.frames*2) {
+	if (micBuffer.size() == lastMicBufferSize && micBuffer.size() > dst->frames*2) {
 		sys::cout << "Shrunk!" << std::endl;
 		// Crossfade from new end to actual end
 		float t = 0.0f;
-		size_t crossFadeLen = std::min((size_t)(micBuffer.size() - buffer.frames), (size_t)256);
+		size_t crossFadeLen = std::min((size_t)(micBuffer.size() - dst->frames), (size_t)256);
 		for (size_t i = micBuffer.size()-crossFadeLen; i < micBuffer.size(); i++) {
 			t = std::min(1.0f, t + 1.0f / (float)crossFadeLen);
-			float *dst = &micBuffer[i - buffer.frames];
-			float src = micBuffer[i];
-			*dst = *dst + (src - *dst) * t;
+			float *micDst = &micBuffer[i - dst->frames];
+			float micSrc = micBuffer[i];
+			*micDst = *micDst + (micSrc - *micDst) * t;
 		}
-		micBuffer.erase(micBuffer.end() - buffer.frames, micBuffer.end());
+		micBuffer.erase(micBuffer.end() - dst->frames, micBuffer.end());
 	}
 	lastMicBufferSize = micBuffer.size();
-	// printf("micBuffer size: %d\n", micBuffer.size() / buffer.channels);
+	// printf("micBuffer size: %d\n", micBuffer.size() / dst->channels);
 	// printf("output has ");
 	size_t i = 0;
 	static float lastSample = 0.0f;
 	static float fadein = 0.0f;
-	for (; i < std::min((size_t)buffer.frames, micBuffer.size()); i++) {
+	for (; i < std::min((size_t)dst->frames, micBuffer.size()); i++) {
 		fadein = std::min(1.0f, fadein + 1.0f / 256.0f);
 		lastSample = std::max(0.0f, lastSample - 1.0f / 256.0f);
-		processingBuffer[i] = lastSample + micBuffer[i] * fadein;
+		srcBuffer.pSamples[i] = lastSample + micBuffer[i] * fadein;
 	}
-	if (buffer.frames > micBuffer.size()) {
+	if (dst->frames > micBuffer.size()) {
 		fadein = 0.0f;
 		if (micBuffer.size()) lastSample = micBuffer.back();
-		sys::cout << "Buffer underrun (" << micBuffer.size() << "/" << buffer.frames << " frames available, last input buffer was " << lastInputBufferSize << " samples and last output buffer was " << buffer.frames << " samples, had " << numInputBuffers << " input buffers and " << numOutputBuffers << " output buffers so far)" << std::endl;
+		sys::cout << "Buffer underrun (" << micBuffer.size() << "/" << dst->frames << " frames available, last input buffer was " << lastInputBufferSize << " samples and last output buffer was " << dst->frames << " samples, had " << numInputBuffers << " input buffers and " << numOutputBuffers << " output buffers so far)" << std::endl;
 	}
 	micBuffer.erase(micBuffer.begin(), micBuffer.begin() + i);
-	for (; i < buffer.frames; i++) {
+	for (; i < dst->frames; i++) {
 		lastSample = std::max(0.0f, lastSample - 1.0f / 256.0f);
-		processingBuffer[i] = lastSample;
+		srcBuffer.pSamples[i] = lastSample;
 	}
 	int err;
-	azaBuffer srcBuffer;
-	srcBuffer.channelLayout.count = 1;
-	srcBuffer.frames = buffer.frames;
-	srcBuffer.samplerate = buffer.samplerate;
-	srcBuffer.samples = processingBuffer;
-	srcBuffer.stride = 1;
 	// float distance = (0.5f + 0.5f * sin(angle2)) * 100.0f;
 	azaVec3 srcPosStart = {
 		sin(angle) * 100.0f,
@@ -134,10 +131,13 @@ int processCallbackOutput(void *userdata, azaBuffer buffer) {
 		0.0f,
 		// 0.0f,
 	};
-	angle += ((float)buffer.frames / (float)buffer.samplerate) * AZA_TAU * 0.05f;
-	// angle2 += ((float)buffer.frames / (float)buffer.samplerate) * AZA_TAU * 1.0f;
+	angle += ((float)dst->frames / (float)dst->samplerate) * AZA_TAU * 0.15f;
 	if (angle > AZA_TAU) {
 		angle -= AZA_TAU;
+	}
+	angle2 += ((float)dst->frames / (float)dst->samplerate) * AZA_TAU * 0.125f;
+	if (angle2 > AZA_TAU) {
+		angle2 -= AZA_TAU;
 	}
 	// distance = (0.5f + 0.5f * sin(angle2)) * 100.0f;
 	azaVec3 srcPosEnd = {
@@ -147,54 +147,69 @@ int processCallbackOutput(void *userdata, azaBuffer buffer) {
 		0.0f,
 		// 0.0f,
 	};
-	if ((err = azaGateProcess(gate, srcBuffer))) {
+	if ((err = azaGateProcess(gate, &srcBuffer, &srcBuffer, flags))) {
 		return err;
 	}
-	memset(buffer.samples, 0, buffer.frames * buffer.channelLayout.count * sizeof(float));
-	float volumeStart = azaClampf(10.0f / azaVec3Norm(srcPosStart), 0.0f, 1.0f);
-	float volumeEnd = azaClampf(10.0f / azaVec3Norm(srcPosEnd), 0.0f, 1.0f);
-	if ((err = azaSpatializeProcess(spatialize, buffer, srcBuffer, srcPosStart, volumeStart, srcPosEnd, volumeEnd))) {
+	azaBufferZero(dst);
+	float volumeStart = azaClampf(10.0f / sqrtf(azaVec3Norm(srcPosStart)), 0.0f, 1.0f);
+	float volumeEnd = azaClampf(10.0f / sqrtf(azaVec3Norm(srcPosEnd)), 0.0f, 1.0f);
+	azaSpatializeChannelConfig start = {{
+		srcPosStart,
+		volumeStart,
+	}};
+	azaSpatializeChannelConfig end = {{
+		srcPosEnd,
+		volumeEnd,
+	}};
+	azaSpatializeSetRamps(spatialize, 1, &start, &end, srcBuffer.frames, srcBuffer.samplerate);
+	if ((err = azaSpatializeProcess(spatialize, dst, &srcBuffer, flags))) {
 		return err;
 	}
 	// printf("gate gain: %f\n", gate->gain);
-	endChannelDelays.resize(buffer.channelLayout.count);
-	for (float &delay : endChannelDelays) {
-		delay = 600.0f + sinf(angle2) * 400.0f;
+	float startChannelDelays[AZA_MAX_CHANNEL_POSITIONS];
+	endChannelDelays.resize(dst->channelLayout.count, 0.0f);
+	float lfo2 = sinf(angle2);
+	for (size_t i = 0; i < endChannelDelays.size(); i++) {
+		float &delay = endChannelDelays[i];
+		startChannelDelays[i] = delay;
+		delay = 700.0f + lfo2 * 300.0f;
 	}
-	// if ((err = azaDelayDynamicProcess(delayDynamic, buffer, endChannelDelays.data()))) {
-	// 	return err;
-	// }
-	// if ((err = azaDelayProcess(delay, buffer))) {
-	// 	return err;
-	// }
-	// if ((err = azaDelayProcess(delay2, buffer))) {
-	// 	return err;
-	// }
-	// if ((err = azaDelayProcess(delay3, buffer))) {
-	// 	return err;
-	// }
-	if ((err = azaReverbProcess(reverb, buffer))) {
+	// delayDynamic->config.feedback = 1.0f - (0.1f * pow(lfo2 * 0.5f + 0.5f, 4.0f));
+	azaDelayDynamicSetRamps(delayDynamic, dst->channelLayout.count, startChannelDelays, endChannelDelays.data(), dst->frames, dst->samplerate);
+	if ((err = azaDelayDynamicProcess(delayDynamic, dst, dst, flags))) {
 		return err;
 	}
-	if ((err = azaFilterProcess(highPass, buffer))) {
+	// if ((err = azaDelayProcess(delay, dst, dst, flags))) {
+	// 	return err;
+	// }
+	// if ((err = azaDelayProcess(delay2, dst, dst, flags))) {
+	// 	return err;
+	// }
+	// if ((err = azaDelayProcess(delay3, dst, dst, flags))) {
+	// 	return err;
+	// }
+	if ((err = azaFilterProcess(highPass, dst, dst, flags))) {
 		return err;
 	}
-	if ((err = azaCompressorProcess(compressor, buffer))) {
+	if ((err = azaReverbProcess(reverb, dst, dst, flags))) {
 		return err;
 	}
-	if ((err = azaLookaheadLimiterProcess(limiter, buffer))) {
+	if ((err = azaCompressorProcess(compressor, dst, dst, flags))) {
+		return err;
+	}
+	if ((err = azaLookaheadLimiterProcess(limiter, dst, dst, flags))) {
 		return err;
 	}
 	return AZA_SUCCESS;
 }
 
-int processCallbackInput(void *userdata, azaBuffer buffer) {
+int processCallbackInput(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	numInputBuffers++;
-	lastInputBufferSize = buffer.frames;
+	lastInputBufferSize = src->frames;
 	size_t b_i = micBuffer.size();
-	micBuffer.resize(micBuffer.size() + buffer.frames);
-	for (unsigned long i = 0; i < buffer.frames; i++) {
-		micBuffer[b_i + i] = buffer.samples[i];
+	micBuffer.resize(micBuffer.size() + src->frames);
+	for (unsigned long i = 0; i < src->frames; i++) {
+		micBuffer[b_i + i] = src->pSamples[i];
 	}
 	return AZA_SUCCESS;
 }
@@ -247,115 +262,136 @@ int main(int argumentCount, char** argumentValues) {
 			}, AZA_OUTPUT, 0, false) != AZA_SUCCESS) {
 			throw a_fit("Failed to init output stream!");
 		}
-		uint8_t outputChannelCount = azaStreamGetChannelLayout(&streamOutput).count;
+
+
+
 		// Configure all the DSP functions
+
+
+
 		// gate runs on the single-channel mic buffer
 		gateBandPass = azaMakeFilter(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_BAND_PASS,
 			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 300.0f,
 			/* .dryMix    = */ 0.0f,
-		}, 1);
+		});
 
 		gate = azaMakeGate(azaGateConfig{
 			/* .threshold         = */-42.0f,
-			/* .attack            = */ 10.0f,
-			/* .decay             = */ 500.0f,
+			/* .ratio             = */ 5.0f,
+			/* .attack_ms         = */ 10.0f,
+			/* .decay_ms          = */ 500.0f,
+			/* .gainInput         = */ 0.0f,
+			/* .gainOutput        = */ 0.0f,
 			/* .activationEffects = */ (azaDSP*)gateBandPass,
 		});
 
 		delay = azaMakeDelay(azaDelayConfig{
-			/* .gain       = */-15.0f,
-			/* .gainDry    = */ 0.0f,
-			/* .muteDry    = */ false,
-			/* .muteWet    = */ false,
-			/* .delay      = */ 1234.5f,
-			/* .feedback   = */ 0.5f,
-			/* .pingpong   = */ 0.9f,
-			/* .wetEffects = */ nullptr,
-		}, outputChannelCount);
+			/* .gainWet      = */-15.0f,
+			/* .gainDry      = */ 0.0f,
+			/* .muteWet      = */ false,
+			/* .muteDry      = */ false,
+			/* _reserved[2]  = */ {0},
+			/* .delay_ms     = */ 1234.5f,
+			/* .feedback     = */ 0.5f,
+			/* .pingpong     = */ 0.9f,
+			/* .inputEffects = */ nullptr,
+		});
 
 		delay2 = azaMakeDelay(azaDelayConfig{
-			/* .gain       = */-15.0f,
-			/* .gainDry    = */ 0.0f,
-			/* .muteDry    = */ false,
-			/* .muteWet    = */ false,
-			/* .delay      = */ 2345.6f,
-			/* .feedback   = */ 0.5f,
-			/* .pingpong   = */ 0.2f,
-			/* .wetEffects = */ nullptr,
-		}, outputChannelCount);
+			/* .gainWet      = */-15.0f,
+			/* .gainDry      = */ 0.0f,
+			/* .muteWet      = */ false,
+			/* .muteDry      = */ false,
+			/* _reserved[2]  = */ {0},
+			/* .delay        = */ 2345.6f,
+			/* .feedback     = */ 0.5f,
+			/* .pingpong     = */ 0.2f,
+			/* .inputEffects = */ nullptr,
+		});
 
 		delayWetFilter = azaMakeFilter(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_BAND_PASS,
 			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 800.0f,
-			/* .dryMix    = */ 0.5f,
-		}, outputChannelCount);
+			/* .dryMix    = */ 0.8f,
+		});
 
 		delay3 = azaMakeDelay(azaDelayConfig{
-			/* .gain       = */-15.0f,
-			/* .gainDry    = */ 0.0f,
-			/* .muteDry    = */ false,
-			/* .muteWet    = */ false,
-			/* .delay      = */ 1000.0f / 3.0f,
-			/* .feedback   = */ 0.98f,
-			/* .pingpong   = */ 0.0f,
-			/* .wetEffects = */ (azaDSP*)delayWetFilter,
-		}, outputChannelCount);
+			/* .gainWet      = */-15.0f,
+			/* .gainDry      = */ 0.0f,
+			/* .muteWet      = */ false,
+			/* .muteDry      = */ false,
+			/* _reserved[2]  = */ {0},
+			/* .delay        = */ 1000.0f / 3.0f,
+			/* .feedback     = */ 0.98f,
+			/* .pingpong     = */ 0.0f,
+			/* .inputEffects = */ (azaDSP*)delayWetFilter,
+		});
 
 		highPass = azaMakeFilter(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_HIGH_PASS,
 			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 50.0f,
 			/* .dryMix    = */ 0.0f,
-		}, outputChannelCount);
+		});
 
 		reverb = azaMakeReverb(azaReverbConfig{
-			/* .gain     = */-15.0f,
+			/* .gainWet  = */-15.0f,
 			/* .gainDry  = */ 0.0f,
 			/* .muteWet  = */ false,
 			/* .muteDry  = */ false,
 			/* .roomsize = */ 100.0f,
 			/* .color    = */ 1.0f,
-			/* .delay    = */ 200.0f,
-		}, outputChannelCount);
+			/* .delay_ms = */ 50.0f,
+		});
 		// TODO: maybe recreate this? reverbData[c].delay = c * 377.0f / 48000.0f;
 
 		compressor = azaMakeCompressor(azaCompressorConfig{
-			/* .threshold = */-24.0f,
+			/* .threshold = */-12.0f,
 			/* .ratio     = */ 10.0f,
-			/* .attack    = */ 100.0f,
-			/* .decay     = */ 200.0f,
-		}, outputChannelCount);
+			/* .attack_ms = */ 100.0f,
+			/* .decay_ms  = */ 200.0f,
+			/* .gainInput = */ 24.0f,
+		});
 
 		limiter = azaMakeLookaheadLimiter(azaLookaheadLimiterConfig{
-			/* .gainInput  = */ 24.0f,
+			/* .gainInput  = */ 6.0f,
 			/* .gainOutput = */-6.0f,
-		}, outputChannelCount);
-
-		std::vector<azaDelayDynamicChannelConfig> channelDelays(outputChannelCount, azaDelayDynamicChannelConfig{
-			/* .delay = */ 500.0f,
 		});
+
 		delayDynamic = azaMakeDelayDynamic(azaDelayDynamicConfig{
-			/* .gain       = */ 0.0f,
-			/* .gainDry    = */-INFINITY,
-			/* .delayMax   = */ 1000.0f,
-			/* .feedback   = */ 0.8f,
-			/* .pingpong   = */ 0.0f,
-			/* .wetEffects = */ (azaDSP*)delayWetFilter,
-			/* .kernel     = */ nullptr,
-		}, outputChannelCount, outputChannelCount, channelDelays.data());
+			/* .gainWet            = */-3.0f,
+			/* .gainDry            = */ 0.0f,
+			/* .muteWet            = */ false,
+			/* .muteDry            = */ false,
+			/* .reserved[6]        = */ {0},
+			/* .delayMax_ms        = */ 1000.0f,
+			/* .delayFollowTime_ms = */ 100.0f,
+			/* .feedback           = */ 0.7f,
+			/* .pingpong           = */ 1.0f,
+			// /* .inputEffects       = */ nullptr,
+			/* .inputEffects       = */ (azaDSP*)delayWetFilter,
+			/* .kernel             = */ nullptr,
+		});
 
 		spatialize = azaMakeSpatialize(azaSpatializeConfig{
-			/* .world       = */ nullptr,
-			/* .mode        = */ AZA_SPATIALIZE_ADVANCED,
-			/* .delayMax    = */ 0.0f,
-			/* .earDistance = */ 0.0f,
-		}, outputChannelCount);
+			/* .world                 = */ nullptr,
+			/* .doDoppler             = */ true,
+			/* .doFilter              = */ true,
+			/* .usePerChannelDelay    = */ true,
+			/* .usePerChannelFilter   = */ true,
+			/* .numSrcChannelsActive  = */ 1,
+			/* .reserved[7]           = */ {0},
+			/* .positionFollowTime_ms = */ 100.0f,
+			/* .delayMax_ms           = */ 0.0f,
+			/* .earDistance           = */ 0.0f,
+			/* .channels[]            = */ {0},
+		});
 
-		azaStreamSetActive(&streamInput, 1);
-		azaStreamSetActive(&streamOutput, 1);
+		azaStreamSetActive(&streamInput, true);
+		azaStreamSetActive(&streamOutput, true);
 		std::cout << "Press ENTER to stop" << std::endl;
 		std::cin.get();
 		azaStreamDeinit(&streamInput);

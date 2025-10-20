@@ -7,9 +7,7 @@
 #ifndef AZAUDIO_CHANNEL_LAYOUT_H
 #define AZAUDIO_CHANNEL_LAYOUT_H
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "header_utils.h"
+#include "aza_c_std.h"
 
 #ifdef __cplusplus
 extern "C" {

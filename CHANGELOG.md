@@ -10,7 +10,32 @@ As a bonus, we may try to document porting steps for users of this library that 
 
 ## [Unreleased]
 
-Nothing yet...
+### Complete Rework of azaDSP Plugin Interface
+- azaDSP header is very different
+	- much simplified as the dynamic allocation size was totally removed in favor of fixed struct sizes
+	- fat struct with function pointers instead of a type enum (taking the azaDSPUser interface concept and using it for everything)
+	- Now owns its mixer GUI selection state, allowing multiple plugins to be selected at once.
+	- Removed pointless bit packing of metadata
+	- Explicitly-specified struct size for backwards and forwards compatibility
+		- remember to use this instead of sizeof for copying their state
+	- Single version number for backwards-compatible changes post-1.0
+	- Explicitly-reserved padding for expanding functionality in the future
+- azaDSPProcess reflects the new interface, as does the backend
+```C
+// Information about DSP regarding azaBuffer management, used especially in the mixer for latency compensation
+typedef azaDSPSpecs (*fp_azaDSPGetSpecs)(void *dsp, uint32_t samplerate);
+// Process interface that always takes a src and dst buffer, as well as flags to help gracefully deal with setup changes
+// For many cases, dst and src will refer to the exact same buffer
+typedef int (*fp_azaDSPProcess_t)(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
+```
+- azaDSPRegistry is somewhat simpler
+
+### Splitting of dsp.h Into Many Files in dsp Folder (and dsp/plugins)
+- Moved utility.h to dsp/utility.h
+
+### Moved Several Common C-Standard-Adjacent Utilities Into aza_c_sth.h
+- Deleted helpers.h (moving some part to math.h and some to aza_c_std.h)
+- Deleted header_utils.h (moving everything into aza_c_std.h)
 
 ## [v0.3.0](https://github.com/Equivocatorrr/AzAudio/releases/tag/v0.3.0)
 

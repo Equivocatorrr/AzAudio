@@ -6,16 +6,16 @@
 #ifndef AZAUDIO_MATH_H
 #define AZAUDIO_MATH_H
 
-#include <stdint.h>
+#include "aza_c_std.h"
 #include <math.h>
-#include <assert.h>
 
-#include "header_utils.h"
 #include "simd.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
 
 static const float AZA_TAU = 6.2831853071795864769253f;
 static const float AZA_PI = 3.141592653589793115997f;
@@ -210,6 +210,11 @@ azaOscSaw(float t) {
 }
 
 
+
+// 3D Vector math
+
+
+
 typedef union azaVec3 {
 	struct {
 		float x, y, z;
@@ -265,6 +270,14 @@ static inline azaVec3 azaDivVec3Scalar(azaVec3 lhs, float rhs) {
 	};
 }
 
+static inline azaVec3 azaLerpVec3(azaVec3 a, azaVec3 b, float t) {
+	return AZA_CLITERAL(azaVec3) {
+		azaLerpf(a.x, b.x, t),
+		azaLerpf(a.y, b.y, t),
+		azaLerpf(a.z, b.z, t),
+	};
+}
+
 static inline float azaVec3Dot(azaVec3 lhs, azaVec3 rhs) {
 	return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
 }
@@ -290,6 +303,10 @@ static inline azaVec3 azaVec3NormalizedDef(azaVec3 a, float epsilon, azaVec3 def
 
 static inline azaVec3 azaVec3Normalized(azaVec3 a) {
 	return azaDivVec3Scalar(a, azaVec3Norm(a));
+}
+
+static inline bool azaVec3Equal(azaVec3 a, azaVec3 b) {
+	return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
 // 3x3 matrix with the conventions matching GLSL (same conventions as AzCore)
@@ -340,6 +357,7 @@ static inline azaVec3 azaMulVec3Mat3(azaVec3 lhs, azaMat3 rhs) {
 		azaVec3Dot(lhs, rhs.cols[2]),
 	};
 }
+
 
 
 #ifdef __cplusplus

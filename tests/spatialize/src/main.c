@@ -16,7 +16,7 @@
 
 azaBuffer bufferCat = {0};
 azaSampler *sampler = NULL;
-azaSpatialize **spatialize = NULL;
+azaSpatialize *spatialize = NULL;
 azaReverb *reverb = NULL;
 azaFilter *reverbFilter = NULL;
 azaLookaheadLimiter *limiter = NULL;
@@ -47,8 +47,8 @@ int loadSoundFileIntoBuffer(azaBuffer *buffer, const char *filename) {
 	printf("Sound \"%s\" has %u channels and a samplerate of %u\n", filename, info.channels, info.sample_rate);
 	buffer->channelLayout.count = info.channels;
 	buffer->samplerate = info.sample_rate;
-	azaBufferInit(buffer, buffer->frames, buffer->channelLayout);
-	stb_vorbis_get_samples_float_interleaved(vorbis, buffer->channelLayout.count, buffer->samples, buffer->frames * buffer->channelLayout.count);
+	azaBufferInit(buffer, buffer->frames, 0, 0, buffer->channelLayout);
+	stb_vorbis_get_samples_float_interleaved(vorbis, buffer->channelLayout.count, buffer->pSamples, buffer->frames * buffer->channelLayout.count);
 	stb_vorbis_close(vorbis);
 	return 0;
 }
@@ -63,8 +63,8 @@ float randomf(float min, float max) {
 void updateObjects(uint32_t count, float timeDelta) {
 	if (count == 0) return;
 	float angleSize = AZA_TAU / (float)count;
-	for (uint32_t i = 0; i < count; i++) {
-		Object *object = &objects[i];
+	for (uint8_t c = 0; c < count; c++) {
+		Object *object = &objects[c];
 #if PRINT_OBJECT_INFO
 		if (object->timer <= 0.0f) {
 			printf("target = { %f, %f, %f }\n", object->target.x, object->target.y, object->target.z);
@@ -75,8 +75,8 @@ void updateObjects(uint32_t count, float timeDelta) {
 		object->timer -= timeDelta;
 #endif
 		if (azaVec3NormSqr(azaSubVec3(object->pos, object->target)) < azaSqrf(0.1f)) {
-			float angleMin = angleSize * (float)i;
-			float angleMax = angleSize * (float)(i+1);
+			float angleMin = angleSize * (float)c;
+			float angleMax = angleSize * (float)(c+1);
 			float azimuth = randomf(angleMin, angleMax);
 			float ac = cosf(azimuth), as = sinf(azimuth);
 			float elevation = randomf(-AZA_TAU/4.0f, AZA_TAU/4.0f);
@@ -96,40 +96,44 @@ void updateObjects(uint32_t count, float timeDelta) {
 	}
 }
 
-int processCallbackOutput(void *userdata, azaBuffer buffer) {
-	float timeDelta = (float)buffer.frames / (float)buffer.samplerate;
-	int err;
+int processCallbackOutput(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
+	float timeDelta = (float)dst->frames / (float)dst->samplerate;
+	int err = AZA_SUCCESS;
+	char errorString[64];
 	updateObjects(bufferCat.channelLayout.count, timeDelta);
-	azaBufferZero(buffer);
-	azaBuffer sampledBuffer = azaPushSideBufferZero(buffer.frames, sampler->config.buffer->channelLayout.count, buffer.samplerate);
+	azaBufferZero(dst);
 
-	if ((err = azaSamplerProcess(sampler, sampledBuffer))) {
-		char buffer[64];
-		AZA_LOG_ERR("azaSamplerProcess returned %s\n", azaErrorString(err, buffer, sizeof(buffer)));
+	if ((err = azaSamplerProcess(sampler, dst, src, flags))) {
+		AZA_LOG_ERR("azaSamplerProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
 		goto done;
 	}
 
+	azaSpatializeChannelConfig start[AZA_MAX_CHANNEL_POSITIONS];
+	azaSpatializeChannelConfig end[AZA_MAX_CHANNEL_POSITIONS];
 	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
-		float volumeStart = azaClampf(3.0f / azaVec3Norm(objects[c].posPrev), 0.0f, 1.0f);
-		float volumeEnd = azaClampf(3.0f / azaVec3Norm(objects[c].pos), 0.0f, 1.0f);
-		if ((err = azaSpatializeProcess(spatialize[c], buffer, azaBufferOneChannel(sampledBuffer, c), objects[c].posPrev, volumeStart, objects[c].pos, volumeEnd))) {
-			char buffer[64];
-			AZA_LOG_ERR("azaSpatializeProcess returned %s\n", azaErrorString(err, buffer, sizeof(buffer)));
-			goto done;
-		}
+		start[c] = (azaSpatializeChannelConfig) {{
+			.amplitude = azaClampf(3.0f / azaVec3Norm(objects[c].posPrev), 0.0f, 1.0f),
+			.position = objects[c].posPrev,
+		}};
+		end[c] = (azaSpatializeChannelConfig) {{
+			.amplitude = azaClampf(3.0f / azaVec3Norm(objects[c].pos), 0.0f, 1.0f),
+			.position = objects[c].pos,
+		}};
 	}
-	if ((err = azaReverbProcess(reverb, buffer))) {
-		char buffer[64];
-		AZA_LOG_ERR("azaReverbProcess returned %s\n", azaErrorString(err, buffer, sizeof(buffer)));
+	azaSpatializeSetRamps(spatialize, bufferCat.channelLayout.count, start, end, dst->frames, dst->samplerate);
+	if ((err = azaSpatializeProcess(spatialize, dst, dst, flags))) {
+		AZA_LOG_ERR("azaSpatializeProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
 		goto done;
 	}
-	if ((err = azaLookaheadLimiterProcess(limiter, buffer))) {
-		char buffer[64];
-		AZA_LOG_ERR("azaLookaheadLimiterProcess returned %s\n", azaErrorString(err, buffer, sizeof(buffer)));
+	if ((err = azaReverbProcess(reverb, dst, dst, flags))) {
+		AZA_LOG_ERR("azaReverbProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
+		goto done;
+	}
+	if ((err = azaLookaheadLimiterProcess(limiter, dst, dst, flags))) {
+		AZA_LOG_ERR("azaLookaheadLimiterProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
 		goto done;
 	}
 done:
-	azaPopSideBuffer();
 	return err;
 }
 
@@ -173,54 +177,47 @@ int main(int argumentCount, char** argumentValues) {
 		fprintf(stderr, "Failed to init output stream! (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
 		return 1;
 	}
-	uint8_t outputChannelCount = azaStreamGetChannelLayout(&streamOutput).count;
+
+
+
 	// Configure all the DSP functions
+
+
 
 	sampler = azaMakeSampler((azaSamplerConfig) {
 		.buffer = &bufferCat,
 		.speedTransitionTimeMs = 50.0f,
 		.volumeTransitionTimeMs = 50.0f,
+		.loop = true,
 	});
+	azaSamplerPlay(sampler, 1.0f, 0.0f);
 
 	objects = calloc(bufferCat.channelLayout.count, sizeof(Object));
 	updateObjects(bufferCat.channelLayout.count, 0.0f);
-	spatialize = malloc(sizeof(azaSpatialize*) * bufferCat.channelLayout.count);
 	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
 		objects[c].pos = objects[c].target;
-		spatialize[c] = azaMakeSpatialize((azaSpatializeConfig) {
-			.world       = AZA_WORLD_DEFAULT,
-			.mode        = AZA_SPATIALIZE_ADVANCED,
-			.delayMax    = 0.0f,
-			.earDistance = 0.0f,
-		}, outputChannelCount);
 	}
+	spatialize = (azaSpatialize*)azaMakeDefaultSpatialize();
 
 	reverb = azaMakeReverb((azaReverbConfig) {
-		// effect gain in dB
-		.gain = -6.0f,
-		// dry gain in dB
+		.gainWet = -6.0f,
 		.gainDry = 0.0f,
-		// value affecting reverb feedback, roughly in the range of 1 to 100 for reasonable results
 		.roomsize = 40.0f,
-		// value affecting damping of high frequencies, roughly in the range of 1 to 5
 		.color = 3.0f,
-		// delay for first reflections in ms
-		.delay = 23.0f,
-	}, outputChannelCount);
+		.delay_ms = 23.0f,
+	});
 
 	reverbFilter = azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_HIGH_PASS,
-		// Cutoff frequency in Hz
+		.poles = AZA_FILTER_6_DB,
 		.frequency = 200.0f,
-		// Blends the effect output with the dry signal where 1 is fully dry and 0 is fully wet.
-		.dryMix = 0.0f,
-	}, outputChannelCount);
-	reverb->inputDelay.config.wetEffects = (azaDSP*)reverbFilter;
+	});
+	reverb->inputDelay.config.inputEffects = (azaDSP*)reverbFilter;
 
 	limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
-		.gainInput  = -3.0f,
+		.gainInput  =  3.0f,
 		.gainOutput = -0.1f,
-	}, outputChannelCount);
+	});
 
 	azaStreamSetActive(&streamOutput, 1);
 	printf("Press ENTER to stop\n");
@@ -229,12 +226,9 @@ int main(int argumentCount, char** argumentValues) {
 
 	free(objects);
 	azaFreeSampler(sampler);
-	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
-		azaFreeSpatialize(spatialize[c]);
-	}
-	free(spatialize);
+	azaFreeSpatialize(spatialize);
 	azaFreeLookaheadLimiter(limiter);
-	azaBufferDeinit(&bufferCat);
+	azaBufferDeinit(&bufferCat, true);
 
 	azaDeinit();
 	return 0;

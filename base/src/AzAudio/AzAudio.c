@@ -6,9 +6,10 @@
 #include "AzAudio.h"
 
 #include "error.h"
-#include "helpers.h"
 #include "backend/interface.h"
 #include "cpuid.h"
+#include "dsp/azaKernel.h"
+#include "dsp/utility.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -32,13 +33,7 @@ azaAllocatorCallbacks azaAllocator = {
 	free,
 };
 
-float azaOscSineValues[AZA_OSC_SINE_SAMPLES+1];
-
-void azaInitOscillators() {
-	for (uint32_t i = 0; i < AZA_OSC_SINE_SAMPLES+1; i++) {
-		azaOscSineValues[i] = sinf((float)i / AZA_OSC_SINE_SAMPLES * AZA_TAU);
-	}
-}
+void azaInitOscillators();
 
 int azaInit() {
 	azaCPUIDInit();
@@ -47,7 +42,7 @@ int azaInit() {
 	if (envStr) {
 		size_t levelLen = aza_strcpy(levelStr, envStr, sizeof(levelStr));
 		if (levelLen <= sizeof(levelStr)) {
-			azaStrToLower(levelStr, sizeof(levelStr), levelStr);
+			aza_str_to_lower(levelStr, levelStr, sizeof(levelStr));
 			if (strncmp(levelStr, "none", sizeof(levelStr)) == 0) {
 				azaLogLevel = AZA_LOG_LEVEL_NONE;
 			} else if (strncmp(levelStr, "error", sizeof(levelStr)) == 0) {
@@ -115,7 +110,6 @@ static const char *azaErrorStr[] = {
 	"AZA_ERROR_INVALID_CHANNEL_COUNT",
 	"AZA_ERROR_INVALID_FRAME_COUNT",
 	"AZA_ERROR_INVALID_CONFIGURATION",
-	"AZA_ERROR_INVALID_DSP_KIND",
 	"AZA_ERROR_MISMATCHED_CHANNEL_COUNT",
 	"AZA_ERROR_MISMATCHED_FRAME_COUNT",
 	"AZA_ERROR_MISMATCHED_SAMPLERATE",

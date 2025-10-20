@@ -13,7 +13,6 @@
 #define AZAUDIO_SIMD_H
 
 #include "cpuid.h"
-#include <stdint.h>
 
 // Deal with Michaelsoft's ineptitude yet again.
 #if __AVX2__ && defined(_MSC_VER)
@@ -59,8 +58,6 @@
 
 #include <immintrin.h>
 
-#include "header_utils.h"
-
 #define _MM_SHUFFLER(w, x, y, z) _MM_SHUFFLE(z, y, x, w)
 
 #define _MM_INSERT(dst, src, clear) (((src) << 6) | ((dst) << 4) | (clear))
@@ -90,13 +87,6 @@
 #define AZA_SSE3 azaCPUID.sse3
 #define AZA_SSE2 azaCPUID.sse2
 #define AZA_SSE azaCPUID.sse
-
-// Union for accessing specific scalars in a float vector
-// NOTE: If you have to use this, you're probably not really gaining any performance by using SIMD
-typedef union float_x8 {
-	__m256 v;
-	float f[8];
-} float_x8;
 
 AZA_SIMD_FEATURES("sse,fma")
 static AZA_FORCE_INLINE(float)

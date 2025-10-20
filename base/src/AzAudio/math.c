@@ -5,6 +5,14 @@
 
 #include "math.h"
 
+float azaOscSineValues[AZA_OSC_SINE_SAMPLES+1];
+
+void azaInitOscillators() {
+	for (uint32_t i = 0; i < AZA_OSC_SINE_SAMPLES+1; i++) {
+		azaOscSineValues[i] = sinf((float)i / AZA_OSC_SINE_SAMPLES * AZA_TAU);
+	}
+}
+
 float azaSincf(float x) {
 	if (x == 0)
 		return 1.0f;
@@ -52,4 +60,13 @@ float azaLUTLanczosf(float x, float radius) {
 
 float azaCubicf(float a, float b, float c, float d, float x) {
 	return b + 0.5f * x * (c - a + x * (2 * a - 5 * b + 4 * c - d + x * (3 * (b - c) + d - a)));
+}
+
+float aza_db_to_ampf(float db) {
+	return powf(10.0f, db/20.0f);
+}
+
+float aza_amp_to_dbf(float amp) {
+	if (amp < 0.0f) amp = 0.0f;
+	return log10f(amp)*20.0f;
 }
