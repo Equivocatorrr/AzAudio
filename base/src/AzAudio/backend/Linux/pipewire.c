@@ -6,7 +6,6 @@
 #include "../backend.h"
 #include "../interface.h"
 #include "../../error.h"
-#include "../../helpers.h"
 #include "../../AzAudio.h"
 
 #include <dlfcn.h>

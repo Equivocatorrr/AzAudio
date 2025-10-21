@@ -80,6 +80,8 @@ std::vector<float> endChannelDelays;
 
 struct SideBufferPopper {
 	int count = 0;
+	SideBufferPopper() = delete;
+	SideBufferPopper(int _count) : count(_count) {}
 	~SideBufferPopper() {
 		azaPopSideBuffers(count);
 	}

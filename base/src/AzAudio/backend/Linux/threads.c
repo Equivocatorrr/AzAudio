@@ -50,7 +50,7 @@ void azaThreadDetach(azaThread *thread) {
 void azaThreadSleep(uint32_t milliseconds) {
 	struct timespec remaining = {
 		(time_t)(milliseconds / 1000),
-		(long)(milliseconds % 1000)
+		(long)(1000000 * (long)(milliseconds % 1000))
 	};
 	while (nanosleep(&remaining, &remaining) == -1 && errno == EINTR) {}
 }
