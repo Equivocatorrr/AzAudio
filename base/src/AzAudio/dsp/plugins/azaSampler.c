@@ -55,7 +55,7 @@ azaDSP* azaMakeDefaultSampler() {
 }
 
 int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	// Bypass and chaining handled by azaDSPProcess
+	// Bypass handled by azaDSPProcess
 	int err = AZA_SUCCESS;
 	assert(dsp != NULL);
 	azaSampler *data = (azaSampler*)dsp;

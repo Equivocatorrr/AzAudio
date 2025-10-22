@@ -73,6 +73,10 @@ static inline azaBuffer azaBufferGetExtended(azaBuffer *buffer) {
 	return result;
 }
 
+static inline float azaBufferGetLen_ms(azaBuffer *buffer) {
+	return 1000.0f * (float)buffer->frames / (float)buffer->samplerate;
+}
+
 // If samples are externally-managed, you don't have to call azaBufferInit or azaBufferDeinit
 // NOTE: asserts frames > 0 and channelLayout.count > 0
 // May return AZA_ERROR_OUT_OF_MEMORY

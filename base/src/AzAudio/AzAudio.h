@@ -67,15 +67,16 @@ static inline void aza_free(void *block) {
 int azaInit();
 void azaDeinit();
 
-void azaLogDefault(AzaLogLevel level, const char* format, ...);
+void azaLogDefault(AzaLogLevel level, const char* message);
 
 // We use a callback function for all message logging.
 // This allows the user to define their own logging output functions
-typedef void (*fp_azaLogCallback)(AzaLogLevel level, const char* format, ...);
+typedef void (*fp_azaLogCallback)(AzaLogLevel level, const char* message);
 
 void azaSetLogCallback(fp_azaLogCallback newLogFunc);
 
-extern fp_azaLogCallback azaLog;
+// Does the formatting and calls any callback
+void azaLog(AzaLogLevel level, const char *format, ...);
 
 #define AZA_LOG_ERR(...) azaLog(AZA_LOG_LEVEL_ERROR, __VA_ARGS__)
 #define AZA_LOG_INFO(...) azaLog(AZA_LOG_LEVEL_INFO, __VA_ARGS__)

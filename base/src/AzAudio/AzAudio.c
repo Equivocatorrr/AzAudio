@@ -21,8 +21,9 @@
 	#define _CRT_USE_CONFORMING_ANNEX_K_TIME 1
 #endif
 #include <time.h>
+#include <threads.h>
 
-fp_azaLogCallback azaLog = azaLogDefault;
+static fp_azaLogCallback azaLogCallback = azaLogDefault;
 
 AzaLogLevel azaLogLevel = AZA_LOG_LEVEL_INFO;
 
@@ -79,23 +80,34 @@ void azaDeinit() {
 	azaBackendDeinit();
 }
 
-void azaLogDefault(AzaLogLevel level, const char* format, ...) {
+void azaLogDefault(AzaLogLevel level, const char* message) {
 	if (level > azaLogLevel) return;
 	FILE *file = level == AZA_LOG_LEVEL_ERROR ? stderr : stdout;
 	char timeStr[64];
 	strftime(timeStr, sizeof(timeStr), "%T", localtime(&(time_t){time(NULL)}));
-	fprintf(file, "AzAudio[%s] ", timeStr);
+	fprintf(file, "AzAudio[%s] %s", timeStr, message);
+}
+
+#define MESSAGE_BUFFER_SIZE 1024
+
+// separate error message buffer because it can be queried, so I don't want other kinds of log messages overwriting it.
+static thread_local char errorMessageBuffer[MESSAGE_BUFFER_SIZE] = "No Error";
+static thread_local char otherMessageBuffer[MESSAGE_BUFFER_SIZE] = "You're Cute ;)";
+
+void azaLog(AzaLogLevel level, const char* format, ...) {
+	char *messageBuffer = level == AZA_LOG_LEVEL_ERROR ? errorMessageBuffer : otherMessageBuffer;
 	va_list args;
 	va_start(args, format);
-	vfprintf(file, format, args);
+	vsnprintf(messageBuffer, MESSAGE_BUFFER_SIZE, format, args);
 	va_end(args);
+	azaLogCallback(level, messageBuffer);
 }
 
 void azaSetLogCallback(fp_azaLogCallback newLogFunc) {
 	if (newLogFunc != NULL) {
-		azaLog = newLogFunc;
+		azaLogCallback = newLogFunc;
 	} else {
-		azaLog = azaLogDefault;
+		azaLogCallback = azaLogDefault;
 	}
 }
 
@@ -113,11 +125,9 @@ static const char *azaErrorStr[] = {
 	"AZA_ERROR_MISMATCHED_CHANNEL_COUNT",
 	"AZA_ERROR_MISMATCHED_FRAME_COUNT",
 	"AZA_ERROR_MISMATCHED_SAMPLERATE",
-	"AZA_ERROR_DSP_INTERFACE_EXPECTED_SINGLE",
-	"AZA_ERROR_DSP_INTERFACE_EXPECTED_DUAL",
-	"AZA_ERROR_DSP_INTERFACE_NOT_GENERIC",
 	"AZA_ERROR_MIXER_ROUTING_CYCLE",
 };
+static_assert(sizeof(azaErrorStr) / sizeof(*azaErrorStr) == AZA_ERROR_ONE_AFTER_LAST, "Update azaErrorStr");
 
 const char* azaErrorString(int error, char *buffer, size_t bufferSize) {
 	if (0 <= error && error < AZA_ERROR_ONE_AFTER_LAST) {
@@ -128,4 +138,8 @@ const char* azaErrorString(int error, char *buffer, size_t bufferSize) {
 		return buffer;
 	}
 	return "No buffer for unknown error code :(";
+}
+
+const char* azaGetLastErrorMessage() {
+	return errorMessageBuffer;
 }

@@ -78,7 +78,7 @@ static int azaHandleRMSBuffer(azaRMS *data, uint8_t channels) {
 }
 
 int azaRMSProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	// Bypass and chaining handled by azaDSPProcess
+	// Bypass handled by azaDSPProcess
 	int err = AZA_SUCCESS;
 	assert(dsp != NULL);
 	azaRMS *data = (azaRMS*)dsp;

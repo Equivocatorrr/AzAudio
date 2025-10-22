@@ -56,7 +56,7 @@ azaDSP* azaMakeDefaultCubicLimiter() {
 }
 
 int azaCubicLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	// Bypass and chaining handled by azaDSPProcess
+	// Bypass handled by azaDSPProcess
 	int err = AZA_SUCCESS;
 	assert(dsp != NULL);
 	azaCubicLimiter *data = (azaCubicLimiter*)dsp;

@@ -60,6 +60,7 @@ static const azaDSP azaRMSHeader = {
 	/* .version      = */ 1,
 	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
 	/* ._reserved    = */ {0},
+	/* .error        = */ 0,
 	/* .name         = */ "RMS",
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaRMSProcess,

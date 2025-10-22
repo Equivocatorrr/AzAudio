@@ -144,7 +144,7 @@ azaDSP* azaMakeDefaultDelayDynamic() {
 }
 
 int azaDelayDynamicProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	// Bypass and chaining handled by azaDSPProcess
+	// Bypass handled by azaDSPProcess
 	int err = AZA_SUCCESS;
 	assert(dsp != NULL);
 	azaDelayDynamic *data = (azaDelayDynamic*)dsp;
@@ -214,8 +214,18 @@ int azaDelayDynamicProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t f
 		}
 	}
 	if (data->config.inputEffects) {
-		err = azaDSPProcess(data->config.inputEffects, &sideBuffer, &sideBuffer, flags);
-		if (err) goto error;
+		azaDSP *dspStart = data->config.inputEffects;
+		azaDSP *dsp = dspStart;
+		while (dsp) {
+			err = azaDSPProcess(dsp, &sideBuffer, &sideBuffer, flags);
+			if (err) {
+				dsp->error = err;
+			}
+			dsp = dsp->pNext;
+			if (dsp == dspStart) {
+				return AZA_ERROR_MIXER_ROUTING_CYCLE;
+			}
+		}
 	}
 	azaDelayDynamicPrimeBuffer(data, &sideBuffer);
 	float amountWet = data->config.muteWet ? 0.0f : aza_db_to_ampf(data->config.gainWet);

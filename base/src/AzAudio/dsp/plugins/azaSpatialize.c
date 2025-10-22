@@ -285,7 +285,7 @@ static float azaSpatializeGetFilterCutoff(float delay, float dot) {
 
 //int azaSpatializeProcess(azaSpatialize *data, azaBuffer dstBuffer, azaBuffer srcBuffer, azaVec3 srcPosStart, float srcAmpStart, azaVec3 srcPosEnd, float srcAmpEnd) {
 int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	// Bypass and chaining handled by azaDSPProcess
+	// Bypass handled by azaDSPProcess
 	int err = AZA_SUCCESS;
 	assert(dsp != NULL);
 	azaSpatialize *data = (azaSpatialize*)dsp;

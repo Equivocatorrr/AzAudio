@@ -7,6 +7,7 @@
 #define AZAUDIO_AZAKERNEL_H
 
 #include "../math.h"
+#include "azaBuffer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -74,6 +75,12 @@ static inline float azaSampleWithKernel1Ch(azaKernel *kernel, float *src, int sr
 	float result;
 	azaSampleWithKernel(&result, 1, kernel, src, srcStride, minFrame, maxFrame, wrap, frame, fraction, rate);
 	return result;
+}
+
+static inline void azaBufferSampleWithKernel(float *dst, int dstChannels, azaKernel *kernel, azaBuffer *src, bool wrap, uint32_t frame, float fraction, float rate) {
+	int minFrame = -(int)src->framesLeading;
+	int maxFrame = (int)(src->frames + src->framesTrailing);
+	azaSampleWithKernel(dst, dstChannels, kernel, src->pSamples, (int)src->stride, minFrame, maxFrame, wrap, frame, fraction, rate);
 }
 
 // How many total kernel samples have been taken as scalars (to measure SIMD efficacy)

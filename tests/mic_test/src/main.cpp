@@ -13,8 +13,6 @@
 #include <iostream>
 #include <vector>
 
-#include <cstdarg>
-
 #include "log.hpp"
 #include "AzAudio/AzAudio.h"
 #include "AzAudio/dsp.h"
@@ -42,17 +40,12 @@ void handler(int sig) {
 }
 #endif
 
-void logCallback(AzaLogLevel level, const char* format, ...) {
+void logCallback(AzaLogLevel level, const char* message) {
 	if (level > azaLogLevel) return;
-	char buffer[1024];
+	char buffer[64];
 	time_t now = time(nullptr);
 	strftime(buffer, sizeof(buffer), "%T", localtime(&now));
-	sys::cout << "AzAudio[" << buffer << "] ";
-	va_list args;
-	va_start(args, format);
-	vsnprintf(buffer, 1024, format, args);
-	va_end(args);
-	sys::cout << buffer;
+	sys::cout << "AzAudio[" << buffer << "] " << message;
 }
 
 azaLookaheadLimiter *limiter = nullptr;

@@ -11,6 +11,7 @@
 #include "plugins/azaCubicLimiter.h"
 #include "plugins/azaLookaheadLimiter.h"
 #include "plugins/azaFilter.h"
+#include "plugins/azaLowPassFIR.h"
 #include "plugins/azaCompressor.h"
 #include "plugins/azaGate.h"
 #include "plugins/azaDelay.h"
@@ -73,16 +74,13 @@ azaDSPSpecs azaDSPChainGetSpecs(azaDSP *dsp, uint32_t samplerate) {
 }
 
 int azaDSPProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	if (!dsp->bypass && dsp->fp_process) {
+	if (!dsp->bypass && dsp->fp_process && dsp->error == AZA_SUCCESS) {
 		int result = dsp->fp_process(dsp, dst, src, flags);
 		if (result != AZA_SUCCESS) {
 			return result;
 		}
-	}
-	dsp->prevChannelCountDst = dst->channelLayout.count;
-	dsp->prevChannelCountSrc = src->channelLayout.count;
-	if (dsp->pNext) {
-		return azaDSPProcess(dsp->pNext, dst, src, flags);
+		dsp->prevChannelCountDst = dst->channelLayout.count;
+		dsp->prevChannelCountSrc = src->channelLayout.count;
 	}
 	return AZA_SUCCESS;
 }
@@ -102,6 +100,7 @@ int azaDSPRegistryInit() {
 	azaDSPAddRegEntry(azaCubicLimiterHeader, azaMakeDefaultCubicLimiter);
 	azaDSPAddRegEntry(azaLookaheadLimiterHeader, azaMakeDefaultLookaheadLimiter);
 	azaDSPAddRegEntry(azaFilterHeader, azaMakeDefaultFilter);
+	azaDSPAddRegEntry(azaLowPassFIRHeader, azaMakeDefaultLowPassFIR);
 	azaDSPAddRegEntry(azaCompressorHeader, azaMakeDefaultCompressor);
 	azaDSPAddRegEntry(azaGateHeader, azaMakeDefaultGate);
 	azaDSPAddRegEntry(azaDelayHeader, azaMakeDefaultDelay);

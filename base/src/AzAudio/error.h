@@ -40,20 +40,15 @@ enum {
 	AZA_ERROR_MISMATCHED_FRAME_COUNT,
 	// Two buffers were expected to have the same samplerate, but they didn't
 	AZA_ERROR_MISMATCHED_SAMPLERATE,
-	// An azaDSP was expecting a single-buffer interface (like `int azaFilterProcess(azaFilter *data, azaBuffer buffer)`) and was given a dual-buffer interface
-	AZA_ERROR_DSP_INTERFACE_EXPECTED_SINGLE,
-	// An azaDSP was expecting a dual-buffer interface (like `int azaRMSProcessDual(azaRMS *data, azaBuffer dst, azaBuffer src)`) and was given a single-buffer interface
-	AZA_ERROR_DSP_INTERFACE_EXPECTED_DUAL,
-	// An azaDSP was used generically when its interface makes no sense as such (requires additional information)
-	// TODO: Maybe make interfaces like this not a thing, allowing everything to be stored in the struct
-	AZA_ERROR_DSP_INTERFACE_NOT_GENERIC,
 	// Attempted to process an azaMixer with circular track routing
 	AZA_ERROR_MIXER_ROUTING_CYCLE,
-	// Enum count
+	// Enum count (not a forward-compatible upper bound)
 	AZA_ERROR_ONE_AFTER_LAST,
 };
 // For known error codes, buffer is unused. For unknown error codes, prints into buffer and returns it.
 const char *azaErrorString(int error, char *buffer, size_t bufferSize);
+// Returns the last error message emitted on this thread.
+const char* azaGetLastErrorMessage();
 
 #ifdef __cplusplus
 }

@@ -1688,6 +1688,8 @@ static const Color colorTrackFXBot = {  40,  50,  80, 255 };
 static const Color colorTrackControlsTop = {  50,  55,  90, 255 };
 static const Color colorTrackControlsBot = {  30,  40,  60, 255 };
 
+static const Color colorTrackFXError = { 255, 0, 0, 255 };
+
 static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect bounds) {
 	azaDrawRectGradientV(bounds, colorTrackFXTop, colorTrackFXBot);
 	azaRectShrinkMargin(&bounds, margin);
@@ -1710,17 +1712,28 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 			}
 			mouseoverDSP = dsp;
 		} else if (azaMouseInRectDepth(muteRect, 0)) {
-			azaTooltipAdd("Bypass", muteRect.x + muteRect.w, muteRect.y, false);
-			if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
-				dsp->bypass = !dsp->bypass;
+			if (dsp->error) {
+				azaTooltipAdd("Click to Clear Error", muteRect.x + muteRect.w, muteRect.y, false);
+				if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
+					dsp->error = 0;
+				}
+			} else {
+				azaTooltipAdd("Bypass", muteRect.x + muteRect.w, muteRect.y, false);
+				if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
+					dsp->bypass = !dsp->bypass;
+				}
 			}
 		}
 		azaDrawRectLines(pluginRect, dsp == selectedDSP ? colorPluginBorderSelected : colorPluginBorder);
 		azaDrawText(dsp->name, pluginRect.x + margin, pluginRect.y + margin, 10, WHITE);
-		if (dsp->bypass) {
-			azaDrawRect(muteRect, colorFaderMuteButton);
+		if (dsp->error) {
+			azaDrawRect(muteRect, colorTrackFXError);
 		} else {
-			azaDrawRectLines(muteRect, colorFaderMuteButton);
+			if (dsp->bypass) {
+				azaDrawRect(muteRect, colorFaderMuteButton);
+			} else {
+				azaDrawRectLines(muteRect, colorFaderMuteButton);
+			}
 		}
 		dsp = dsp->pNext;
 		pluginRect.y += pluginRect.h + margin;
@@ -2531,4 +2544,9 @@ void azaMixerGUIUnselectDSP(azaDSP *dsp) {
 	if (dsp == selectedDSP) {
 		selectedDSP = NULL;
 	}
+}
+
+void azaMixerGUIShowError(const char *message) {
+	aza_strcpy(contextMenuError, message, sizeof(contextMenuError));
+	azaContextMenuOpen(AZA_CONTEXT_MENU_ERROR_REPORT);
 }

@@ -59,7 +59,8 @@ typedef struct azaDSP {
 	uint8_t selected; // Bitset for being selected in the mixer GUI (each bit represents a different view).
 	uint8_t prevChannelCountDst; // How many dst channels were in the last azaDSPProcess call, used for handling changes.
 	uint8_t prevChannelCountSrc; // How many src channels were in the last azaDSPProcess call, used for handling changes.
-	byte _reserved[6]; // Explicit padding bytes reserved for later.
+	byte _reserved[2]; // Explicit padding bytes reserved for later.
+	int32_t error; // If nonzero, there was an error when processing, so disable this plugin until the user requests to try again. Stores the error code.
 	char name[32]; // Null-terminated string. Unused chars should be zeroed.
 	fp_azaDSPGetSpecs fp_getSpecs; // Nullable, meaning a zeroed-out struct azaDSPSpecs.
 	fp_azaDSPProcess_t fp_process; // Nullable, meaning no processing is required.
@@ -80,7 +81,8 @@ azaDSPSpecs azaDSPChainGetSpecsBackward(azaDSP *dsp, uint32_t samplerate);
 azaDSPSpecs azaDSPChainGetSpecsForward(azaDSP *dsp, uint32_t samplerate);
 // returns the combined azaDSPSpecs of the entire plugin chain.
 azaDSPSpecs azaDSPChainGetSpecs(azaDSP *dsp, uint32_t samplerate);
-// Handles bypass, following the plugin chain, and calls dsp->fp_process if applicable.
+// Handles bypass, and calls dsp->fp_process if applicable.
+// NOTE: Does not follow the plugin chain. You must do that externally.
 int azaDSPProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 // Handles owned, and calls dsp->fp_free if applicable. Returns true if dsp was freed.
 bool azaFreeDSP(azaDSP *dsp);

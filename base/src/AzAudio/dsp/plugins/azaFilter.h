@@ -107,6 +107,7 @@ static const azaDSP azaFilterHeader = {
 	/* .version      = */ 1,
 	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
 	/* ._reserved    = */ {0},
+	/* .error        = */ 0,
 	/* .name         = */ "Filter",
 	/* fp_getSpecs   = */ NULL, // As an IIR filter, we affect the phase, which depends on the frequency, so we report zero latency.
 	/* fp_process    = */ azaFilterProcess,

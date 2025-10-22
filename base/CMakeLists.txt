@@ -95,6 +95,8 @@ add_library(AzAudio STATIC
 	src/AzAudio/dsp/plugins/azaCubicLimiter.c
 	src/AzAudio/dsp/plugins/azaLookaheadLimiter.h
 	src/AzAudio/dsp/plugins/azaLookaheadLimiter.c
+	src/AzAudio/dsp/plugins/azaLowPassFIR.h
+	src/AzAudio/dsp/plugins/azaLowPassFIR.c
 	src/AzAudio/dsp/plugins/azaFilter.h
 	src/AzAudio/dsp/plugins/azaFilter.c
 	src/AzAudio/dsp/plugins/azaCompressor.h

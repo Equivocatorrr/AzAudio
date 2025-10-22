@@ -81,6 +81,7 @@ static const azaDSP azaLookaheadLimiterHeader = {
 	/* .version      = */ 1,
 	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
 	/* ._reserved    = */ {0},
+	/* .error        = */ 0,
 	/* .name         = */ "Lookahead Limiter",
 	/* fp_getSpecs   = */ azaLookaheadLimiterGetSpecs,
 	/* fp_process    = */ azaLookaheadLimiterProcess,

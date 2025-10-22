@@ -131,6 +131,7 @@ static const azaDSP azaSpatializeHeader = {
 	/* .version      = */ 1,
 	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
 	/* ._reserved    = */ {0},
+	/* .error        = */ 0,
 	/* .name         = */ "Spatialize",
 	/* fp_getSpecs   = */ azaSpatializeGetSpecs,
 	/* fp_process    = */ azaSpatializeProcess,

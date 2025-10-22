@@ -60,7 +60,7 @@ azaDSP* azaMakeDefaultGate() {
 }
 
 int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	// Bypass and chaining handled by azaDSPProcess
+	// Bypass handled by azaDSPProcess
 	int err = AZA_SUCCESS;
 	assert(dsp != NULL);
 	azaGate *data = (azaGate*)dsp;
@@ -88,10 +88,17 @@ int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	if (data->config.activationEffects) {
 		activationBuffer = azaPushSideBufferCopy(src);
 		sideBuffersInUse++;
-		int err = azaDSPProcess(data->config.activationEffects, &activationBuffer, &activationBuffer, flags);
-		if AZA_UNLIKELY(err) {
-			azaPopSideBuffers(sideBuffersInUse);
-			return err;
+		azaDSP *dspStart = data->config.activationEffects;
+		azaDSP *dsp = dspStart;
+		while (dsp) {
+			err = azaDSPProcess(dsp, &activationBuffer, &activationBuffer, flags);
+			if (err) {
+				dsp->error = err;
+			}
+			dsp = dsp->pNext;
+			if (dsp == dspStart) {
+				return AZA_ERROR_MIXER_ROUTING_CYCLE;
+			}
 		}
 	} else {
 		activationBuffer = *src;
@@ -130,7 +137,7 @@ int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	if (data->header.selected) {
 		azaMetersUpdate(&data->metersOutput, dst, 1.0f);
 	}
-
+error:
 	azaPopSideBuffers(sideBuffersInUse);
 	return AZA_SUCCESS;
 }

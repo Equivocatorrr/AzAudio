@@ -141,7 +141,7 @@ static void azaMonitorSpectrumApplyWindow(azaBuffer buffer) {
 }
 
 int azaMonitorSpectrumProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	// Bypass and chaining handled by azaDSPProcess
+	// Bypass handled by azaDSPProcess
 	int err = AZA_SUCCESS;
 	assert(dsp != NULL);
 	azaMonitorSpectrum *data = (azaMonitorSpectrum*)dsp;

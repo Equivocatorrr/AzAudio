@@ -145,9 +145,22 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 		azaBufferMixMatrix(&buffer, 1.0f, &srcBuffer, aza_db_to_ampf(route->gain), &route->channelMatrix);
 	}
 	if (data->dsp) {
-		// TODO: Check when track configuration changed so we can pass the appropriate flag
-		err = azaDSPProcess(data->dsp, &buffer, &buffer, 0);
-		if (err) return err;
+		azaDSP *dspStart = data->dsp;
+		azaDSP *dsp = dspStart;
+		while (dsp) {
+			// TODO: Check when track configuration changed so we can pass the appropriate flag
+			err = azaDSPProcess(dsp, &buffer, &buffer, 0);
+			if (err) {
+				dsp->error = err;
+				if (azaMixerGUIIsOpen()) {
+					azaMixerGUIShowError(azaGetLastErrorMessage());
+				}
+			}
+			dsp = dsp->pNext;
+			if (dsp == dspStart) {
+				return AZA_ERROR_MIXER_ROUTING_CYCLE;
+			}
+		}
 	}
 	if (data->gain != 0.0f) {
 		float amp = aza_db_to_ampf(data->gain);

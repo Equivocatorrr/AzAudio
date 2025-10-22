@@ -106,7 +106,7 @@ static int azaDelayHandleBufferResizes(azaDelay *data, uint32_t samplerate, uint
 }
 
 int azaDelayProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	// Bypass and chaining handled by azaDSPProcess
+	// Bypass handled by azaDSPProcess
 	int err = AZA_SUCCESS;
 	assert(dsp != NULL);
 	azaDelay *data = (azaDelay*)dsp;
@@ -143,8 +143,18 @@ int azaDelayProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 		}
 	}
 	if (data->config.inputEffects) {
-		err = azaDSPProcess(data->config.inputEffects, &sideBuffer, &sideBuffer, flags);
-		if AZA_UNLIKELY(err) goto error;
+		azaDSP *dspStart = data->config.inputEffects;
+		azaDSP *dsp = dspStart;
+		while (dsp) {
+			err = azaDSPProcess(dsp, &sideBuffer, &sideBuffer, flags);
+			if (err) {
+				dsp->error = err;
+			}
+			dsp = dsp->pNext;
+			if (dsp == dspStart) {
+				return AZA_ERROR_MIXER_ROUTING_CYCLE;
+			}
+		}
 	}
 	float amountWet = data->config.muteWet ? 0.0f : aza_db_to_ampf(data->config.gainWet);
 	float amountDry = data->config.muteDry ? 0.0f : aza_db_to_ampf(data->config.gainDry);

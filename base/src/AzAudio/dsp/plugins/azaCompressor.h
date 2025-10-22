@@ -74,6 +74,7 @@ static const azaDSP azaCompressorHeader = {
 	/* .version      = */ 1,
 	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
 	/* ._reserved    = */ {0},
+	/* .error        = */ 0,
 	/* .name         = */ "Compressor",
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaCompressorProcess,
