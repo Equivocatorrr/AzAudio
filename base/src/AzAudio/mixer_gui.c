@@ -145,10 +145,6 @@ static const int lookaheadLimiterMeterDBRange = 48;
 static const int lookaheadLimiterAttenuationMeterDBRange = 12;
 static const Color colorLookaheadLimiterAttenuation = {   0, 128, 255, 255 };
 
-static const int compressorMeterDBRange = 48;
-static const int compressorAttenuationMeterDBRange = 24;
-static const Color colorCompressorAttenuation = {   0, 128, 255, 255 };
-
 
 
 
@@ -1708,7 +1704,12 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 		if (mouseover) {
 			azaDrawRectGradientV(pluginRect, colorPluginBorderSelected, colorPluginBorder);
 			if (azaMousePressed(MOUSE_BUTTON_LEFT, 0)) {
+				if (selectedDSP) {
+					selectedDSP->selected = 0;
+				}
 				selectedDSP = dsp;
+				// TODO: Replace this 1 with whatever layer we have active
+				dsp->selected = 1;
 			}
 			mouseoverDSP = dsp;
 		} else if (azaMouseInRectDepth(muteRect, 0)) {
@@ -1979,6 +1980,36 @@ static void azaDrawFilter(azaFilter *data, azaRect bounds) {
 	usedWidth = azaDrawSliderFloat(bounds, &data->config.dryMix, 0.0f, 1.0f, 0.1f, 0.0f, "Dry Mix", "%.2f");
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 }
+
+
+
+static const int lowPassFIRMeterDBRange = 48;
+
+static void azaDrawLowPassFIR(azaLowPassFIR *data, azaRect bounds) {
+	int usedWidth;
+	usedWidth = azaDrawMeters(&data->metersInput, bounds, lowPassFIRMeterDBRange);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.frequency, 50.0f, 24000.0f, 0.1f, 4000.0f, "Cutoff Frequency", "%.1fHz");
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	usedWidth = azaDrawSliderFloatLog(bounds, &data->config.frequencyFollowTime_ms, 1.0f, 5000.0f, 0.2f, 50.0f, "Cutoff Frequency Follower Time", "%.0fms");
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	float maxKernelSamples = data->config.maxKernelSamples;
+	usedWidth = azaDrawSliderFloat(bounds, &maxKernelSamples, 3.0f, (float)(AZA_KERNEL_DEFAULT_LANCZOS_COUNT*2+1), 1.0f, 63, "Maximum Kernel Samples Per Sample (Quality)", "%.0f");
+	data->config.maxKernelSamples = (uint16_t)roundf(maxKernelSamples);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+
+	usedWidth = azaDrawMeters(&data->metersOutput, bounds, lowPassFIRMeterDBRange);
+	azaRectShrinkLeft(&bounds, usedWidth + margin);
+}
+
+
+
+static const int compressorMeterDBRange = 48;
+static const int compressorAttenuationMeterDBRange = 24;
+static const Color colorCompressorAttenuation = {   0, 128, 255, 255 };
 
 static void azaDrawCompressor(azaCompressor *data, azaRect bounds) {
 	int usedWidth;
@@ -2437,6 +2468,8 @@ static void azaDrawSelectedDSP() {
 		azaDrawLookaheadLimiter((azaLookaheadLimiter*)selectedDSP, bounds);
 	} else if (selectedDSP->fp_process == azaFilterProcess) {
 		azaDrawFilter((azaFilter*)selectedDSP, bounds);
+	} else if (selectedDSP->fp_process == azaLowPassFIRProcess) {
+		azaDrawLowPassFIR((azaLowPassFIR*)selectedDSP, bounds);
 	} else if (selectedDSP->fp_process == azaCompressorProcess) {
 		azaDrawCompressor((azaCompressor*)selectedDSP, bounds);
 	} else if (selectedDSP->fp_process == azaDelayProcess) {

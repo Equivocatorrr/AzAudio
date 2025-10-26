@@ -20,6 +20,7 @@
 #include "dsp/plugins/azaCubicLimiter.h"
 #include "dsp/plugins/azaLookaheadLimiter.h"
 #include "dsp/plugins/azaFilter.h"
+#include "dsp/plugins/azaLowPassFIR.h"
 #include "dsp/plugins/azaCompressor.h"
 #include "dsp/plugins/azaGate.h"
 #include "dsp/plugins/azaDelay.h"
