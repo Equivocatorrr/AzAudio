@@ -141,7 +141,6 @@ int32_t azaSignExtend24Bit(uint32_t value);
 
 
 // Dynamic Arrays
-// TODO: Use realloc
 
 
 
@@ -155,14 +154,11 @@ struct {\
 #define AZA_DA_RESERVE_COUNT(name, num, onAllocFail)\
 if ((name).capacity < (num)) {\
 	uint32_t aza_newCapacity = (uint32_t)aza_grow((name).capacity, (num), 8);\
-	void *aza_newData = aza_calloc(aza_newCapacity, sizeof((name).data[0]));\
+	void *aza_newData = aza_realloc((name).data, aza_newCapacity * sizeof((name).data[0]));\
 	if (!aza_newData) { onAllocFail; }\
-	(name).capacity = aza_newCapacity;\
-	if ((name).data) {\
-		memcpy(aza_newData, (name).data, (name).count * sizeof((name).data[0]));\
-		aza_free((name).data);\
-	}\
 	(name).data = aza_newData;\
+	memset((name).data + (name).capacity, 0, sizeof((name).data[0]) * (aza_newCapacity - (name).capacity));\
+	(name).capacity = aza_newCapacity;\
 }
 
 #define AZA_DA_RESERVE_ONE_AT_END(name, onAllocFail) AZA_DA_RESERVE_COUNT(name, (name).count+1, onAllocFail)
@@ -173,32 +169,23 @@ if ((name).capacity < (num)) {\
 }
 
 #define AZA_DA_INSERT(name, index, value, onAllocFail) {\
-	assert((uint32_t)(index) >= 0);\
 	assert((uint32_t)(index) <= (name).count);\
 	if ((name).count == (name).capacity) {\
 		uint32_t aza_newCapacity = (uint32_t)aza_grow((name).capacity, (name).count+1, 8);\
-		void *aza_newData = aza_calloc(aza_newCapacity, sizeof((name).data[0]));\
+		void *aza_newData = aza_realloc((name).data, aza_newCapacity * sizeof((name).data[0]));\
 		if (!aza_newData) { onAllocFail; }\
-		(name).capacity = aza_newCapacity;\
-		if ((name).data) {\
-			memcpy(aza_newData, (name).data, (uint32_t)(index) * sizeof((name).data[0]));\
-			memcpy((char*)aza_newData + (uint32_t)((index)+1) * sizeof((name).data[0]), (name).data + (uint32_t)(index), ((name).count - (uint32_t)(index)) * sizeof((name).data[0]));\
-			aza_free((name).data);\
-		}\
 		(name).data = aza_newData;\
-	} else {\
-		for (uint32_t aza_i = (name).count; aza_i > (uint32_t)(index); aza_i--) {\
-			(name).data[aza_i] = (name).data[aza_i-1];\
-		}\
+		memset((name).data + (name).capacity, 0, sizeof((name).data[0]) * (aza_newCapacity - (name).capacity));\
+		(name).capacity = aza_newCapacity;\
 	}\
+	memmove((name).data + ((index) + 1), (name).data + (index), sizeof((name).data[0]) * ((name).count - (index)));\
 	(name).data[(uint32_t)(index)] = (value);\
 	(name).count++;\
 }
 
 #define AZA_DA_ERASE(name, index, num) {\
-	for (int64_t aza_i = (index); aza_i < (int64_t)(name).count - (num); aza_i++) {\
-		(name).data[aza_i] = (name).data[aza_i + (num)];\
-	}\
+	assert((uint32_t)(index) <= (name).count);\
+	memmove((name).data + (index), (name).data + ((index) + 1), sizeof((name).data[0]) * ((name).count - (index)));\
 	(name).count -= (num);\
 }
 

@@ -35,7 +35,7 @@ typedef struct azaAllocatorCallbacks {
 	void* (*fp_malloc)(size_t size);
 	// tries to resize a memory block in place if possible (returning the existing pointer), else copy it into a new block and return the new pointer
 	void* (*fp_realloc)(void *memblock, size_t size);
-	// frees a block of memory that had been previously returned from fp_calloc
+	// frees a block of memory that had been previously returned from fp_calloc, fp_malloc_or fp_realloc
 	void (*fp_free)(void *block);
 } azaAllocatorCallbacks;
 extern azaAllocatorCallbacks azaAllocator;
