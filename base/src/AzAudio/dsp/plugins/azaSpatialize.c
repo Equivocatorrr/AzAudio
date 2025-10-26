@@ -369,7 +369,7 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 
 		if (dst->channelLayout.count == 1) {
 			// Nothing to do but put it in there I guess
-			azaBufferMixFade(&sideBuffer, 1.0f, 1.0f, NULL, &srcBuffer, srcAmpStart, srcAmpEnd, NULL);
+			azaBufferMixFadeLinear(&sideBuffer, 1.0f, 1.0f, &srcBuffer, srcAmpStart, srcAmpEnd);
 
 			if (data->config.doFilter) {
 				// TODO: Probably let the filter cutoff change smoothly
@@ -482,7 +482,7 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 			}
 	#endif
 			azaBuffer dstChannelBuffer = azaBufferOneChannel(&sideBuffer, c);
-			azaBufferMixFade(&dstChannelBuffer, 1.0f, 1.0f, NULL, &srcChannelBuffer, ampStart, ampEnd, NULL);
+			azaBufferMixFadeLinear(&dstChannelBuffer, 1.0f, 1.0f, &srcChannelBuffer, ampStart, ampEnd);
 		}
 
 		if (data->config.doFilter) {

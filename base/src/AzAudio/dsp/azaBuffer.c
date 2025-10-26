@@ -144,19 +144,19 @@ void azaBufferMix(azaBuffer *dst, float volumeDst, azaBuffer *src, float volumeS
 	}
 }
 
-void azaBufferMixFade(azaBuffer *dst, float volumeDstStart, float volumeDstEnd, fp_azaEase_t easeDst, azaBuffer *src, float volumeSrcStart, float volumeSrcEnd, fp_azaEase_t easeSrc) {
+void azaBufferMixFadeEase(azaBuffer *dst, float volumeDstStart, float volumeDstEnd, fp_azaEase_t easeDst, azaBuffer *src, float volumeSrcStart, float volumeSrcEnd, fp_azaEase_t easeSrc) {
 	if (volumeDstStart == volumeDstEnd && volumeSrcStart == volumeSrcEnd) {
 		azaBufferMix(dst, volumeDstStart, src, volumeSrcStart);
 		return;
 	}
+	if ((easeDst == azaEaseLinear || volumeDstStart == volumeDstEnd) && (easeSrc == azaEaseLinear || volumeSrcStart == volumeSrcEnd)) {
+		azaBufferMixFadeLinear(dst, volumeDstStart, volumeDstEnd, src, volumeSrcStart, volumeSrcEnd);
+		return;
+	}
 	assert(dst->frames == src->frames);
 	assert(dst->channelLayout.count == src->channelLayout.count);
-	if (easeDst == NULL) {
-		easeDst = azaEaseLinear;
-	}
-	if (easeSrc == NULL) {
-		easeSrc = azaEaseLinear;
-	}
+	assert(easeDst);
+	assert(easeSrc);
 	const uint32_t channels = dst->channelLayout.count;
 	const float volumeDstDelta = volumeDstEnd - volumeDstStart;
 	const float volumeSrcDelta = volumeSrcEnd - volumeSrcStart;
@@ -188,6 +188,51 @@ void azaBufferMixFade(azaBuffer *dst, float volumeDstStart, float volumeDstEnd, 
 			float t = (float)i / framesF;
 			float volumeDst = volumeDstStart + volumeDstDelta * easeDst(t);
 			float volumeSrc = volumeSrcStart + volumeSrcDelta * easeSrc(t);
+			for (uint32_t c = 0; c < channels; c++) {
+				dst->pSamples[i * dst->stride + c] = dst->pSamples[i * dst->stride + c] * volumeDst + src->pSamples[i * src->stride + c] * volumeSrc;
+			}
+		}
+	}
+}
+
+void azaBufferMixFadeLinear(azaBuffer *dst, float volumeDstStart, float volumeDstEnd, azaBuffer *src, float volumeSrcStart, float volumeSrcEnd) {
+	if (volumeDstStart == volumeDstEnd && volumeSrcStart == volumeSrcEnd) {
+		azaBufferMix(dst, volumeDstStart, src, volumeSrcStart);
+		return;
+	}
+	assert(dst->frames == src->frames);
+	assert(dst->channelLayout.count == src->channelLayout.count);
+	const uint32_t channels = dst->channelLayout.count;
+	const float volumeDstDelta = volumeDstEnd - volumeDstStart;
+	const float volumeSrcDelta = volumeSrcEnd - volumeSrcStart;
+	const float framesF = (float)dst->frames;
+	if (volumeDstDelta == 0.0f) {
+		// No fading necessary for dst
+		if (volumeDstStart == 1.0f) {
+			// No attenuation necessary for dst
+			for (uint32_t i = 0; i < dst->frames; i++) {
+				float t = (float)i / framesF;
+				float volumeSrc = volumeSrcStart + volumeSrcDelta * t;
+				for (uint32_t c = 0; c < channels; c++) {
+					dst->pSamples[i * dst->stride + c] = dst->pSamples[i * dst->stride + c] + src->pSamples[i * src->stride + c] * volumeSrc;
+				}
+			}
+		} else {
+			// We must still attenuate dst, just without a fade
+			for (uint32_t i = 0; i < dst->frames; i++) {
+				float t = (float)i / framesF;
+				float volumeSrc = volumeSrcStart + volumeSrcDelta * t;
+				for (uint32_t c = 0; c < channels; c++) {
+					dst->pSamples[i * dst->stride + c] = dst->pSamples[i * dst->stride + c] + src->pSamples[i * src->stride + c] * volumeSrc;
+				}
+			}
+		}
+	} else {
+		// Fading is necessary for dst
+		for (uint32_t i = 0; i < dst->frames; i++) {
+			float t = (float)i / framesF;
+			float volumeDst = volumeDstStart + volumeDstDelta * t;
+			float volumeSrc = volumeSrcStart + volumeSrcDelta * t;
 			for (uint32_t c = 0; c < channels; c++) {
 				dst->pSamples[i * dst->stride + c] = dst->pSamples[i * dst->stride + c] * volumeDst + src->pSamples[i * src->stride + c] * volumeSrc;
 			}

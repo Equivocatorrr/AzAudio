@@ -102,12 +102,19 @@ void azaBufferReinterlace(azaBuffer *dst, azaBuffer *src);
 void azaBufferMix(azaBuffer *dst, float volumeDst, azaBuffer *src, float volumeSrc);
 
 // Same as azaBufferMix, but the volumes will fade across the buffer according to the easing functions.
-// You can pass NULL into each easing function and it will default to linear.
+// Does NOT mix extraneous samples.
 // For uncorrelated signals, cosine crossfades maintain unity power (but may peak up to sqrt(2)).
 // For correlated signals, linear crossfades maintain unity power (and cannot peak higher than 1).
 // A cosine crossfade from dst to src would use easeDst=azaEaseCosineOut and easeSrc=azaEaseCosineIn.
 // NOTE: asserts that dst and src have the same frame count and channel count.
-void azaBufferMixFade(azaBuffer *dst, float volumeDstStart, float volumeDstEnd, fp_azaEase_t easeDst, azaBuffer *src, float volumeSrcStart, float volumeSrcEnd, fp_azaEase_t easeSrc);
+// NOTE: asserts that easeDst and easeSrc are not NULL
+// Also, if easeDst and easeSrc are both azaEaseLinear (or one is azaEaseLinear and the other volume doesn't change), this automagically calls azaBufferMixFadeLinear instead. Probably prefer calling azaBufferMixFadeLinear directly if you know it's linear, but doing it parameterized will do the smart thing.
+void azaBufferMixFadeEase(azaBuffer *dst, float volumeDstStart, float volumeDstEnd, fp_azaEase_t easeDst, azaBuffer *src, float volumeSrcStart, float volumeSrcEnd, fp_azaEase_t easeSrc);
+
+// Same as azaBufferMix, but the volumes will fade linearly across the buffer.
+// Does NOT mix extraneous samples.
+// NOTE: asserts that dst and src have the same frame count and channel count.
+void azaBufferMixFadeLinear(azaBuffer *dst, float volumeDstStart, float volumeDstEnd, azaBuffer *src, float volumeSrcStart, float volumeSrcEnd);
 
 // Copies the contents of one buffer into the other.
 // NOTE: asserts that dst and src have the same frame count and channel count.
