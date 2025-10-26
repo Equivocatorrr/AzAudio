@@ -78,6 +78,14 @@ void azaQueueSort(azaQueue *data);
 
 
 // Attack Decay Sustain Release envelope config
+/*    stage:    A   D S     R
+ *                 /\
+ *                /  \______
+ *      amp:     /          \
+ *              /            \
+ *              ^           ^
+ * function:  Start        Stop
+ */
 typedef struct azaADSRConfig {
 	// attack time in ms (how long until we hit full volume)
 	float attack;
@@ -215,6 +223,10 @@ static inline void azaFollowerLinear3DJump(azaFollowerLinear3D *data, azaVec3 ta
 	data->end = target;
 	data->progress = 1.0f;
 }
+
+
+
+// World definitions for spatialization, etc.
 
 
 
