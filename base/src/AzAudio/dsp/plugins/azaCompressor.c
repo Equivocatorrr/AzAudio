@@ -98,7 +98,7 @@ int azaCompressorProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	data->minGainShort = 0.0f;
 	float totalGain = data->config.gainOutput + data->config.gainInput;
 	for (size_t i = 0; i < dst->frames; i++) {
-		float rms = aza_amp_to_dbf(rmsBuffer.pSamples[i]);
+		float rms = aza_amp_to_dbf(rmsBuffer.pSamples[i]) + data->config.gainInput;
 		if (rms < -120.0f) rms = -120.0f;
 		if (rms > data->attenuation) {
 			data->attenuation = rms + attackFactor * (data->attenuation - rms);
