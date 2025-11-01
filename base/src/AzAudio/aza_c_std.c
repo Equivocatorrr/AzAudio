@@ -10,6 +10,19 @@
 
 
 
+// Allocators
+
+
+
+azaAllocatorCallbacks azaAllocator = {
+	calloc,
+	malloc,
+	realloc,
+	free,
+};
+
+
+
 // String stuff
 
 

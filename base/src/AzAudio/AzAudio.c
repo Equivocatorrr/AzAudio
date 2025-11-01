@@ -27,13 +27,6 @@ static fp_azaLogCallback azaLogCallback = azaLogDefault;
 
 AzaLogLevel azaLogLevel = AZA_LOG_LEVEL_INFO;
 
-azaAllocatorCallbacks azaAllocator = {
-	calloc,
-	malloc,
-	realloc,
-	free,
-};
-
 void azaInitOscillators();
 
 int azaInit() {

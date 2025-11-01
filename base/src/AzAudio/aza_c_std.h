@@ -34,6 +34,40 @@ static_assert(sizeof(byte) == 1, "We're fucked");
 
 
 
+// Allocators
+
+
+
+typedef struct azaAllocatorCallbacks {
+	// returns zero-initialized memory aligned to at least an 8-byte boundary
+	void* (*fp_calloc)(size_t count, size_t size);
+	// returns uninitialized memory aligned to at least an 8-byte boundary
+	void* (*fp_malloc)(size_t size);
+	// tries to resize a memory block in place if possible (returning the existing pointer), else copy it into a new block and return the new pointer
+	void* (*fp_realloc)(void *memblock, size_t size);
+	// frees a block of memory that had been previously returned from fp_calloc, fp_malloc, or fp_realloc
+	void (*fp_free)(void *block);
+} azaAllocatorCallbacks;
+extern azaAllocatorCallbacks azaAllocator;
+
+static inline void* aza_calloc(size_t count, size_t size) {
+	return azaAllocator.fp_calloc(count, size);
+}
+
+static inline void* aza_malloc(size_t size) {
+	return azaAllocator.fp_malloc(size);
+}
+
+static inline void* aza_realloc(void *memblock, size_t size) {
+	return azaAllocator.fp_realloc(memblock, size);
+}
+
+static inline void aza_free(void *block) {
+	azaAllocator.fp_free(block);
+}
+
+
+
 // Preprocessor stuff
 
 
