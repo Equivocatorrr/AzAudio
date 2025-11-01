@@ -938,6 +938,7 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 	CHECK_RESULT("IAudioClient::Start", FAIL_ACTION);
 
 	if (!exactFormat) {
+	#if 0
 		data->processingBuffer.frames = GetResampledFramecount(data->processingBuffer.samplerate, data->waveFormatExtensible.Format.nSamplesPerSec, data->deviceBufferFrames);
 		data->nativeBuffer.pSamples = aza_calloc((data->deviceBufferFrames + AZA_RESAMPLING_WINDOW*2) * data->waveFormatExtensible.Format.nChannels, sizeof(float));
 		data->nativeBuffer.owned = true;
@@ -947,6 +948,18 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 		data->processingBuffer.owned = true;
 		data->processingBufferStart = data->processingBuffer.pSamples + (AZA_RESAMPLING_WINDOW * 2) * data->processingBuffer.channelLayout.count;
 		data->processingBuffer.channelLayout = azaChannelLayoutStandardFromCount(data->processingBuffer.channelLayout.count);
+	#else
+		uint32_t dstSamplerate = data->processingBuffer.samplerate;
+		uint32_t srcSamplerate = data->waveFormatExtensible.Format.nSamplesPerSec;
+		azaChannelLayout channelLayout = azaGetChannelLayoutFromMask((uint8_t)data->waveFormatExtensible.Format.nChannels, data->waveFormatExtensible.dwChannelMask);
+		errCode = azaBufferInit(&data->processingBuffer, GetResampledFramecount(dstSamplerate, srcSamplerate, data->deviceBufferFrames), AZA_RESAMPLING_WINDOW, AZA_RESAMPLING_WINDOW, channelLayout);
+		if (errCode) goto error;
+		errCode = azaBufferInit(&data->nativeBuffer, data->deviceBufferFrames, AZA_RESAMPLING_WINDOW, AZA_RESAMPLING_WINDOW, channelLayout);
+		if (errCode) goto error;
+		// TODO: Remove all this resampling code and replace it with core library utils.
+		data->processingBufferStart = data->processingBuffer.buffer;
+		data->nativeBufferStart = data->nativeBuffer.buffer;
+	#endif
 	} else {
 		data->processingBuffer.pSamples = NULL;
 		data->processingBuffer.channelLayout = azaGetChannelLayoutFromMask(data->processingBuffer.channelLayout.count, data->waveFormatExtensible.dwChannelMask);
@@ -972,6 +985,8 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 	azaMutexUnlock(&mutex);
 	return AZA_SUCCESS;
 error:
+	azaBufferDeinit(&data->processingBuffer, false);
+	azaBufferDeinit(&data->nativeBuffer, false);
 	CoTaskMemFree(defaultFormat);
 	CoTaskMemFree(pClosestFormat);
 	azaStreamDataFree(data);

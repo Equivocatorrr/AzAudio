@@ -78,8 +78,8 @@ static inline float azaSampleWithKernel1Ch(azaKernel *kernel, float *src, int sr
 }
 
 static inline void azaBufferSampleWithKernel(float *dst, int dstChannels, azaKernel *kernel, azaBuffer *src, bool wrap, uint32_t frame, float fraction, float rate) {
-	int minFrame = -(int)src->framesLeading;
-	int maxFrame = (int)(src->frames + src->framesTrailing);
+	int minFrame = -(int)src->leadingFrames;
+	int maxFrame = (int)(src->frames + src->trailingFrames);
 	azaSampleWithKernel(dst, dstChannels, kernel, src->pSamples, (int)src->stride, minFrame, maxFrame, wrap, frame, fraction, rate);
 }
 

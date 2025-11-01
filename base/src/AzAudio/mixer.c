@@ -304,7 +304,7 @@ error:
 int azaMixerCallback(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	azaMixer *mixer = (azaMixer*)userdata;
 	azaBuffer stash = mixer->master.buffer;
-	mixer->master.buffer = *dst;
+	mixer->master.buffer = azaBufferView(dst);
 	if (dst != src) {
 		azaBufferCopy(dst, src);
 	}

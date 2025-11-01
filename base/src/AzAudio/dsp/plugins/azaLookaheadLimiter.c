@@ -85,7 +85,7 @@ int azaLookaheadLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32
 	}
 	// TODO: There's some odd behavior where CPU usage jumps the instant there's any attenuation and never drops again. Pls investigate!
 	azaBuffer gainBuffer;
-	gainBuffer = azaPushSideBufferZero(dst->frames, dst->framesLeading, dst->framesTrailing, 1, dst->samplerate);
+	gainBuffer = azaPushSideBufferZero(dst->frames, dst->leadingFrames, dst->trailingFrames, 1, dst->samplerate);
 	// TODO: It may be desirable to prevent the subwoofer channel from affecting the rest, and it may want its own independent limiter.
 	int index = data->index;
 	// Do all the gain calculations and put them into gainBuffer

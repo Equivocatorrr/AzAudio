@@ -7,6 +7,7 @@
 
 #include "../error.h"
 #include "../AzAudio.h"
+#include "../math.h"
 #include <threads.h> // thread_local
 
 
@@ -63,42 +64,101 @@ int azaCheckBuffersForDSPProcess_full(const char *context, azaBuffer *dst, azaBu
 	return AZA_SUCCESS;
 }
 
-int azaBufferInit(azaBuffer *buffer, uint32_t frames, uint32_t framesLeading, uint32_t framesTrailing, azaChannelLayout channelLayout) {
-	uint32_t totalFrames = frames + framesLeading + framesTrailing;
+int azaBufferInit(azaBuffer *buffer, uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, azaChannelLayout channelLayout) {
+	uint32_t totalFrames = frames + leadingFrames + trailingFrames;
 	assert(totalFrames > 0);
 	assert(channelLayout.count > 0);
-	buffer->pSamples = (float*)aza_calloc(totalFrames * channelLayout.count, sizeof(float));
-	if (!buffer->pSamples) return AZA_ERROR_OUT_OF_MEMORY;
-	buffer->pSamples += framesLeading * channelLayout.count;
+	buffer->bufferCapacity = totalFrames * channelLayout.count;
+	buffer->buffer = (float*)aza_calloc(buffer->bufferCapacity, sizeof(float));
+	if (!buffer->buffer) return AZA_ERROR_OUT_OF_MEMORY;
+	buffer->pSamples = buffer->buffer + leadingFrames * channelLayout.count;
 	buffer->frames = frames;
-	buffer->framesLeading = framesLeading;
-	buffer->framesTrailing = framesTrailing;
+	buffer->leadingFrames = leadingFrames;
+	buffer->trailingFrames = trailingFrames;
 	buffer->stride = channelLayout.count;
-	buffer->owned = true;
 	buffer->channelLayout = channelLayout;
 	return AZA_SUCCESS;
 }
 
 void azaBufferDeinit(azaBuffer *buffer, bool warnOnUnowned) {
-	if (!buffer->owned) {
+	if (!buffer->buffer) {
 		if (warnOnUnowned) {
 			AZA_LOG_ERR("Warning: Called azaBufferDeinit on an unowned buffer\n");
 		}
 	} else {
-		aza_free(azaBufferGetStart(buffer));
+		aza_free(buffer->buffer);
+		buffer->buffer = NULL;
+		buffer->bufferCapacity = 0;
+		buffer->pSamples = NULL;
 	}
+}
+
+int azaBufferResize(azaBuffer *buffer, uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, azaChannelLayout channelLayout) {
+	if (buffer->pSamples) {
+		assert(buffer->buffer && "azaBufferResize is only for owned buffers");
+	}
+	uint32_t totalFrames = frames + leadingFrames + trailingFrames;
+	uint32_t neededCapacity = totalFrames * channelLayout.count;
+	if (neededCapacity > buffer->bufferCapacity) {
+		neededCapacity = (uint32_t)aza_grow(buffer->bufferCapacity, neededCapacity, 16);
+		if (leadingFrames == buffer->leadingFrames) {
+			float *newBuffer = aza_realloc(buffer->buffer, sizeof(*buffer->buffer) * neededCapacity);
+			if (!newBuffer) {
+				return AZA_ERROR_OUT_OF_MEMORY;
+			}
+			buffer->buffer = newBuffer;
+			memset(buffer->buffer + buffer->bufferCapacity, 0, sizeof(*buffer->buffer) * (neededCapacity - buffer->bufferCapacity));
+		} else {
+			float *newBuffer = aza_calloc(neededCapacity, sizeof(*buffer->buffer));
+			if (!newBuffer) {
+				return AZA_ERROR_OUT_OF_MEMORY;
+			}
+			if (buffer->buffer) {
+				if (channelLayout.count == buffer->channelLayout.count) {
+					memcpy(newBuffer + (leadingFrames - buffer->leadingFrames) * channelLayout.count, buffer->buffer, sizeof(*buffer->buffer) * buffer->bufferCapacity);
+				}
+				aza_free(buffer->buffer);
+			}
+			buffer->buffer = newBuffer;
+		}
+		buffer->bufferCapacity = neededCapacity;
+	} else if (leadingFrames != buffer->leadingFrames && channelLayout.count == buffer->channelLayout.count) {
+		uint32_t bufferTotalFrames = azaBufferGetTotalFrameCount(buffer);
+		if (leadingFrames > buffer->leadingFrames) {
+			// Move the data into the right place sir
+			memmove(buffer->buffer + (leadingFrames - buffer->leadingFrames) * channelLayout.count, buffer->buffer, sizeof(*buffer->buffer) * bufferTotalFrames * channelLayout.count);
+			// Zero the start
+			memset(buffer->buffer, 0, sizeof(*buffer->buffer) * (leadingFrames - buffer->leadingFrames) * channelLayout.count);
+		} else {
+			// Move the data into the left place sir
+			memmove(buffer->buffer, buffer->buffer + (buffer->leadingFrames - leadingFrames) * channelLayout.count, sizeof(*buffer->buffer) * bufferTotalFrames * channelLayout.count);
+		}
+		if (frames + trailingFrames > buffer->frames + buffer->trailingFrames) {
+			// Zero the end
+			memset(buffer->buffer + bufferTotalFrames * channelLayout.count, 0, sizeof(*buffer->buffer) * (totalFrames - bufferTotalFrames) * channelLayout.count);
+		}
+	}
+	buffer->pSamples = buffer->buffer + leadingFrames * channelLayout.count;
+	buffer->frames = frames;
+	buffer->leadingFrames = leadingFrames;
+	buffer->trailingFrames = trailingFrames;
+	buffer->stride = channelLayout.count;
+	buffer->channelLayout = channelLayout;
+	if (channelLayout.count != buffer->channelLayout.count) {
+		azaBufferZero(buffer);
+	}
+	return AZA_SUCCESS;
 }
 
 void azaBufferZero(azaBuffer *buffer) {
 	uint32_t totalFrames = azaBufferGetTotalFrameCount(buffer);
 	if (buffer->pSamples && totalFrames && buffer->channelLayout.count) {
-		float *pSamplesStart = azaBufferGetStart(buffer);
 		if AZA_LIKELY(buffer->channelLayout.count == buffer->stride) {
-			memset(pSamplesStart, 0, sizeof(float) * totalFrames * buffer->channelLayout.count);
+			memset(buffer->pSamples - buffer->leadingFrames * buffer->stride, 0, sizeof(float) * totalFrames * buffer->channelLayout.count);
 		} else {
-			for (uint32_t i = 0; i < totalFrames * buffer->stride; i += buffer->stride) {
+			for (int32_t i = -(int32_t)buffer->leadingFrames * buffer->stride; i < (int32_t)(buffer->frames + buffer->trailingFrames) * buffer->stride; i += buffer->stride) {
 				for (uint8_t c = 0; c < buffer->channelLayout.count; c++) {
-					pSamplesStart[i + c] = 0.0f;
+					buffer->pSamples[i + c] = 0.0f;
 				}
 			}
 		}
@@ -245,10 +305,14 @@ void azaBufferMixFadeLinear(azaBuffer *dst, float volumeDstStart, float volumeDs
 void azaBufferCopy(azaBuffer *dst, azaBuffer *src) {
 	assert(dst->frames == src->frames);
 	assert(dst->channelLayout.count == src->channelLayout.count);
+	uint32_t leadingFrames = AZA_MIN(dst->leadingFrames, src->leadingFrames);
+	uint32_t trailingFrames = AZA_MIN(dst->trailingFrames, src->trailingFrames);
+	uint32_t totalFrames = src->frames + leadingFrames + trailingFrames;
 	if (dst->channelLayout.count == dst->stride && src->channelLayout.count == src->stride) {
-		memcpy(dst->pSamples, src->pSamples, sizeof(float) * src->frames * src->channelLayout.count);
+		uint32_t leadingSamples = leadingFrames * src->channelLayout.count;
+		memcpy(dst->pSamples - leadingSamples, src->pSamples - leadingSamples, sizeof(float) * totalFrames * src->channelLayout.count);
 	} else {
-		for (uint32_t i = 0; i < src->frames; i++) {
+		for (int64_t i = -(int64_t)leadingFrames; i < (int64_t)(src->frames + trailingFrames); i++) {
 			for (uint8_t c = 0; c < src->channelLayout.count; c++) {
 				dst->pSamples[i * dst->stride + c] = src->pSamples[i * src->stride + c];
 			}
@@ -260,18 +324,22 @@ void azaBufferCopyChannel(azaBuffer *dst, uint8_t channelDst, azaBuffer *src, ui
 	assert(dst->frames == src->frames);
 	assert(channelDst < dst->channelLayout.count);
 	assert(channelSrc < src->channelLayout.count);
+	uint32_t leadingFrames = AZA_MIN(dst->leadingFrames, src->leadingFrames);
+	uint32_t trailingFrames = AZA_MIN(dst->trailingFrames, src->trailingFrames);
+	uint32_t totalFrames = src->frames + leadingFrames + trailingFrames;
 	if (dst->stride == 1 && src->stride == 1) {
-		memcpy(dst->pSamples, src->pSamples, sizeof(float) * dst->frames);
+		uint32_t leadingSamples = leadingFrames;
+		memcpy(dst->pSamples - leadingSamples, src->pSamples - leadingSamples, sizeof(float) * totalFrames);
 	} else if (dst->stride == 1) {
-		for (uint32_t i = 0; i < dst->frames; i++) {
+		for (int64_t i = 0; i < (int64_t)(dst->frames + trailingFrames); i++) {
 			dst->pSamples[i] = src->pSamples[i * src->stride + channelSrc];
 		}
 	} else if (src->stride == 1) {
-		for (uint32_t i = 0; i < dst->frames; i++) {
+		for (int64_t i = 0; i < (int64_t)(dst->frames + trailingFrames); i++) {
 			dst->pSamples[i * dst->stride + channelDst] = src->pSamples[i];
 		}
 	} else {
-		for (uint32_t i = 0; i < dst->frames; i++) {
+		for (int64_t i = 0; i < (int64_t)(dst->frames + trailingFrames); i++) {
 			dst->pSamples[i * dst->stride + channelDst] = src->pSamples[i * src->stride + channelSrc];
 		}
 	}
@@ -280,14 +348,18 @@ void azaBufferCopyChannel(azaBuffer *dst, uint8_t channelDst, azaBuffer *src, ui
 void azaBufferBroadcastChannel(azaBuffer *dst, azaBuffer *src, uint8_t channelSrc) {
 	assert(dst->frames == src->frames);
 	assert(channelSrc < src->channelLayout.count);
+	uint32_t leadingFrames = AZA_MIN(dst->leadingFrames, src->leadingFrames);
+	uint32_t trailingFrames = AZA_MIN(dst->trailingFrames, src->trailingFrames);
+	uint32_t totalFrames = src->frames + leadingFrames + trailingFrames;
 	if (dst->stride == 1 && src->stride == 1) {
-		memcpy(dst->pSamples, src->pSamples, sizeof(float) * dst->frames);
+		uint32_t leadingSamples = leadingFrames;
+		memcpy(dst->pSamples - leadingSamples, src->pSamples - leadingSamples, sizeof(float) * totalFrames);
 	} else if (dst->stride == 1) {
-		for (uint32_t i = 0; i < dst->frames; i++) {
+		for (int64_t i = 0; i < (int64_t)(dst->frames + trailingFrames); i++) {
 			dst->pSamples[i] = src->pSamples[i * src->stride + channelSrc];
 		}
 	} else {
-		for (uint32_t i = 0; i < dst->frames; i++) {
+		for (int64_t i = 0; i < (int64_t)(dst->frames + trailingFrames); i++) {
 			float sample = src->pSamples[i * src->stride + channelSrc];
 			for (uint8_t c = 0; c < dst->channelLayout.count; c++) {
 				dst->pSamples[i * dst->stride + c] = sample;
@@ -296,18 +368,39 @@ void azaBufferBroadcastChannel(azaBuffer *dst, azaBuffer *src, uint8_t channelSr
 	}
 }
 
+azaBuffer azaBufferView(azaBuffer *src) {
+	azaBuffer result = *src;
+	result.buffer = NULL;
+	result.bufferCapacity = 0;
+	return result;
+}
+
 azaBuffer azaBufferSlice(azaBuffer *src, uint32_t frameStart, uint32_t frameCount) {
 	assert(frameStart < src->frames);
 	assert(frameCount <= src->frames - frameStart);
-	uint32_t srcEndFrame = src->frames + src->framesTrailing;
+	uint32_t srcEndFrame = src->frames + src->trailingFrames;
 	return (azaBuffer) {
 		.pSamples       = src->pSamples + frameStart * src->stride,
 		.samplerate     = src->samplerate,
 		.frames         = frameCount,
-		.framesLeading  = src->framesLeading + frameStart,
-		.framesTrailing = srcEndFrame - (frameStart + frameCount),
+		.leadingFrames  = src->leadingFrames + frameStart,
+		.trailingFrames = srcEndFrame - (frameStart + frameCount),
 		.stride         = src->stride,
-		.owned          = false,
+		.channelLayout  = src->channelLayout,
+	};
+}
+
+azaBuffer azaBufferSliceEx(azaBuffer *src, uint32_t frameStart, uint32_t frameCount, uint32_t leadingFrames, uint32_t trailingFrames) {
+	assert(leadingFrames <= src->leadingFrames);
+	assert(frameStart < src->frames);
+	assert(frameCount+trailingFrames <= src->frames + src->trailingFrames - frameStart);
+	return (azaBuffer) {
+		.pSamples       = src->pSamples + frameStart * src->stride,
+		.samplerate     = src->samplerate,
+		.frames         = frameCount,
+		.leadingFrames  = leadingFrames,
+		.trailingFrames = trailingFrames,
+		.stride         = src->stride,
 		.channelLayout  = src->channelLayout,
 	};
 }
@@ -317,10 +410,9 @@ azaBuffer azaBufferOneChannel(azaBuffer *src, uint8_t channel) {
 		.pSamples       = src->pSamples + channel,
 		.samplerate     = src->samplerate,
 		.frames         = src->frames,
-		.framesLeading  = src->framesLeading,
-		.framesTrailing = src->framesTrailing,
+		.leadingFrames  = src->leadingFrames,
+		.trailingFrames = src->trailingFrames,
 		.stride         = src->stride,
-		.owned          = false,
 		.channelLayout  = azaChannelLayoutOneChannel(src->channelLayout, channel),
 	};
 }
@@ -330,10 +422,9 @@ azaBuffer azaBufferOneSample(float *sample, uint32_t samplerate) {
 		.pSamples       = sample,
 		.samplerate     = samplerate,
 		.frames         = 1,
-		.framesLeading  = 0,
-		.framesTrailing = 0,
+		.leadingFrames  = 0,
+		.trailingFrames = 0,
 		.stride         = 1,
-		.owned          = false,
 		.channelLayout  = azaChannelLayoutMono(),
 	};
 }
@@ -347,49 +438,31 @@ azaBuffer azaBufferOneSample(float *sample, uint32_t samplerate) {
 // TODO: Maybe make this dynamic, and also deal with the thread_local memory leak snafu (possibly by making it not a stack, and therefore no longer thread_local)
 #define AZA_MAX_SIDE_BUFFERS 64
 thread_local azaBuffer sideBufferPool[AZA_MAX_SIDE_BUFFERS] = {{0}};
-thread_local size_t sideBufferCapacity[AZA_MAX_SIDE_BUFFERS] = {0};
 thread_local size_t sideBuffersInUse = 0;
 
-azaBuffer azaPushSideBuffer(uint32_t frames, uint32_t framesLeading, uint32_t framesTrailing, uint32_t channels, uint32_t samplerate) {
+azaBuffer azaPushSideBuffer(uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, uint32_t channels, uint32_t samplerate) {
 	assert(sideBuffersInUse < AZA_MAX_SIDE_BUFFERS);
 	azaBuffer *buffer = &sideBufferPool[sideBuffersInUse];
-	size_t *capacity = &sideBufferCapacity[sideBuffersInUse];
-	uint32_t totalFrames = frames + framesLeading + framesTrailing;
-	size_t capacityNeeded = totalFrames * channels;
-	if (*capacity < capacityNeeded) {
-		if (*capacity) {
-			azaBufferDeinit(buffer, false);
-		}
-	}
-	buffer->stride = channels;
-	buffer->channelLayout.count = channels;
+	azaBufferResize(buffer, frames, leadingFrames, trailingFrames, (azaChannelLayout) { .count = channels });
 	buffer->samplerate = samplerate;
-	if (*capacity < capacityNeeded) {
-		azaBufferInit(buffer, frames, framesLeading, framesTrailing, buffer->channelLayout);
-		*capacity = capacityNeeded;
-	} else {
-		buffer->frames = frames;
-		buffer->framesLeading = framesLeading;
-		buffer->framesTrailing = framesTrailing;
-	}
 	sideBuffersInUse++;
 	return *buffer;
 }
 
-azaBuffer azaPushSideBufferZero(uint32_t frames, uint32_t framesLeading, uint32_t framesTrailing, uint32_t channels, uint32_t samplerate) {
-	azaBuffer buffer = azaPushSideBuffer(frames, framesLeading, framesTrailing, channels, samplerate);
+azaBuffer azaPushSideBufferZero(uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, uint32_t channels, uint32_t samplerate) {
+	azaBuffer buffer = azaPushSideBuffer(frames, leadingFrames, trailingFrames, channels, samplerate);
 	azaBufferZero(&buffer);
 	return buffer;
 }
 
 azaBuffer azaPushSideBufferCopy(azaBuffer *src) {
-	azaBuffer result = azaPushSideBuffer(src->frames, src->framesLeading, src->framesTrailing, src->channelLayout.count, src->samplerate);
+	azaBuffer result = azaPushSideBuffer(src->frames, src->leadingFrames, src->trailingFrames, src->channelLayout.count, src->samplerate);
 	azaBufferCopy(&result, src);
 	return result;
 }
 
 azaBuffer azaPushSideBufferCopyZero(azaBuffer *src) {
-	azaBuffer result = azaPushSideBufferZero(src->frames, src->framesLeading, src->framesTrailing, src->channelLayout.count, src->samplerate);
+	azaBuffer result = azaPushSideBufferZero(src->frames, src->leadingFrames, src->trailingFrames, src->channelLayout.count, src->samplerate);
 	return result;
 }
 

@@ -69,12 +69,12 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	uint32_t maxKernelRadius = (data->config.maxKernelSamples-1)/2;
 	maxKernelRadius = AZA_CLAMP(maxKernelRadius, 1, AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
 
-	if (src->framesLeading < maxKernelRadius) {
-		AZA_LOG_ERR("Error(%s): src->framesLeading (%u) < maxKernelRadius(%u)\n", AZA_FUNCTION_NAME, src->framesLeading, maxKernelRadius);
+	if (src->leadingFrames < maxKernelRadius) {
+		AZA_LOG_ERR("Error(%s): src->leadingFrames (%u) < maxKernelRadius(%u)\n", AZA_FUNCTION_NAME, src->leadingFrames, maxKernelRadius);
 		return AZA_ERROR_INVALID_FRAME_COUNT;
 	}
-	if (src->framesTrailing < maxKernelRadius) {
-		AZA_LOG_ERR("Error(%s): src->framesTrailing (%u) < maxKernelRadius(%u)\n", AZA_FUNCTION_NAME, src->framesTrailing, maxKernelRadius);
+	if (src->trailingFrames < maxKernelRadius) {
+		AZA_LOG_ERR("Error(%s): src->trailingFrames (%u) < maxKernelRadius(%u)\n", AZA_FUNCTION_NAME, src->trailingFrames, maxKernelRadius);
 		return AZA_ERROR_INVALID_FRAME_COUNT;
 	}
 	// frame delta in src for one frame into dst
