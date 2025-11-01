@@ -379,8 +379,8 @@ static __m256 azaKernelSample_x8_avx2_fma(azaKernel *kernel, float pos, float ra
 void azaSampleWithKernel_scalar(float *dst, int dstChannels, azaKernel *kernel, float *src, int srcStride, int minFrame, int maxFrame, bool wrap, int32_t frame, float fraction, float rate) {
 	memset(dst, 0, sizeof(*dst)*dstChannels);
 	float kernelIntegral = 0.0f;
-	int srcStart = frame + (int)floorf(-(float)kernel->sampleZero / rate);
-	int srcLen = (int)floorf((float)kernel->length / rate);
+	int srcStart = frame + (int)ceilf(-(float)kernel->sampleZero / rate);
+	int srcLen = (int)ceilf((float)kernel->length / rate) - 1;
 	int srcEnd = srcStart + srcLen;
 	float kernelPos = rate * (1.0f-fraction) - (float)kernel->sampleZero;
 	if (wrap) {
@@ -421,8 +421,8 @@ void azaSampleWithKernel_sse(float *dst, int dstChannels, azaKernel *kernel, flo
 	memset(dst, 0, sizeof(*dst)*dstChannels);
 	__m128 kernelIntegral_x4 = _mm_setzero_ps();
 	float kernelIntegral = 0.0f;
-	int srcStart = frame + (int)floorf(-(float)kernel->sampleZero / rate);
-	int srcLen = (int)floorf((float)kernel->length / rate);
+	int srcStart = frame + (int)ceilf(-(float)kernel->sampleZero / rate);
+	int srcLen = (int)ceilf((float)kernel->length / rate) - 1;
 	int srcEnd = srcStart + srcLen;
 	float kernelPos = rate * (1.0f-fraction) - (float)kernel->sampleZero;
 	if (!wrap) {
@@ -543,8 +543,8 @@ void azaSampleWithKernel_sse2(float *dst, int dstChannels, azaKernel *kernel, fl
 	memset(dst, 0, sizeof(*dst)*dstChannels);
 	__m128 kernelIntegral_x4 = _mm_setzero_ps();
 	float kernelIntegral = 0.0f;
-	int srcStart = frame + (int)floorf(-(float)kernel->sampleZero / rate);
-	int srcLen = (int)floorf((float)kernel->length / rate);
+	int srcStart = frame + (int)ceilf(-(float)kernel->sampleZero / rate);
+	int srcLen = (int)ceilf((float)kernel->length / rate) - 1;
 	int srcEnd = srcStart + srcLen;
 	float kernelPos = rate * (1.0f-fraction) - (float)kernel->sampleZero;
 	if (!wrap) {
@@ -666,8 +666,8 @@ void azaSampleWithKernel_sse3(float *dst, int dstChannels, azaKernel *kernel, fl
 	memset(dst, 0, sizeof(*dst)*dstChannels);
 	__m128 kernelIntegral_x4 = _mm_setzero_ps();
 	float kernelIntegral = 0.0f;
-	int srcStart = frame + (int)floorf(-(float)kernel->sampleZero / rate);
-	int srcLen = (int)floorf((float)kernel->length / rate);
+	int srcStart = frame + (int)ceilf(-(float)kernel->sampleZero / rate);
+	int srcLen = (int)ceilf((float)kernel->length / rate) - 1;
 	int srcEnd = srcStart + srcLen;
 	float kernelPos = rate * (1.0f-fraction) - (float)kernel->sampleZero;
 	if (!wrap) {
@@ -789,8 +789,8 @@ void azaSampleWithKernel_avx(float *dst, int dstChannels, azaKernel *kernel, flo
 	memset(dst, 0, sizeof(*dst)*dstChannels);
 	__m256 kernelIntegral_x8 = _mm256_setzero_ps();
 	float kernelIntegral = 0.0f;
-	int srcStart = frame + (int)floorf(-(float)kernel->sampleZero / rate);
-	int srcLen = (int)floorf((float)kernel->length / rate);
+	int srcStart = frame + (int)ceilf(-(float)kernel->sampleZero / rate);
+	int srcLen = (int)ceilf((float)kernel->length / rate) - 1;
 	int srcEnd = srcStart + srcLen;
 	float kernelPos = rate * (1.0f-fraction) - (float)kernel->sampleZero;
 	if (!wrap) {
@@ -944,8 +944,8 @@ void azaSampleWithKernel_avx_fma(float *dst, int dstChannels, azaKernel *kernel,
 	memset(dst, 0, sizeof(*dst)*dstChannels);
 	__m256 kernelIntegral_x8 = _mm256_setzero_ps();
 	float kernelIntegral = 0.0f;
-	int srcStart = frame + (int)floorf(-(float)kernel->sampleZero / rate);
-	int srcLen = (int)floorf((float)kernel->length / rate);
+	int srcStart = frame + (int)ceilf(-(float)kernel->sampleZero / rate);
+	int srcLen = (int)ceilf((float)kernel->length / rate) - 1;
 	int srcEnd = srcStart + srcLen;
 	float kernelPos = rate * (1.0f-fraction) - (float)kernel->sampleZero;
 	if (!wrap) {
@@ -1100,8 +1100,8 @@ void azaSampleWithKernel_avx2_fma(float *dst, int dstChannels, azaKernel *kernel
 	memset(dst, 0, sizeof(*dst)*dstChannels);
 	__m256 kernelIntegral_x8 = _mm256_setzero_ps();
 	float kernelIntegral = 0.0f;
-	int srcStart = frame + (int)floorf(-(float)kernel->sampleZero / rate);
-	int srcLen = (int)floorf((float)kernel->length / rate);
+	int srcStart = frame + (int)ceilf(-(float)kernel->sampleZero / rate);
+	int srcLen = (int)ceilf((float)kernel->length / rate) - 1;
 	int srcEnd = srcStart + srcLen;
 	float kernelPos = rate * (1.0f-fraction) - (float)kernel->sampleZero;
 	if (!wrap) {
