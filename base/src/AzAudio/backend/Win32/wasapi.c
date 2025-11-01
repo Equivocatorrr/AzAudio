@@ -251,8 +251,8 @@ static size_t azaFindDefaultDevice(azaDeviceInfo devicePool[], size_t deviceCoun
 #define FAIL_ACTION result = AZA_MAX_DEVICES; goto error
 	size_t result = AZA_MAX_DEVICES;
 	HRESULT hResult;
-	IMMDevice *pDevice;
-	IPropertyStore *pPropertyStore;
+	IMMDevice *pDevice = NULL;
+	IPropertyStore *pPropertyStore = NULL;
 	char *name = NULL;
 	hResult = pEnumerator->lpVtbl->GetDefaultAudioEndpoint(pEnumerator, dataFlow, eConsole, &pDevice);
 	CHECK_RESULT("GetDefaultAudioEndpoint", FAIL_ACTION);
@@ -648,9 +648,9 @@ static int azaWASAPIInit() {
 	}
 	deviceCount = (size_t)deviceCountUINT;
 	for (UINT i = 0; i < deviceCountUINT; i++) {
-		IMMDevice *pDevice;
-		IMMEndpoint *pEndpoint;
-		IPropertyStore *pPropertyStore;
+		IMMDevice *pDevice = NULL;
+		IMMEndpoint *pEndpoint = NULL;
+		IPropertyStore *pPropertyStore = NULL;
 		WCHAR *idWStr;
 		char *name;
 		// unsigned speakerConfig;
