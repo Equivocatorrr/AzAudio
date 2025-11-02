@@ -65,7 +65,6 @@ static const azaDSP azaRMSHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaRMSProcess,
 	/* fp_free       = */ azaFreeRMS,
-	NULL, NULL,
 };
 
 

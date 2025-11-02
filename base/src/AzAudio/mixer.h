@@ -30,7 +30,7 @@ static inline void azaTrackRouteDeinit(azaTrackRoute *data) {
 typedef struct azaTrack {
 	azaBuffer buffer;
 	// Plugin chain, including synths and samplers
-	azaDSP *dsp;
+	azaDSPChain plugins;
 	char name[32];
 	struct {
 		azaTrackRoute *data;

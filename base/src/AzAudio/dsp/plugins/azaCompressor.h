@@ -79,7 +79,6 @@ static const azaDSP azaCompressorHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaCompressorProcess,
 	/* fp_free       = */ azaFreeCompressor,
-	NULL, NULL,
 };
 
 

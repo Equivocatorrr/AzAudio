@@ -18,7 +18,7 @@ extern "C" {
 // Some specs used to help manage buffers, especially in the mixer.
 // Relies heavily on ZII for correctness
 typedef struct azaDSPSpecs {
-	// How many samples of latency does the plugin create in the chain? Used for latency compensation.
+	// How many frames of latency does the plugin create in the chain? Only for reporting latency within the plugin, not any latency brought on by fulfilling extraneous frame requirements.
 	uint32_t latencyFrames;
 	// How many src leading frames are desired for processing. Used for kernel sampling.
 	uint32_t leadingFrames;
@@ -66,26 +66,94 @@ typedef struct azaDSP {
 	fp_azaDSPProcess_t fp_process; // Nullable, meaning no processing is required.
 	fp_azaFreeDSP_t fp_free; // Nullable, meaning removal from a plugin chain requires no action (mostly for un-owned user plugins).
 	// TODO: function for drawing in the GUI
-	// A doubly-linked list of plugins representing a single processing chain.
-	struct azaDSP *pPrev;
-	struct azaDSP *pNext;
 } azaDSP;
 
-static_assert(sizeof(azaDSP) == (48 + sizeof(void*)*5), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
+static_assert(sizeof(azaDSP) == (48 + sizeof(void*)*3), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
 
 // Handles bypass and calls dsp->fp_getSpecs if applicable.
 azaDSPSpecs azaDSPGetSpecs(azaDSP *dsp, uint32_t samplerate);
-// returns the combined azaDSPSpecs of the plugin chain up to and including dsp.
-azaDSPSpecs azaDSPChainGetSpecsBackward(azaDSP *dsp, uint32_t samplerate);
-// returns the combined azaDSPSpecs of the plugin chain from dsp until the end.
-azaDSPSpecs azaDSPChainGetSpecsForward(azaDSP *dsp, uint32_t samplerate);
-// returns the combined azaDSPSpecs of the entire plugin chain.
-azaDSPSpecs azaDSPChainGetSpecs(azaDSP *dsp, uint32_t samplerate);
+
 // Handles bypass, and calls dsp->fp_process if applicable.
 // NOTE: Does not follow the plugin chain. You must do that externally.
 int azaDSPProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 // Handles owned, and calls dsp->fp_free if applicable. Returns true if dsp was freed.
 bool azaFreeDSP(azaDSP *dsp);
+
+
+
+// Utilities for dealing with extraneous samples, latency, carrying data forwards for processing
+// Effectively centralizing the hard work of dealing with this stuff so implementing plugins is simpler.
+
+
+
+// One step in the processing chain
+typedef struct azaDSPChainStep {
+	azaDSP *dsp;
+	uint32_t bufferOffset;
+	azaDSPSpecs specs;
+} azaDSPChainStep;
+
+static const uint32_t AZA_DSP_CHAIN_BUFFER_OFFSET_UNINITIALIZED = 0xFFFFFFFF;
+
+typedef struct azaDSPChain {
+	struct {
+		azaDSPChainStep *data;
+		uint32_t count;
+		uint32_t capacity;
+	} steps;
+	struct {
+		float *data;
+		uint32_t count;
+		uint32_t capacity;
+	} buffer;
+} azaDSPChain;
+
+// Initialize with a given number of steps to allocate.
+// NOTE: Zeroes out the whole struct at the start.
+// May return AZA_ERROR_OUT_OF_MEMORY, but only if stepsToReserve > 0
+int azaDSPChainInit(azaDSPChain *data, uint32_t stepsToReserve);
+// Frees all additional memory allocated
+void azaDSPChainDeinit(azaDSPChain *data);
+
+// Adds a plugin onto the end of the chain.
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaDSPChainAppend(azaDSPChain *data, azaDSP *dsp);
+// Adds a plugin onto the beginning of the chain.
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaDSPChainPrepend(azaDSPChain *data, azaDSP *dsp);
+// Adds a plugin in the place of dst, pushing dst and all later plugins later. If dst is NULL, this appends.
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaDSPChainInsert(azaDSPChain *data, azaDSP *dsp, azaDSP *dst);
+// Adds a plugin in the place of dst, pushing dst and all later plugins later.
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaDSPChainInsertIndex(azaDSPChain *data, azaDSP *dsp, uint32_t index);
+// Looks for the plugin in the chain and removes it. Asserts that it is found.
+void azaDSPChainRemove(azaDSPChain *data, azaDSP *dsp);
+// Removes plugin at the given index. Asserts index is valid.
+void azaDSPChainRemoveIndex(azaDSPChain *data, uint32_t index);
+
+// returns the combined azaDSPSpecs of the entire plugin chain.
+azaDSPSpecs azaDSPChainGetSpecs(azaDSPChain *data, uint32_t samplerate);
+
+// Handles changes in azaDSPSpecs, moving buffer space around as needed.
+// This gets called by azaDSPChainProcess automatically, but doing it manually on setup can reduce the workload during processing.
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaDSPChainUpdate(azaDSPChain *data, azaBuffer *dst, azaBuffer *src, uint32_t flags);
+
+typedef void (*fp_azaDSPChainProcess_OnPluginError)(azaDSP *dsp, void *userdata);
+
+// Process the DSP chain with the given buffers.
+// Calls azaDSPChainUpdate internally, so if config changes you don't need to do anything.
+// If a plugin has an error, we don't error out of the whole chain. Instead, we set the error field in the plugin header, and call fp_OnPluginError, which gets the dsp that had an error and your passed in userdata pointer. This function shouldn't change anything about the plugin chain, as it's in the middle of processing and will continue afterwards.
+// fp_OnPluginError can be NULL
+// May return AZA_ERROR_OUT_OF_MEMORY
+int azaDSPChainProcessWithHandler(azaDSPChain *data, azaBuffer *dst, azaBuffer *src, uint32_t flags, fp_azaDSPChainProcess_OnPluginError fp_OnPluginError, void *userdata);
+// Process the DSP chain with the given buffers.
+// Calls azaDSPChainUpdate internally, so if config changes you don't need to do anything.
+// May return AZA_ERROR_OUT_OF_MEMORY
+static inline int azaDSPChainProcess(azaDSPChain *data, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
+	return azaDSPChainProcessWithHandler(data, dst, src, flags, NULL, NULL);
+}
 
 
 

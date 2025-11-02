@@ -38,8 +38,6 @@ typedef struct azaDelayDynamicConfig {
 	float feedback;
 	// How much of one channel's signal gets added to a different channel in the range 0 to 1
 	float pingpong;
-	// You can provide a chain of effects to operate on the input (including any feedback), which only affect the wet signal
-	azaDSP *inputEffects;
 	// Resampling kernel. If NULL it will use azaKernelDefaultLanczos
 	azaKernel *kernel;
 
@@ -57,6 +55,9 @@ typedef struct azaDelayDynamicChannelData {
 typedef struct azaDelayDynamic {
 	azaDSP header;
 	azaDelayDynamicConfig config;
+
+	// You can provide a chain of effects to operate on the input (including any feedback), which only affect the wet signal
+	azaDSPChain inputEffects;
 
 	azaMeters metersInput;
 	azaMeters metersOutput;
@@ -102,7 +103,6 @@ static const azaDSP azaDelayDynamicHeader = {
 	/* fp_getSpecs   = */ azaDelayDynamicGetSpecs,
 	/* fp_process    = */ azaDelayDynamicProcess,
 	/* fp_free       = */ azaFreeDelayDynamic,
-	NULL, NULL,
 };
 
 

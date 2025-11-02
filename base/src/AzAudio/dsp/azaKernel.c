@@ -46,7 +46,7 @@ void azaKernelPack(azaKernel *kernel) {
 // azaKernelSample and azaSampleWithKernel are implemented in specialized/azaKernel.c
 
 int azaKernelMakeLanczos(azaKernel *kernel, uint32_t resolution, uint32_t radius) {
-	int err = azaKernelInit(kernel, 1+radius*2, 1+radius, resolution);
+	int err = azaKernelInit(kernel, 1+radius*2, radius, resolution);
 	if (err) return err;
 	kernel->table[0] = 0.0f;
 	for (uint32_t i = 0; i < radius * resolution; i++) {

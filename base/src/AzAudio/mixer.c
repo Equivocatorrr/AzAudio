@@ -13,24 +13,24 @@
 #include <string.h>
 
 int azaTrackInit(azaTrack *data, uint32_t bufferFrames, azaChannelLayout bufferChannelLayout) {
-	return azaBufferInit(&data->buffer, bufferFrames, 0, 0, bufferChannelLayout);
+	int err = azaBufferInit(&data->buffer, bufferFrames, 0, 0, bufferChannelLayout);
+	if AZA_UNLIKELY(err) return err;
+	azaDSPChainInit(&data->plugins, 0);
+	return AZA_SUCCESS;
 }
 
 void azaTrackDeinit(azaTrack *data) {
 	azaBufferDeinit(&data->buffer, true);
-	azaDSP *dsp = data->dsp;
-	while (dsp) {
-		azaDSP *nextDSP = dsp->pNext;
+	for (uint32_t i = 0; i < data->plugins.steps.count; i++) {
+		azaDSP *dsp = data->plugins.steps.data[i].dsp;
 		if (dsp->owned) {
 			if (!azaFreeDSP(dsp)) {
 				// TODO: Move this error into the GUI as well
 				AZA_LOG_ERR("Failed to free \"%s\" because a free function is not given.\n", dsp->name);
-				dsp->pNext = NULL;
 			}
 		}
-		dsp = nextDSP;
 	}
-	data->dsp = NULL;
+	azaDSPChainDeinit(&data->plugins);
 	for (uint32_t i = 0; i < data->receives.count; i++) {
 		azaTrackRouteDeinit(&data->receives.data[i]);
 	}
@@ -38,41 +38,19 @@ void azaTrackDeinit(azaTrack *data) {
 }
 
 void azaTrackAppendDSP(azaTrack *data, azaDSP *dsp) {
-	azaDSP **ppdst = &data->dsp;
-	while (*ppdst) {
-		ppdst = &(*ppdst)->pNext;
-	}
-	*ppdst = dsp;
+	azaDSPChainAppend(&data->plugins, dsp);
 }
 
 void azaTrackPrependDSP(azaTrack *data, azaDSP *dsp) {
-	azaDSP *nextDSP = data->dsp;
-	data->dsp = dsp;
-	dsp->pNext = nextDSP;
+	azaDSPChainPrepend(&data->plugins, dsp);
 }
 
 void azaTrackInsertDSP(azaTrack *data, azaDSP *dsp, azaDSP *dst) {
-	azaDSP **ppdst = &data->dsp;
-	while (true) {
-		if (*ppdst == dst) {
-			dsp->pNext = *ppdst;
-			*ppdst = dsp;
-			break;
-		}
-		assert(*ppdst); // Means dst is not found.
-		ppdst = &(*ppdst)->pNext;
-	}
+	azaDSPChainInsert(&data->plugins, dsp, dst);
 }
 
 void azaTrackRemoveDSP(azaTrack *data, azaDSP *dsp) {
-	azaDSP **ppdst = &data->dsp;
-	while (*ppdst) {
-		if (*ppdst == dsp) {
-			*ppdst = dsp->pNext;
-			break;
-		}
-		ppdst = &(*ppdst)->pNext;
-	}
+	azaDSPChainRemove(&data->plugins, dsp);
 }
 
 void azaTrackSetName(azaTrack *data, const char *name) {
@@ -126,8 +104,22 @@ azaTrackRoute* azaTrackGetReceive(azaTrack *from, azaTrack *to) {
 	return NULL;
 }
 
+void azaTrackProcess_OnPluginError(azaDSP *dsp, void *userdata) {
+	if (azaMixerGUIIsOpen()) {
+		azaMixerGUIShowError(azaGetLastErrorMessage());
+	}
+}
+
 int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 	if (data->processed) return AZA_SUCCESS;
+
+	// Latency measurement
+	azaDSPSpecs dspSpecs = azaDSPChainGetSpecs(&data->plugins, samplerate);
+	if (dspSpecs.leadingFrames > data->buffer.leadingFrames) {
+		int err = azaBufferResize(&data->buffer, data->buffer.frames, dspSpecs.leadingFrames, dspSpecs.trailingFrames, data->buffer.channelLayout);
+		if (err) return err;
+	}
+
 	data->buffer.samplerate = samplerate;
 	azaBuffer buffer = azaBufferSlice(&data->buffer, 0, frames);
 	azaBufferZero(&buffer);
@@ -144,24 +136,9 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 		azaBuffer srcBuffer = azaBufferSlice(&route->track->buffer, 0, frames);
 		azaBufferMixMatrix(&buffer, 1.0f, &srcBuffer, aza_db_to_ampf(route->gain), &route->channelMatrix);
 	}
-	if (data->dsp) {
-		azaDSP *dspStart = data->dsp;
-		azaDSP *dsp = dspStart;
-		while (dsp) {
-			// TODO: Check when track configuration changed so we can pass the appropriate flag
-			err = azaDSPProcess(dsp, &buffer, &buffer, 0);
-			if (err) {
-				dsp->error = err;
-				if (azaMixerGUIIsOpen()) {
-					azaMixerGUIShowError(azaGetLastErrorMessage());
-				}
-			}
-			dsp = dsp->pNext;
-			if (dsp == dspStart) {
-				return AZA_ERROR_MIXER_ROUTING_CYCLE;
-			}
-		}
-	}
+	// TODO: Check when track configuration changed so we can pass the appropriate flag
+	err = azaDSPChainProcessWithHandler(&data->plugins, &buffer, &buffer, 0, azaTrackProcess_OnPluginError, NULL);
+	if AZA_UNLIKELY(err) return err;
 	if (data->gain != 0.0f) {
 		float amp = aza_db_to_ampf(data->gain);
 		for (uint32_t i = 0; i < buffer.frames; i++) {

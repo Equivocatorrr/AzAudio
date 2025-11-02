@@ -212,7 +212,7 @@ int main(int argumentCount, char** argumentValues) {
 		.poles = AZA_FILTER_6_DB,
 		.frequency = 200.0f,
 	});
-	reverb->inputDelay.config.inputEffects = (azaDSP*)reverbFilter;
+	azaDSPChainAppend(&reverb->inputDelay.inputEffects, (azaDSP*)reverbFilter);
 
 	limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
 		.gainInput  =  3.0f,

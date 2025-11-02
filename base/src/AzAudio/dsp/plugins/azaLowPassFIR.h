@@ -76,7 +76,6 @@ static const azaDSP azaLowPassFIRHeader = {
 	/* fp_getSpecs   = */ azaLowPassFIRGetSpecs,
 	/* fp_process    = */ azaLowPassFIRProcess,
 	/* fp_free       = */ azaFreeLowPassFIR,
-	NULL, NULL,
 };
 
 

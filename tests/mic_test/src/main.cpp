@@ -279,8 +279,8 @@ int main(int argumentCount, char** argumentValues) {
 			/* .decay_ms          = */ 500.0f,
 			/* .gainInput         = */ 0.0f,
 			/* .gainOutput        = */ 0.0f,
-			/* .activationEffects = */ (azaDSP*)gateBandPass,
 		});
+		azaDSPChainAppend(&gate->activationEffects, (azaDSP*)gateBandPass);
 
 		delay = azaMakeDelay(azaDelayConfig{
 			/* .gainWet      = */-15.0f,
@@ -291,7 +291,6 @@ int main(int argumentCount, char** argumentValues) {
 			/* .delay_ms     = */ 1234.5f,
 			/* .feedback     = */ 0.5f,
 			/* .pingpong     = */ 0.9f,
-			/* .inputEffects = */ nullptr,
 		});
 
 		delay2 = azaMakeDelay(azaDelayConfig{
@@ -303,7 +302,6 @@ int main(int argumentCount, char** argumentValues) {
 			/* .delay        = */ 2345.6f,
 			/* .feedback     = */ 0.5f,
 			/* .pingpong     = */ 0.2f,
-			/* .inputEffects = */ nullptr,
 		});
 
 		delayWetFilter = azaMakeFilter(azaFilterConfig{
@@ -322,8 +320,8 @@ int main(int argumentCount, char** argumentValues) {
 			/* .delay        = */ 1000.0f / 3.0f,
 			/* .feedback     = */ 0.98f,
 			/* .pingpong     = */ 0.0f,
-			/* .inputEffects = */ (azaDSP*)delayWetFilter,
 		});
+		azaDSPChainAppend(&delay3->inputEffects, (azaDSP*)delayWetFilter);
 
 		highPass = azaMakeFilter(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_HIGH_PASS,
@@ -366,10 +364,9 @@ int main(int argumentCount, char** argumentValues) {
 			/* .delayFollowTime_ms = */ 100.0f,
 			/* .feedback           = */ 0.7f,
 			/* .pingpong           = */ 1.0f,
-			// /* .inputEffects       = */ nullptr,
-			/* .inputEffects       = */ (azaDSP*)delayWetFilter,
 			/* .kernel             = */ nullptr,
 		});
+		azaDSPChainAppend(&delayDynamic->inputEffects, (azaDSP*)delayWetFilter);
 
 		spatialize = azaMakeSpatialize(azaSpatializeConfig{
 			/* .world                 = */ nullptr,

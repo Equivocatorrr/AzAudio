@@ -112,7 +112,6 @@ static const azaDSP azaFilterHeader = {
 	/* fp_getSpecs   = */ NULL, // As an IIR filter, we affect the phase, which depends on the frequency, so we report zero latency.
 	/* fp_process    = */ azaFilterProcess,
 	/* fp_free       = */ azaFreeFilter,
-	NULL, NULL,
 };
 
 

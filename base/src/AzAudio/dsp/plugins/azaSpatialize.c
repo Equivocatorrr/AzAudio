@@ -192,7 +192,6 @@ void azaSpatializeInit(azaSpatialize *data, azaSpatializeConfig config) {
 		.delayFollowTime_ms = 10.0f,
 		.feedback = 0.0f,
 		.pingpong = 0.0f,
-		.inputEffects = NULL,
 		.kernel = NULL,
 		.channels = {0},
 	};

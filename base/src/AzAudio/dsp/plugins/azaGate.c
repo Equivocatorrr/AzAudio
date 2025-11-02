@@ -12,6 +12,7 @@
 void azaGateInit(azaGate *data, azaGateConfig config) {
 	data->header = azaGateHeader;
 	data->config = config;
+	azaDSPChainInit(&data->activationEffects, 0);
 	azaRMSInit(&data->rms, (azaRMSConfig) {
 		.windowSamples = 128,
 		.combineOp = azaOpMax
@@ -19,6 +20,7 @@ void azaGateInit(azaGate *data, azaGateConfig config) {
 }
 
 void azaGateDeinit(azaGate *data) {
+	azaDSPChainDeinit(&data->activationEffects);
 	azaRMSDeinit(&data->rms);
 }
 
@@ -55,7 +57,6 @@ azaDSP* azaMakeDefaultGate() {
 		.decay_ms = 100.0f,
 		.gainInput = 0.0f,
 		.gainOutput = 0.0f,
-		.activationEffects = NULL,
 	});
 }
 
@@ -85,20 +86,12 @@ int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	azaBuffer rmsBuffer = azaPushSideBuffer(src->frames, 0, 0, 1, src->samplerate);
 	uint8_t sideBuffersInUse = 1;
 	azaBuffer activationBuffer;
-	if (data->config.activationEffects) {
+	if (data->activationEffects.steps.count) {
 		activationBuffer = azaPushSideBufferCopy(src);
 		sideBuffersInUse++;
-		azaDSP *dspStart = data->config.activationEffects;
-		azaDSP *dsp = dspStart;
-		while (dsp) {
-			err = azaDSPProcess(dsp, &activationBuffer, &activationBuffer, flags);
-			if (err) {
-				dsp->error = err;
-			}
-			dsp = dsp->pNext;
-			if (dsp == dspStart) {
-				return AZA_ERROR_MIXER_ROUTING_CYCLE;
-			}
+		err = azaDSPChainProcess(&data->activationEffects, &activationBuffer, &activationBuffer, flags);
+		if AZA_UNLIKELY(err) {
+			goto error;
 		}
 	} else {
 		activationBuffer = *src;

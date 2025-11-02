@@ -86,7 +86,6 @@ static const azaDSP azaLookaheadLimiterHeader = {
 	/* fp_getSpecs   = */ azaLookaheadLimiterGetSpecs,
 	/* fp_process    = */ azaLookaheadLimiterProcess,
 	/* fp_free       = */ azaFreeLookaheadLimiter,
-	NULL, NULL,
 };
 
 

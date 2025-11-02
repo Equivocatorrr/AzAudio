@@ -1698,8 +1698,8 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 	azaRectShrinkRight(&pluginRect, pluginRect.h + margin);
 	azaRectShrinkLeft(&muteRect, pluginRect.w + margin);
 	azaDSP *mouseoverDSP = NULL;
-	azaDSP *dsp = track->dsp;
-	while (dsp) {
+	for (uint32_t i = 0; i < track->plugins.steps.count; i++) {
+		azaDSP *dsp = track->plugins.steps.data[i].dsp;
 		bool mouseover = azaMouseInRectDepth(pluginRect, 0);
 		if (mouseover) {
 			azaDrawRectGradientV(pluginRect, colorPluginBorderSelected, colorPluginBorder);
@@ -1736,7 +1736,6 @@ static void azaDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azaRect boun
 				azaDrawRectLines(muteRect, colorFaderMuteButton);
 			}
 		}
-		dsp = dsp->pNext;
 		pluginRect.y += pluginRect.h + margin;
 		muteRect.y += pluginRect.h + margin;
 	}
@@ -1997,7 +1996,7 @@ static void azaDrawLowPassFIR(azaLowPassFIR *data, azaRect bounds) {
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 
 	float maxKernelSamples = data->config.maxKernelSamples;
-	usedWidth = azaDrawSliderFloat(bounds, &maxKernelSamples, 3.0f, (float)(AZA_KERNEL_DEFAULT_LANCZOS_COUNT*2+1), 1.0f, 63, "Maximum Kernel Samples Per Sample (Quality)", "%.0f");
+	usedWidth = azaDrawSliderFloatLog(bounds, &maxKernelSamples, 16.0f, 2.0f*4192.0f, 1.0f, 63, "Maximum Kernel Samples Per Sample (Quality)", "%.0f");
 	data->config.maxKernelSamples = (uint16_t)roundf(maxKernelSamples);
 	azaRectShrinkLeft(&bounds, usedWidth + margin);
 

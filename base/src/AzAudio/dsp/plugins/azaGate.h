@@ -34,13 +34,14 @@ typedef struct azaGateConfig {
 	// output gain in dB
 	float gainOutput;
 	// TODO: Add sidechain support
-	// Any effects to apply to the activation signal
-	azaDSP *activationEffects;
 } azaGateConfig;
 
 typedef struct azaGate {
 	azaDSP header;
 	azaGateConfig config;
+
+	// Any effects to apply to the activation signal
+	azaDSPChain activationEffects;
 
 	azaMeters metersInput;
 	azaMeters metersOutput;
@@ -81,7 +82,6 @@ static const azaDSP azaGateHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaGateProcess,
 	/* fp_free       = */ azaFreeGate,
-	NULL, NULL,
 };
 
 

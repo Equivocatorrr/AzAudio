@@ -90,7 +90,6 @@ static const azaDSP azaMonitorSpectrumHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaMonitorSpectrumProcess,
 	/* fp_free       = */ azaFreeMonitorSpectrum,
-	NULL, NULL,
 };
 
 

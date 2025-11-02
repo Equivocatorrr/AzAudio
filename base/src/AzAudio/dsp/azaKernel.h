@@ -120,6 +120,16 @@ void azaResample(azaKernel *kernel, float factor, float *dst, int dstStride, int
 // Same as azaResample, except the resampled values are added to dst instead of replacing them. Every sample is multiplied by amp before being added.
 void azaResampleAdd(azaKernel *kernel, float factor, float amp, float *dst, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset);
 
+// returns the correct dst frame count required for resampling from a src buffer with the given length
+uint32_t azaGetResampledDstFrameCount(uint32_t dstSamplerate, uint32_t srcSamplerate, uint32_t srcFrames);
+// returns the correct src frame count required for resampling into a dst buffer with the given length
+uint32_t azaGetResampledSrcFrameCount(uint32_t dstSamplerate, uint32_t srcSamplerate, uint32_t dstFrames);
+
+// Use kernel to resample src into dst, at their respective samplerates.
+// srcSampleOffset is persistent state required for processing streams. Initialize it to 0.0f and hold on to it between calls. This state applies to the specific buffer pair.
+//
+void azaBufferResample(azaBuffer *dst, azaBuffer *src, azaKernel *kernel, float *srcSampleOffset);
+
 
 
 #ifdef __cplusplus

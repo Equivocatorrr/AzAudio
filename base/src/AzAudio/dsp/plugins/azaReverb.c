@@ -19,7 +19,6 @@ void azaReverbInit(azaReverb *data, azaReverbConfig config) {
 		.delay_ms = config.delay_ms,
 		.feedback = 0.0f,
 		.pingpong = 0.0f,
-		.inputEffects = NULL,
 	});
 
 	float delays[AZAUDIO_REVERB_DELAY_COUNT] = {
@@ -63,7 +62,6 @@ void azaReverbInit(azaReverb *data, azaReverbConfig config) {
 			.delay_ms = delays[tap],
 			.feedback = 0.0f,
 			.pingpong = 0.05f,
-			.inputEffects = NULL,
 		});
 		azaFilterInit(filter, (azaFilterConfig) {
 			.kind = AZA_FILTER_LOW_PASS,

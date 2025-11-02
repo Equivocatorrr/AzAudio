@@ -26,8 +26,9 @@ azaMixer mixer;
 
 typedef struct Synth {
 	azaDSP header;
+	azaDSPChain outputEffects;
 	azaFilter *filter;
-	float gen[1];
+	float gen[10];
 	float lfo;
 	int32_t impulseFrame;
 } Synth;
@@ -61,6 +62,8 @@ int synthProcess(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 	if (synth->impulseFrame < 0) {
 		synth->impulseFrame += 100000;
 	}
+	int err = azaDSPChainProcess(&synth->outputEffects, dst, dst, flags);
+	if (err) return err;
 	return AZA_SUCCESS;
 }
 
@@ -80,23 +83,27 @@ static const azaDSP SynthHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ synthProcess,
 	/* fp_free       = */ FreeSynth,
-	NULL, NULL,
 };
 
 azaDSP* MakeDefaultSynth() {
 	Synth *result = aza_calloc(1, sizeof(Synth));
 	if (!result) return NULL;
 	result->header = SynthHeader;
+	if (azaDSPChainInit(&result->outputEffects, 1)) {
+		goto fail;
+	}
 	result->filter = azaMakeFilter((azaFilterConfig) {
 		.kind = AZA_FILTER_LOW_PASS,
 		.frequency = 500.0f,
 	});
-	result->header.pNext = (azaDSP*)result->filter;
-	if (!result->filter) goto fail;
-	result->gen[0] = 0.0f;
+	if (!result->filter) goto fail2;
+	azaDSPChainAppend(&result->outputEffects, (azaDSP*)result->filter);
+	memset(result->gen, 0, sizeof(result->gen));
 	result->lfo = 0.25f;
 	result->impulseFrame = 100000;
 	return (azaDSP*)result;
+fail2:
+	azaDSPChainDeinit(&result->outputEffects);
 fail:
 	aza_free(result);
 	return NULL;

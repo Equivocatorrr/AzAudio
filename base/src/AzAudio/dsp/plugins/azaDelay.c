@@ -12,9 +12,11 @@
 void azaDelayInit(azaDelay *data, azaDelayConfig config) {
 	data->header = azaDelayHeader;
 	data->config = config;
+	azaDSPChainInit(&data->inputEffects, 0);
 }
 
 void azaDelayDeinit(azaDelay *data) {
+	azaDSPChainDeinit(&data->inputEffects);
 	if (data->buffer) {
 		aza_free(data->buffer);
 		data->buffer = NULL;
@@ -59,7 +61,6 @@ azaDSP* azaMakeDefaultDelay() {
 		.delay_ms = 300.0f,
 		.feedback = 0.5f,
 		.pingpong = 0.0f,
-		.inputEffects = NULL,
 	});
 }
 
@@ -142,19 +143,9 @@ int azaDelayProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 			index = (index+1) % channelData->delaySamples;
 		}
 	}
-	if (data->config.inputEffects) {
-		azaDSP *dspStart = data->config.inputEffects;
-		azaDSP *dsp = dspStart;
-		while (dsp) {
-			err = azaDSPProcess(dsp, &sideBuffer, &sideBuffer, flags);
-			if (err) {
-				dsp->error = err;
-			}
-			dsp = dsp->pNext;
-			if (dsp == dspStart) {
-				return AZA_ERROR_MIXER_ROUTING_CYCLE;
-			}
-		}
+	if (data->inputEffects.steps.count) {
+		err = azaDSPChainProcess(&data->inputEffects, &sideBuffer, &sideBuffer, flags);
+		if AZA_UNLIKELY(err) goto error;
 	}
 	float amountWet = data->config.muteWet ? 0.0f : aza_db_to_ampf(data->config.gainWet);
 	float amountDry = data->config.muteDry ? 0.0f : aza_db_to_ampf(data->config.gainDry);

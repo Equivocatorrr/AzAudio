@@ -94,7 +94,6 @@ static const azaDSP azaSamplerHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaSamplerProcess,
 	/* fp_free       = */ azaFreeSampler,
-	NULL, NULL,
 };
 
 

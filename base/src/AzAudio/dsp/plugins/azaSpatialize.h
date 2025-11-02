@@ -136,7 +136,6 @@ static const azaDSP azaSpatializeHeader = {
 	/* fp_getSpecs   = */ azaSpatializeGetSpecs,
 	/* fp_process    = */ azaSpatializeProcess,
 	/* fp_free       = */ azaFreeSpatialize,
-	NULL, NULL,
 };
 
 

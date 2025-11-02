@@ -79,7 +79,6 @@ static const azaDSP azaReverbHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaReverbProcess,
 	/* fp_free       = */ azaFreeReverb,
-	NULL, NULL,
 };
 
 

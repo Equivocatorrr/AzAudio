@@ -64,7 +64,6 @@ static const azaDSP azaCubicLimiterHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaCubicLimiterProcess,
 	/* fp_free       = */ azaFreeCubicLimiter,
-	NULL, NULL,
 };
 
 

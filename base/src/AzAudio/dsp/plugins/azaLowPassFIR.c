@@ -48,9 +48,11 @@ azaDSP* azaMakeDefaultLowPassFIR() {
 	return (azaDSP*)azaMakeLowPassFIR((azaLowPassFIRConfig) {
 		.frequency = 4000.0f,
 		.frequencyFollowTime_ms = 50.0f,
-		.maxKernelSamples = 27,
+		.maxKernelSamples = 13*16+1,
 	});
 }
+
+// BIG TODO: Use half-pass filters for very low frequencies to reduce the total workload.
 
 int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	// Bypass handled by azaDSPProcess
@@ -66,8 +68,8 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	err = azaCheckBuffersForDSPProcess(dst, src, /* sameFrameCount: */ false, /* sameChannelCount: */ true);
 	if AZA_UNLIKELY(err) return err;
 
-	uint32_t maxKernelRadius = (data->config.maxKernelSamples-1)/2;
-	maxKernelRadius = AZA_CLAMP(maxKernelRadius, 1, AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
+	uint32_t maxKernelRadius = (uint32_t)ceilf((float)data->config.maxKernelSamples / 2.0f);
+	// maxKernelRadius = AZA_CLAMP(maxKernelRadius, 1, AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
 
 	if (src->leadingFrames < maxKernelRadius) {
 		AZA_LOG_ERR("Error(%s): src->leadingFrames (%u) < maxKernelRadius(%u)\n", AZA_FUNCTION_NAME, src->leadingFrames, maxKernelRadius);
@@ -85,11 +87,15 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 		return AZA_ERROR_INVALID_FRAME_COUNT;
 	}
 	azaBuffer sideBuffer;
-	if (dst == src) {
+	if (dst->pSamples == src->pSamples) {
 		// We progressively write into dst as we sample, and our kernel will sample the frames we put into dst if we don't do this.
 		sideBuffer = azaPushSideBufferCopy(src);
 		src = &sideBuffer;
 		numSideBuffers++;
+	}
+
+	if (data->header.selected) {
+		azaMetersUpdate(&data->metersInput, src, 1.0f);
 	}
 
 	float minNyquist = azaMinf((float)dst->samplerate, (float)src->samplerate) * 0.5f;
@@ -100,11 +106,16 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	startFrequency = azaMinf(startFrequency, minNyquist);
 	float endFrequency = azaFollowerLinearGetValue(&data->frequency);
 	endFrequency = azaMinf(endFrequency, minNyquist);
-	float startKernelRate = 0.5f * (float)src->samplerate / startFrequency;
-	float endKernelRate = 0.5f * (float)src->samplerate / endFrequency;
+	float startKernelRate = azaMaxf(startFrequency / (0.5f * (float)src->samplerate), 0.011f);
+	float endKernelRate = azaMaxf(endFrequency / (0.5f * (float)src->samplerate), 0.011f);
 
 	// TODO: Handle popping from swapping out kernels dynamically like this.
-	azaKernel *kernel = azaKernelGetDefaultLanczos(azaKernelGetRadiusForRate(startKernelRate, maxKernelRadius));
+	uint32_t actualRadius = azaKernelGetRadiusForRate(startKernelRate, maxKernelRadius);
+	actualRadius = AZA_CLAMP(actualRadius, 1, AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
+	azaKernel *kernel = azaKernelGetDefaultLanczos(actualRadius);
+	float minKernelRate = ceilf((float)kernel->length / 2.0f) / ceilf((float)data->config.maxKernelSamples / 2.0f);
+	startKernelRate = azaMaxf(minKernelRate, startKernelRate);
+	endKernelRate = azaMaxf(minKernelRate, endKernelRate);
 
 	float srcFrame = data->srcFrameOffset;
 	for (uint32_t i = 0; i < dst->frames; i++) {
@@ -117,16 +128,27 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 
 		srcFrame += srcFrameRate;
 	}
+
+	if (data->header.selected) {
+		azaMetersUpdate(&data->metersOutput, dst, 1.0f);
+	}
+
 	azaPopSideBuffers(numSideBuffers);
 	return err;
 }
 
 azaDSPSpecs azaLowPassFIRGetSpecs(void *dsp, uint32_t samplerate) {
 	azaLowPassFIR *data = (azaLowPassFIR*)dsp;
-	uint32_t maxKernelRadius = (data->config.maxKernelSamples-1)/2;
-	maxKernelRadius = AZA_CLAMP(maxKernelRadius, 1, AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
+	uint32_t maxKernelRadius = (uint32_t)ceilf((float)data->config.maxKernelSamples / 2.0f);
+	// maxKernelRadius = AZA_CLAMP(maxKernelRadius, 1, AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
+#if 0
+	// Report latency based on frequency (causes continuous latency changes)
+	float maxFrequency = azaMaxf(data->frequency.start, data->frequency.end);
+	float kernelRate = azaMaxf(maxFrequency / (0.5f * (float)samplerate), 0.011f);
+	maxKernelRadius = (uint32_t)ceilf((float)maxKernelRadius / kernelRate);
+#endif
 	azaDSPSpecs result = {
-		.latencyFrames = maxKernelRadius,
+		.latencyFrames = 0,
 		.leadingFrames = maxKernelRadius,
 		.trailingFrames = maxKernelRadius,
 	};

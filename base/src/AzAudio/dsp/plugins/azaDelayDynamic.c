@@ -87,10 +87,12 @@ static void azaDelayDynamicPrimeBuffer(azaDelayDynamic *data, azaBuffer *src) {
 void azaDelayDynamicInit(azaDelayDynamic *data, azaDelayDynamicConfig config) {
 	data->header = azaDelayDynamicHeader;
 	data->config = config;
+	azaDSPChainInit(&data->inputEffects, 0);
 	data->lastSrcBufferFrames = 0;
 }
 
 void azaDelayDynamicDeinit(azaDelayDynamic *data) {
+	azaDSPChainDeinit(&data->inputEffects);
 	if (data->buffer) {
 		aza_free(data->buffer);
 	}
@@ -138,7 +140,6 @@ azaDSP* azaMakeDefaultDelayDynamic() {
 		.delayFollowTime_ms = 20.0f, // Just under 60fps as a random guess, using buffer time as an unreliable half-measure to prevent pitch from changing abruptly because the next target hadn't come in yet. This needs a proper solution before long.
 		.feedback = 0.5f,
 		.pingpong = 0.0f,
-		.inputEffects = NULL,
 		.kernel = NULL,
 	});
 }
@@ -213,18 +214,10 @@ int azaDelayDynamicProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t f
 			channelData->delay_ms = followerBackup;
 		}
 	}
-	if (data->config.inputEffects) {
-		azaDSP *dspStart = data->config.inputEffects;
-		azaDSP *dsp = dspStart;
-		while (dsp) {
-			err = azaDSPProcess(dsp, &sideBuffer, &sideBuffer, flags);
-			if (err) {
-				dsp->error = err;
-			}
-			dsp = dsp->pNext;
-			if (dsp == dspStart) {
-				return AZA_ERROR_MIXER_ROUTING_CYCLE;
-			}
+	if (data->inputEffects.steps.count) {
+		err = azaDSPChainProcess(&data->inputEffects, &sideBuffer, &sideBuffer, flags);
+		if AZA_UNLIKELY(err) {
+			goto error;
 		}
 	}
 	azaDelayDynamicPrimeBuffer(data, &sideBuffer);
