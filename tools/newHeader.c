@@ -113,21 +113,13 @@ int main(int argc, char** argv) {
 		if (file) {
 			fclose(file);
 			fprintf(stderr, "File \"%s\" already exists! Use `--replace-h` to overwrite it.\n", dstPath);
-			return 1;
-		}
-	}
-	if (outputCFile && !replaceC) {
-		file = fopen(dstCPath, "r");
-		if (file) {
-			fclose(file);
-			fprintf(stderr, "File \"%s\" already exists! Use `--replace-c` to overwrite it.\n", dstCPath);
-			return 1;
+			goto skipHeader;
 		}
 	}
 	file = fopen(dstPath, "w");
 	if (!file) {
 		fprintf(stderr, "Failed to open \"%s\" for writing\n", dstPath);
-		return 1;
+		goto skipHeader;
 	}
 
 	fprintf(file,
@@ -158,7 +150,17 @@ extern \"C\" {\n\
 
 	fclose(file);
 
+skipHeader:
+
 	if (outputCFile) {
+		if (!replaceC) {
+			file = fopen(dstCPath, "r");
+			if (file) {
+				fclose(file);
+				fprintf(stderr, "File \"%s\" already exists! Use `--replace-c` to overwrite it.\n", dstCPath);
+				return 1;
+			}
+		}
 		file = fopen(dstCPath, "w");
 		if (!file) {
 			fprintf(stderr, "Failed to open \"%s\" for writing\n", dstPath);
