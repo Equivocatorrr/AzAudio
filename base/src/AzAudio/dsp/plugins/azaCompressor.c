@@ -9,6 +9,8 @@
 #include "../../math.h"
 #include "../../error.h"
 
+#include "../../gui/gui.h"
+
 void azaCompressorInit(azaCompressor *data, azaCompressorConfig config) {
 	data->header = azaCompressorHeader;
 	data->config = config;
@@ -126,4 +128,75 @@ int azaCompressorProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	}
 
 	return AZA_SUCCESS;
+}
+
+
+
+// GUI
+
+
+
+static const int faderDBRange = 48;
+static const int faderDBHeadroom = 12;
+static const int thresholdDBRange = 48;
+static const int thresholdDBHeadroom = 12;
+static const int attenuationMeterDBRange = 24;
+
+void azagDrawCompressor(void *dsp, azagRect bounds) {
+	azaCompressor *data = dsp;
+	int usedWidth;
+	usedWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawMeters(&data->metersInput, bounds, faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawFader(bounds, &data->config.threshold, NULL, false, "Threshold", thresholdDBRange, thresholdDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawSliderFloat(bounds, &data->config.ratio, 1.0f, 10.0f, 0.2f, 10.0f, "Ratio", "%.2f");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawSliderFloatLog(bounds, &data->config.attack_ms, 1.0f, 1000.0f, 0.2f, 50.0f, "Attack", "%.1fms");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawSliderFloatLog(bounds, &data->config.decay_ms, 1.0f, 1000.0f, 0.2f, 200.0f, "Release", "%.1fms");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	azagRect attenuationRect = {
+		bounds.x,
+		bounds.y,
+		azagThemeCurrent.attenuationMeterWidth,
+		bounds.h,
+	};
+	azagRectShrinkLeft(&bounds, attenuationRect.w + azagThemeCurrent.margin.x);
+	bool attenuationMouseover = azagMouseInRect(attenuationRect);
+	if (attenuationMouseover) {
+		azagTooltipAdd("Attenuation", (azagPoint) {attenuationRect.x + attenuationRect.w/2, attenuationRect.y - azagThemeCurrent.margin.y}, 0.0f, 1.0f);
+	}
+	azagDrawMeterBackground(attenuationRect, attenuationMeterDBRange, 0);
+	azagRectShrinkAll(&attenuationRect, azagThemeCurrent.margin.x);
+	int yOffset;
+	yOffset = azagDBToYOffsetClamped(-data->minGainShort, attenuationRect.h, 0, (float)attenuationMeterDBRange);
+	azagDrawRect((azagRect) {
+		attenuationRect.x,
+		attenuationRect.y,
+		attenuationRect.w,
+		yOffset
+	}, azagThemeCurrent.colorAttenuation);
+	yOffset = azagDBToYOffsetClamped(-data->minGain, attenuationRect.h, 0, (float)attenuationMeterDBRange);
+	if (attenuationMouseover) {
+		azagTooltipAdd(azaTextFormat("%+.1fdb", data->minGain), (azagPoint) {attenuationRect.x + attenuationRect.w + azagThemeCurrent.margin.x, attenuationRect.y + yOffset}, 0.0f, 0.5f);
+	}
+	azagDrawLine(
+		(azagPoint) {attenuationRect.x, attenuationRect.y + yOffset},
+		(azagPoint) {attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset},
+		azagThemeCurrent.colorAttenuation
+	);
+	if (azagMousePressedInRect(AZAG_MOUSE_BUTTON_LEFT, attenuationRect)) {
+		data->minGain = 1.0f;
+	}
+
+	usedWidth = azagDrawFader(bounds, &data->config.gainOutput, NULL, false, "Output Gain", faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
+	// azagRectShrinkLeftMargin(&bounds, usedWidth);
 }

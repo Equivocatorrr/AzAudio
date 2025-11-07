@@ -6,8 +6,7 @@
 
 #include "../testing.h"
 
-#include <stdio.h>
-#include <AzAudio/dsp.h>
+#include <AzAudio/dsp/azaBuffer.h>
 
 void ut_run_azaBufferResize() {
 	{

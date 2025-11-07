@@ -67,6 +67,20 @@ azaClampf(float a, float min, float max) {
 
 #define AZA_CLAMP(a, min, max) AZA_MAX(min, AZA_MIN(max, a))
 
+static inline float azaSnapf(float value, float interval) {
+	assert(interval > 0.0f);
+	return roundf(value / interval) * interval;
+}
+
+static inline int azaSnapi(int value, int interval) {
+	assert(interval > 0);
+	if (value >= 0) {
+		return ((value + interval/2) / interval) * interval;
+	} else {
+		return ((value - interval/2) / interval) * interval;
+	}
+}
+
 static inline float
 azaLinstepf(float a, float min, float max) {
 	return azaClampf((a - min) / (max - min), 0.0f, 1.0f);

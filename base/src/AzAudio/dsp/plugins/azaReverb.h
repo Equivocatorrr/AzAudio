@@ -69,6 +69,10 @@ int azaReverbProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 
+void azagDrawReverb(void *dsp, azagRect bounds);
+
+
+
 static const azaDSP azaReverbHeader = {
 	/* .size         = */ sizeof(azaReverb),
 	/* .version      = */ 1,
@@ -79,6 +83,7 @@ static const azaDSP azaReverbHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaReverbProcess,
 	/* fp_free       = */ azaFreeReverb,
+	/* fp_draw       = */ azagDrawReverb,
 };
 
 

@@ -22,6 +22,8 @@ typedef enum azaMonitorSpectrumMode {
 	AZA_MONITOR_SPECTRUM_MODE_COUNT,
 } azaMonitorSpectrumMode;
 
+extern const char *azaMonitorSpectrumModeString[AZA_MONITOR_SPECTRUM_MODE_COUNT];
+
 typedef struct azaMonitorSpectrumConfig {
 	azaMonitorSpectrumMode mode;
 	// In AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL mode, this is which channel gets analyzed
@@ -80,16 +82,21 @@ int azaMonitorSpectrumProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_
 
 
 
+void azagDrawMonitorSpectrum(void *dsp, azagRect bounds);
+
+
+
 static const azaDSP azaMonitorSpectrumHeader = {
 	/* .size         = */ sizeof(azaMonitorSpectrum),
 	/* .version      = */ 1,
 	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
 	/* ._reserved    = */ {0},
 	/* .error        = */ 0,
-	/* .name         = */ "MonitorSpectrum",
+	/* .name         = */ "Spectrum Monitor",
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaMonitorSpectrumProcess,
 	/* fp_free       = */ azaFreeMonitorSpectrum,
+	/* fp_draw       = */ azagDrawMonitorSpectrum,
 };
 
 

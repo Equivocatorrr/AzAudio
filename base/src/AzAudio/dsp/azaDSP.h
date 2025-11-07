@@ -9,6 +9,8 @@
 
 #include "azaBuffer.h"
 
+#include "../gui/types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -48,6 +50,9 @@ typedef int (*fp_azaDSPProcess_t)(void *dsp, azaBuffer *dst, azaBuffer *src, uin
 // dsp is a pointer to the azaDSP derivative. This function must free all additional memory that was allocated by the plugin, and then the struct itself.
 typedef void (*fp_azaFreeDSP_t)(void *dsp);
 
+// Draws all plugin controls and visualizers within the given bounds.
+typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
+
 // TODO: Possibly do a little work to handle processing errors gracefully, such that an error caused by configuration in the GUI is easily recoverable by simply changing the config again (and maybe un-bypassing manually?).
 
 // Must be at the start of actual plugins
@@ -65,10 +70,10 @@ typedef struct azaDSP {
 	fp_azaDSPGetSpecs fp_getSpecs; // Nullable, meaning a zeroed-out struct azaDSPSpecs.
 	fp_azaDSPProcess_t fp_process; // Nullable, meaning no processing is required.
 	fp_azaFreeDSP_t fp_free; // Nullable, meaning removal from a plugin chain requires no action (mostly for un-owned user plugins).
-	// TODO: function for drawing in the GUI
+	fp_azagDrawDSP fp_draw; // Nullable, meaning we don't draw anything.
 } azaDSP;
 
-static_assert(sizeof(azaDSP) == (48 + sizeof(void*)*3), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
+static_assert(sizeof(azaDSP) == (48 + sizeof(void*)*4), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
 
 // Handles bypass and calls dsp->fp_getSpecs if applicable.
 azaDSPSpecs azaDSPGetSpecs(azaDSP *dsp, uint32_t samplerate);

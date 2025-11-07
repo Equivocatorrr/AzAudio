@@ -9,6 +9,8 @@
 #include "../../math.h"
 #include "../../error.h"
 
+#include "../../gui/gui.h"
+
 void azaDelayInit(azaDelay *data, azaDelayConfig config) {
 	data->header = azaDelayHeader;
 	data->config = config;
@@ -179,4 +181,46 @@ azaDSPSpecs azaDelayGetSpecs(void *dsp, uint32_t samplerate) {
 		.latencyFrames = 0,
 		.leadingFrames = (uint32_t)aza_ms_to_samples(totalDelay_ms, (float)samplerate),
 	};
+}
+
+
+
+// GUI
+
+
+
+static const int faderDBRange = 48;
+static const int faderDBHeadroom = 12;
+
+void azagDrawDelay(void *dsp, azagRect bounds) {
+	azaDelay *data = dsp;
+	azagRect meterBounds = bounds;
+	azagRectCutOutFaderMuteButton(&meterBounds);
+	int usedWidth = azagDrawMeters(&data->metersInput, meterBounds, faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, false, "Wet Gain", faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, false, "Dry Gain", faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawSliderFloatLog(bounds, &data->config.delay_ms, 0.1f, 10000.0f, 0.1f, 300.0f, "Delay", "%.1fms");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawSliderFloat(bounds, &data->config.feedback, 0.0f, 1.0f, 0.02f, 0.5f, "Feedback", "%.3f");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawSliderFloat(bounds, &data->config.pingpong, 0.0f, 1.0f, 0.02f, 0.0f, "PingPong", "%.3f");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	for (uint32_t c = 0; c < data->header.prevChannelCountDst; c++) {
+		azaDelayChannelConfig *channel = &data->channelData[c].config;
+		usedWidth = azagDrawSliderFloatLog(bounds, &channel->delay_ms, 0.1f, 10000.0f, 0.1f, 0.0f, azaTextFormat("Ch %d Delay", (int)c), "%.1fms");
+		azagRectShrinkLeftMargin(&bounds, usedWidth);
+	}
+
+	// TODO: wet effects list (I guess with some kinda navigation?)
+
+	usedWidth = azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
 }

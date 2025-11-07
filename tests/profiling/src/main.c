@@ -8,8 +8,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "AzAudio/AzAudio.h"
-#include "AzAudio/backend/timer.h"
+#include <AzAudio/AzAudio.h>
+#include <AzAudio/timer.h>
 
 #define TEST_BUFFERS_FRAME_COUNT 1234
 #define TEST_ITERATIONS 10000ull

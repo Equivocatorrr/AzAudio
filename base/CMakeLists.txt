@@ -59,14 +59,21 @@ add_library(AzAudio STATIC
 	src/AzAudio/easing.c
 	src/AzAudio/mixer.h
 	src/AzAudio/mixer.c
-	src/AzAudio/mixer_gui.c
 	src/AzAudio/simd.h
+	src/AzAudio/timer.h
+	# gui
+	src/AzAudio/gui/types.h
+	src/AzAudio/gui/types.c
+	src/AzAudio/gui/gui.h
+	src/AzAudio/gui/gui.c
+	src/AzAudio/gui/platform.h
+	src/AzAudio/gui/platform-raylib.c
+	src/AzAudio/mixer_gui.c
 	# backend
 	src/AzAudio/backend/backend.h
 	src/AzAudio/backend/interface.h
 	src/AzAudio/backend/interface.c
 	src/AzAudio/backend/threads.h
-	src/AzAudio/backend/timer.h
 	${BACKEND_SOURCES}
 	# specialized implementations
 	src/AzAudio/specialized/azaBufferDeinterlace.c
@@ -74,8 +81,7 @@ add_library(AzAudio STATIC
 	src/AzAudio/specialized/azaBufferMixMatrix.c
 	src/AzAudio/specialized/azaKernel.c
 	# dsp basics
-	src/AzAudio/dsp.h
-	# src/AzAudio/dsp.c
+	src/AzAudio/dsp/dsp.h
 	src/AzAudio/dsp/utility.h
 	src/AzAudio/dsp/utility.c
 	src/AzAudio/dsp/azaChannelMatrix.h
@@ -116,30 +122,6 @@ add_library(AzAudio STATIC
 	src/AzAudio/dsp/plugins/azaMonitorSpectrum.h
 	src/AzAudio/dsp/plugins/azaMonitorSpectrum.c
 )
-
-# # All of these are built in src/AzAudio/dsp.c
-# set_source_files_properties(
-# 	src/AzAudio/dsp/utility.c
-# 	src/AzAudio/dsp/azaChannelMatrix.c
-# 	src/AzAudio/dsp/azaBuffer.c
-# 	src/AzAudio/dsp/azaDSP.c
-# 	src/AzAudio/dsp/azaKernel.c
-# 	src/AzAudio/dsp/azaMeters.c
-# 	# plugins
-# 	src/AzAudio/dsp/plugins/azaRMS.c
-# 	src/AzAudio/dsp/plugins/azaCubicLimiter.c
-# 	src/AzAudio/dsp/plugins/azaLookaheadLimiter.c
-# 	src/AzAudio/dsp/plugins/azaFilter.c
-# 	src/AzAudio/dsp/plugins/azaCompressor.c
-# 	src/AzAudio/dsp/plugins/azaGate.c
-# 	src/AzAudio/dsp/plugins/azaDelay.c
-# 	src/AzAudio/dsp/plugins/azaDelayDynamic.c
-# 	src/AzAudio/dsp/plugins/azaReverb.c
-# 	src/AzAudio/dsp/plugins/azaSampler.c
-# 	src/AzAudio/dsp/plugins/azaSpatialize.c
-# 	src/AzAudio/dsp/plugins/azaMonitorSpectrum.c
-# 	PROPERTIES HEADER_FILE_ONLY TRUE
-# )
 
 set_target_properties(AzAudio PROPERTIES
 	DEBUG_POSTFIX ${CMAKE_DEBUG_POSTFIX}

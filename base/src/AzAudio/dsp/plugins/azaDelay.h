@@ -84,6 +84,10 @@ azaDSPSpecs azaDelayGetSpecs(void *dsp, uint32_t samplerate);
 
 
 
+void azagDrawDelay(void *dsp, azagRect bounds);
+
+
+
 static const azaDSP azaDelayHeader = {
 	/* .size         = */ sizeof(azaDelay),
 	/* .version      = */ 1,
@@ -94,6 +98,7 @@ static const azaDSP azaDelayHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaDelayProcess,
 	/* fp_free       = */ azaFreeDelay,
+	/* fp_draw       = */ azagDrawDelay,
 };
 
 

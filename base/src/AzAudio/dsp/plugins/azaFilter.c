@@ -9,6 +9,7 @@
 #include "../../math.h"
 #include "../../error.h"
 
+#include "../../gui/gui.h"
 
 
 const char *azaFilterKindString[] = {
@@ -146,4 +147,57 @@ int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 	}
 
 	return AZA_SUCCESS;
+}
+
+
+
+// GUI
+
+
+
+static const int filterKindRectWidth = 80;
+
+void azagDrawFilter(void *dsp, azagRect bounds) {
+	azaFilter *data = dsp;
+	azagRect kindRect = bounds;
+	kindRect.w = filterKindRectWidth;
+	kindRect.h = azagTextHeightMargin("A", AZAG_TEXT_SCALE_TEXT);
+	azagColor colorText = azagColorSatVal(azagThemeCurrent.colorSwitchHighlight, 0.5f, 0.9f);
+	for (int i = 0; i < AZA_FILTER_KIND_COUNT; i++) {
+		bool highlighted = azagMouseInRect(kindRect);
+		if (highlighted && azagMousePressed(AZAG_MOUSE_BUTTON_LEFT)) {
+			data->config.kind = (azaFilterKind)i;
+		}
+		bool selected = ((int)data->config.kind == i);
+		azagDrawRect(kindRect, highlighted ? azagThemeCurrent.colorSwitchHighlight : azagThemeCurrent.colorSwitch);
+		if (selected) {
+			azagDrawRectOutline(kindRect, colorText);
+		}
+		azagDrawTextMargin(azaFilterKindString[i], kindRect.xy, AZAG_TEXT_SCALE_TEXT, colorText);
+		kindRect.y += kindRect.h + azagThemeCurrent.margin.y;
+	}
+	{ // cutoff
+		int vMove = (int)azagMouseWheelV();
+		uint32_t poles = AZA_MIN(data->config.poles+1, AZAUDIO_FILTER_MAX_POLES);
+		bool highlighted = azagMouseInRect(kindRect);
+		if (highlighted) {
+			if (azagMousePressed(AZAG_MOUSE_BUTTON_LEFT) || vMove > 0) {
+				if (data->config.poles < AZAUDIO_FILTER_MAX_POLES-1) {
+					data->config.poles++;
+				}
+			}
+			if (azagMousePressed(AZAG_MOUSE_BUTTON_RIGHT) || vMove < 0) {
+				if (data->config.poles > 0) {
+					data->config.poles--;
+				}
+			}
+		}
+		azagDrawRect(kindRect, highlighted ? azagThemeCurrent.colorSwitchHighlight : azagThemeCurrent.colorSwitch);
+		azagDrawTextMargin(azaTextFormat("%udB/oct", poles*6), kindRect.xy, AZAG_TEXT_SCALE_TEXT, colorText);
+	}
+	azagRectShrinkLeftMargin(&bounds, kindRect.w);
+	int usedWidth = azagDrawSliderFloatLog(bounds, &data->config.frequency, 5.0f, 24000.0f, 0.1f, 500.0f, "Cutoff Frequency", "%.1fHz");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawSliderFloat(bounds, &data->config.dryMix, 0.0f, 1.0f, 0.1f, 0.0f, "Dry Mix", "%.2f");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
 }

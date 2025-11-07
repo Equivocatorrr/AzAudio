@@ -76,6 +76,10 @@ azaDSPSpecs azaLookaheadLimiterGetSpecs(void *dsp, uint32_t samplerate);
 
 
 
+void azagDrawLookaheadLimiter(void *dsp, azagRect bounds);
+
+
+
 static const azaDSP azaLookaheadLimiterHeader = {
 	/* .size         = */ sizeof(azaLookaheadLimiter),
 	/* .version      = */ 1,
@@ -86,6 +90,7 @@ static const azaDSP azaLookaheadLimiterHeader = {
 	/* fp_getSpecs   = */ azaLookaheadLimiterGetSpecs,
 	/* fp_process    = */ azaLookaheadLimiterProcess,
 	/* fp_free       = */ azaFreeLookaheadLimiter,
+	/* fp_draw       = */ azagDrawLookaheadLimiter,
 };
 
 

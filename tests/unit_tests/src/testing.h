@@ -6,6 +6,8 @@
 
 #include <AzAudio/aza_c_std.h>
 
+#include <stdio.h> // snprintf
+
 #ifndef UT_TESTING_H
 #define UT_TESTING_H
 

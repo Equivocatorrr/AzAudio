@@ -11,7 +11,7 @@
 #include "AzAudio/mixer.h"
 #include "AzAudio/error.h"
 #include "AzAudio/math.h"
-#include "AzAudio/dsp.h"
+#include "AzAudio/dsp/dsp.h"
 #include "AzAudio/backend/threads.h"
 
 #include <stb_vorbis.c>

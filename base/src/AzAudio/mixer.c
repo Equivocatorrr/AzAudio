@@ -8,7 +8,7 @@
 #include "math.h"
 #include "error.h"
 
-#include "backend/timer.h"
+#include "timer.h"
 
 #include <string.h>
 

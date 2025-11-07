@@ -9,6 +9,8 @@
 #include "../../math.h"
 #include "../../error.h"
 
+#include "../../gui/gui.h"
+
 void azaReverbInit(azaReverb *data, azaReverbConfig config) {
 	data->header = azaReverbHeader;
 	data->config = config;
@@ -210,4 +212,23 @@ azaDSPSpecs azaReverbGetSpecs(void *dsp, uint32_t samplerate) {
 	}
 	azaDSPSpecsCombineSerial(&specs, &specsIndividualDelays);
 	return specs;
+}
+
+
+
+// GUI
+
+
+
+void azagDrawReverb(void *dsp, azagRect bounds) {
+	azaReverb *data = dsp;
+	int usedWidth = azagDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, true, "Wet Gain", 36, 6);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, true, "Dry Gain", 36, 6);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawSliderFloat(bounds, &data->config.roomsize, 1.0f, 100.0f, 1.0f, 10.0f, "Room Size", "%.0f");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawSliderFloat(bounds, &data->config.color, 1.0f, 5.0f, 0.25f, 2.0f, "Color", "%.2f");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	usedWidth = azagDrawSliderFloat(bounds, &data->config.delay_ms, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "%.1fms");
 }

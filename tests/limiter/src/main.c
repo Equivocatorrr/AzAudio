@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 #include "AzAudio/AzAudio.h"
-#include "AzAudio/dsp.h"
+#include "AzAudio/dsp/dsp.h"
 #include "AzAudio/error.h"
 #include "AzAudio/math.h"
 

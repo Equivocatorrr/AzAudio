@@ -15,7 +15,7 @@
 
 #include "log.hpp"
 #include "AzAudio/AzAudio.h"
-#include "AzAudio/dsp.h"
+#include "AzAudio/dsp/dsp.h"
 #include "AzAudio/error.h"
 
 #ifdef __unix

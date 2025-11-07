@@ -66,6 +66,10 @@ azaDSPSpecs azaLowPassFIRGetSpecs(void *dsp, uint32_t samplerate);
 
 
 
+void azagDrawLowPassFIR(void *dsp, azagRect bounds);
+
+
+
 static const azaDSP azaLowPassFIRHeader = {
 	/* .size         = */ sizeof(azaLowPassFIR),
 	/* .version      = */ 1,
@@ -76,6 +80,7 @@ static const azaDSP azaLowPassFIRHeader = {
 	/* fp_getSpecs   = */ azaLowPassFIRGetSpecs,
 	/* fp_process    = */ azaLowPassFIRProcess,
 	/* fp_free       = */ azaFreeLowPassFIR,
+	/* fp_draw       = */ azagDrawLowPassFIR,
 };
 
 

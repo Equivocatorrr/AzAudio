@@ -10,6 +10,7 @@
 #include "cpuid.h"
 #include "dsp/azaKernel.h"
 #include "dsp/utility.h"
+#include "gui/gui.h"
 
 #include <stdlib.h>
 #include <stdarg.h>
@@ -66,6 +67,9 @@ int azaInit() {
 	azaWorldDefault.orientation.up      = (azaVec3) { 0.0f, 1.0f, 0.0f };
 	azaWorldDefault.orientation.forward = (azaVec3) { 0.0f, 0.0f, 1.0f };
 	azaWorldDefault.speedOfSound = 343.0f;
+
+	azagSetDefaultTheme();
+
 	return azaBackendInit();
 }
 

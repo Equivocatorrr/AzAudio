@@ -8,6 +8,7 @@
 #include "../../AzAudio.h"
 #include "../../math.h"
 #include "../../error.h"
+#include "../../gui/gui.h"
 
 
 
@@ -147,4 +148,66 @@ azaDSPSpecs azaLookaheadLimiterGetSpecs(void *dsp, uint32_t samplerate) {
 	return (azaDSPSpecs) {
 		.latencyFrames = AZAUDIO_LOOKAHEAD_SAMPLES,
 	};
+}
+
+
+
+// GUI
+
+
+
+static const int faderDBRange = 48;
+static const int faderDBHeadroom = 12;
+static const int attenuationMeterDBRange = 12;
+
+void azagDrawLookaheadLimiter(void *dsp, azagRect bounds) {
+	azaLookaheadLimiter *data = dsp;
+	int faderWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, faderWidth);
+	int metersWidth = azagDrawMeters(&data->metersInput, bounds, faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, metersWidth);
+
+	azagRect attenuationRect = {
+		bounds.x,
+		bounds.y,
+		azagThemeCurrent.attenuationMeterWidth,
+		bounds.h,
+	};
+	azagRectShrinkLeftMargin(&bounds, attenuationRect.w);
+	bool attenuationMouseover = azagMouseInRect(attenuationRect);
+	if (attenuationMouseover) {
+		azagTooltipAdd("Attenuation", (azagPoint) {attenuationRect.x + attenuationRect.w/2, attenuationRect.y - azagThemeCurrent.margin.y}, 0.5f, 1.0f);
+	}
+	azagDrawMeterBackground(attenuationRect, attenuationMeterDBRange, 0);
+	azagRectShrinkAllXY(&attenuationRect, azagThemeCurrent.margin);
+	int yOffset;
+	yOffset = azagDBToYOffsetClamped(-aza_amp_to_dbf(data->minAmpShort), attenuationRect.h, 0, (float)attenuationMeterDBRange);
+	azagDrawRect((azagRect) {
+		attenuationRect.x,
+		attenuationRect.y,
+		attenuationRect.w,
+		yOffset
+	}, azagThemeCurrent.colorAttenuation);
+	float attenuationPeakDB = aza_amp_to_dbf(data->minAmp);
+	yOffset = azagDBToYOffsetClamped(-attenuationPeakDB, attenuationRect.h, 0, (float)attenuationMeterDBRange);
+	if (attenuationMouseover) {
+		azagTooltipAdd(azaTextFormat("%+.1fdb", attenuationPeakDB), (azagPoint) {
+			attenuationRect.x + attenuationRect.w + azagThemeCurrent.margin.x,
+			attenuationRect.y + yOffset
+		}, 0.0f, 0.5f);
+	}
+	azagDrawLine(
+		(azagPoint) {attenuationRect.x,                     attenuationRect.y + yOffset},
+		(azagPoint) {attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset},
+		azagThemeCurrent.colorAttenuation
+	);
+	if (azagMousePressedInRect(AZAG_MOUSE_BUTTON_LEFT, attenuationRect)) {
+		data->minAmp = 1.0f;
+	}
+	data->minAmpShort = 1.0f;
+
+	azagDrawFader(bounds, &data->config.gainOutput, NULL, false, "Output Gain", faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, faderWidth);
+	azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, metersWidth);
 }

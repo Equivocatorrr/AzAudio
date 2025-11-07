@@ -102,6 +102,10 @@ int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 
+void azagDrawFilter(void *dsp, azagRect bounds);
+
+
+
 static const azaDSP azaFilterHeader = {
 	/* .size         = */ sizeof(azaFilter),
 	/* .version      = */ 1,
@@ -112,6 +116,7 @@ static const azaDSP azaFilterHeader = {
 	/* fp_getSpecs   = */ NULL, // As an IIR filter, we affect the phase, which depends on the frequency, so we report zero latency.
 	/* fp_process    = */ azaFilterProcess,
 	/* fp_free       = */ azaFreeFilter,
+	/* fp_draw       = */ azagDrawFilter,
 };
 
 

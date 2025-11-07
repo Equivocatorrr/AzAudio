@@ -69,6 +69,10 @@ int azaCompressorProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 
 
 
+void azagDrawCompressor(void *dsp, azagRect bounds);
+
+
+
 static const azaDSP azaCompressorHeader = {
 	/* .size         = */ sizeof(azaCompressor),
 	/* .version      = */ 1,
@@ -79,6 +83,7 @@ static const azaDSP azaCompressorHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaCompressorProcess,
 	/* fp_free       = */ azaFreeCompressor,
+	/* fp_draw       = */ azagDrawCompressor,
 };
 
 

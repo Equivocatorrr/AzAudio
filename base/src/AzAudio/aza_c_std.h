@@ -134,6 +134,13 @@ bool aza_str_begins_with(const char *string, const char *test);
 
 void aza_str_to_lower(char *dst, const char *src, size_t dstSize);
 
+int azaTextCountLines(const char *text);
+// snprintf's into a static thread_local buffer and returns the pointer to the beginning. This buffer is rewritten on the next call to this, so use it immediately or copy it out.
+const char* azaTextFormat(const char *fmt, ...);
+// Same as above, but we skip substring full strings in storage, allowing you to have more than 1 valid strings at once.
+// NOTE: You must call this in ascending order by substring, else other substrings will be corrupted. Also don't mix with calls to azaTextFormat
+const char* azaTextFormat2(int substring, const char *fmt, ...);
+
 
 
 // alignment and buffers
@@ -171,6 +178,16 @@ azaGetBufferOffset(char *buffer, size_t offset, size_t alignment) {
 
 // Returns the 32-bit signed integer representation of a 24-bit integer stored in the lower 24 bits of a u32. You don't have to worry about what's in the high 8 bits as they'll be masked out.
 int32_t azaSignExtend24Bit(uint32_t value);
+
+
+// Performs bit shifting where positive shifts are left shifts and negative shifts are right shifts
+static inline uint64_t aza_shl_signed(uint64_t lhs, int shift) {
+	if (shift >= 0) {
+		return lhs << shift;
+	} else {
+		return lhs >> -shift;
+	}
+}
 
 
 

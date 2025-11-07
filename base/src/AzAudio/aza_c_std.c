@@ -7,6 +7,9 @@
 #include "math.h"
 
 #include <ctype.h> // tolower
+#include <threads.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 
 
@@ -52,6 +55,41 @@ void aza_str_to_lower(char *dst, const char *src, size_t dstSize) {
 		dst[i] = tolower(src[i]);
 		if (src[i] == '\0') break;
 	}
+}
+
+int azaTextCountLines(const char *text) {
+	if (!text) return 0;
+	int result = 1;
+	while (*text) {
+		if (*text == '\n') result++;
+		text++;
+	}
+	return result;
+}
+
+static thread_local char azaTextFormatBuffer[2048] = {0};
+const char* azaTextFormat(const char *fmt, ...) {
+	va_list list;
+	va_start(list, fmt);
+	vsnprintf(azaTextFormatBuffer, sizeof(azaTextFormatBuffer), fmt, list);
+	va_end(list);
+	return azaTextFormatBuffer;
+}
+
+const char* azaTextFormat2(int substring, const char *fmt, ...) {
+	assert(substring >= 0);
+	assert(substring <= sizeof(azaTextFormatBuffer)/2);
+	char *result = azaTextFormatBuffer;
+	while (substring-- > 0) {
+		while (*result++) {}
+	}
+	size_t offset = result - azaTextFormatBuffer;
+	assert(offset < sizeof(azaTextFormatBuffer));
+	va_list list;
+	va_start(list, fmt);
+	vsnprintf(result, sizeof(azaTextFormatBuffer) - offset, fmt, list);
+	va_end(list);
+	return result;
 }
 
 

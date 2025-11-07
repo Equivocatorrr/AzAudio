@@ -9,6 +9,8 @@
 #include "../../error.h"
 #include "../azaKernel.h"
 
+#include "../../gui/gui.h"
+
 void azaLowPassFIRInit(azaLowPassFIR *data, azaLowPassFIRConfig config) {
 	data->header = azaLowPassFIRHeader;
 	data->config = config;
@@ -153,4 +155,34 @@ azaDSPSpecs azaLowPassFIRGetSpecs(void *dsp, uint32_t samplerate) {
 		.trailingFrames = maxKernelRadius,
 	};
 	return result;
+}
+
+
+
+// GUI
+
+
+
+static const int meterDBRange = 48;
+static const int meterDBHeadroom = 12;
+
+void azagDrawLowPassFIR(void *dsp, azagRect bounds) {
+	azaLowPassFIR *data = dsp;
+	int usedWidth;
+	usedWidth = azagDrawMeters(&data->metersInput, bounds, meterDBRange, meterDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawSliderFloatLog(bounds, &data->config.frequency, 50.0f, 24000.0f, 0.1f, 4000.0f, "Cutoff Frequency", "%.1fHz");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawSliderFloatLog(bounds, &data->config.frequencyFollowTime_ms, 1.0f, 5000.0f, 0.2f, 50.0f, "Cutoff Frequency Follower Time", "%.0fms");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	float maxKernelSamples = data->config.maxKernelSamples;
+	usedWidth = azagDrawSliderFloatLog(bounds, &maxKernelSamples, 16.0f, 2.0f*4192.0f, 1.0f, 63, "Maximum Kernel Samples Per Sample (Quality)", "%.0f");
+	data->config.maxKernelSamples = (uint16_t)roundf(maxKernelSamples);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+
+	usedWidth = azagDrawMeters(&data->metersOutput, bounds, meterDBRange, meterDBHeadroom);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
 }
