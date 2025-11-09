@@ -21,14 +21,40 @@ As a bonus, we may try to document porting steps for users of this library that 
 	- Single version number for backwards-compatible changes post-1.0
 	- Explicitly-reserved padding for expanding functionality in the future
 - azaDSPProcess reflects the new interface, as does the backend
+- azaDSP no longer contains `pNext` and `pPrev` fields, as plugin chains are now managed by `azaDSPChain`
 ```C
 // Information about DSP regarding azaBuffer management, used especially in the mixer for latency compensation
 typedef azaDSPSpecs (*fp_azaDSPGetSpecs)(void *dsp, uint32_t samplerate);
 // Process interface that always takes a src and dst buffer, as well as flags to help gracefully deal with setup changes
 // For many cases, dst and src will refer to the exact same buffer
 typedef int (*fp_azaDSPProcess_t)(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
+// Draws all plugin controls and visualizers within the given bounds.
+typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
 ```
 - azaDSPRegistry is somewhat simpler
+
+### New struct: azaDSPChain
+- Reads `azaDSPSpecs` requirements for plugins and fulfills their needs for extraneous samples when needed.
+- Has storage for carrying buffer frames forward in each step of the chain, handling this requirement automatically so plugin implementations can be simpler.
+	- This fulfills the extra buffer space requirement elegantly.
+		- *The alternative is to require every step to be transitive (reading a src buffer that's separate from the dst buffer), which would require each step to have a full azaBuffer. That wouldn't necessarily be the worst idea, but could potentially waste lots of memory for long plugin chains. This solution does require more moving around of the data, so I may reevaluate this choice if that is found to be too costly. It may be a question of whether moving data around in cache is faster than not moving data around but missing cache, which would depend on the hardware in use.*
+
+### Refactor of Mixer GUI
+- New public GUI interface for implementing plugin GUIs in `AzAudio/gui/`
+	- Allows users to create GUIs for user plugins
+- azaDSP now has an `fp_draw` field for drawing its own GUI
+- Factored out and encapsulated Raylib backend for GUI windows, input, and drawing.
+	- Will allow swapping out Raylib in the future with minimal friction
+- `mixer_gui.c` is slimmed down, as code that used to live there has better places to live now
+	- `gui/types.h` has fundamental types for implementing a GUI
+	- `gui/platform.h` has window management and input functions
+	- `gui/gui.h` has utilities for implementing plugin GUIs, such as:
+		- Theming
+		- Mouse Dragging
+		- Scissor Stack
+		- Common Widgets, such as faders, sliders, textboxes, scrollbars, etc.
+- Plugin GUI implementations have been moved into their respective files in `dsp/plugins/`
+- `azaMeters` widget has been moved into `dsp/azaMeters.c`
 
 ### Splitting of dsp.h Into Many Files in dsp Folder (and dsp/plugins)
 - Moved utility.h to dsp/utility.h
