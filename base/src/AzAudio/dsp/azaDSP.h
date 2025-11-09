@@ -53,8 +53,6 @@ typedef void (*fp_azaFreeDSP_t)(void *dsp);
 // Draws all plugin controls and visualizers within the given bounds.
 typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
 
-// TODO: Possibly do a little work to handle processing errors gracefully, such that an error caused by configuration in the GUI is easily recoverable by simply changing the config again (and maybe un-bypassing manually?).
-
 // Must be at the start of actual plugins
 typedef struct azaDSP {
 	uint32_t size; // Total size of the azaDSP derivative struct (including all config and channeldata).
