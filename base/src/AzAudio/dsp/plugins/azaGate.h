@@ -70,6 +70,8 @@ azaDSP* azaMakeDefaultGate();
 
 int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
+void azagDrawGate(void *dsp, azagRect bounds);
+
 
 
 static const azaDSP azaGateHeader = {
@@ -82,6 +84,7 @@ static const azaDSP azaGateHeader = {
 	/* fp_getSpecs   = */ NULL,
 	/* fp_process    = */ azaGateProcess,
 	/* fp_free       = */ azaFreeGate,
+	/* fp_draw       = */ azagDrawGate,
 };
 
 
