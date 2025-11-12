@@ -22,7 +22,7 @@ azagColor azagMakeColorHSVAf(float hue, float saturation, float value, float alp
 	float r, g, b;
 	int section = (int)(hue * 6.0f);
 	float fraction = hue * 6.0f - (float)section;
-	section %= 6;
+	section = azaWrapi(section, 6);
 	switch (section) {
 		case 0:
 			r = (1.0f)*value;

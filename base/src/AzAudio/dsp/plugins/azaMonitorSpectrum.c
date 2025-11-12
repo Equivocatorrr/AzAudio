@@ -354,7 +354,9 @@ void azagDrawMonitorSpectrum(void *dsp, azagRect bounds) {
 		case AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS: {
 			label = "Avg";
 		} break;
-		case AZA_MONITOR_SPECTRUM_MODE_COUNT: break;
+		default: {
+			label = "INVALID";
+		} break;
 	}
 	int change = azagDrawSwitch(controlRect, label, azaMonitorSpectrumModeString[data->config.mode], azagThemeCurrent.colorSwitch, azagThemeCurrent.colorSwitchHighlight, colorControlText);
 	switch (data->config.mode) {
