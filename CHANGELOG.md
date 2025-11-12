@@ -63,6 +63,10 @@ typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
 - Deleted helpers.h (moving some part to math.h and some to aza_c_std.h)
 - Deleted header_utils.h (moving everything into aza_c_std.h)
 
+### Added
+- azaVersionNote as an additional indicator as to what kind of patch is in use (can be "rel", "rc", and "dev")
+- azaVersionString for the full version string in one piece
+
 ## [v0.3.0](https://github.com/Equivocatorrr/AzAudio/releases/tag/v0.3.0)
 
 ### Removed

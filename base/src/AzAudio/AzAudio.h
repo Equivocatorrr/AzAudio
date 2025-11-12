@@ -17,9 +17,11 @@ extern "C" {
 extern const unsigned short azaVersionMajor;
 extern const unsigned short azaVersionMinor;
 extern const unsigned short azaVersionPatch;
+extern const char *azaVersionNote;
+extern const char *azaVersionString;
 
-#define AZA_VERSION_FORMAT_STR "%hu.%hu.%hu"
-#define AZA_VERSION_ARGS azaVersionMajor, azaVersionMinor, azaVersionPatch
+#define AZA_VERSION_FORMAT_STR "%hu.%hu.%hu-%s"
+#define AZA_VERSION_ARGS azaVersionMajor, azaVersionMinor, azaVersionPatch, azaVersionNote
 
 typedef enum AzaLogLevel {
 	AZA_LOG_LEVEL_NONE=0,
