@@ -12,6 +12,7 @@
 #include "gui/gui.h"
 
 #include <stdio.h>
+#include <errno.h>
 
 #if defined(__GNUC__)
 // Suppress some unused function warnings
