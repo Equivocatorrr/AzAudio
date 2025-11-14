@@ -134,8 +134,10 @@ int azaBufferResize(azaBuffer *buffer, uint32_t frames, uint32_t leadingFrames, 
 			memmove(buffer->buffer, buffer->buffer + (buffer->leadingFrames - leadingFrames) * channelLayout.count, sizeof(*buffer->buffer) * bufferTotalFrames * channelLayout.count);
 		}
 		if (frames + trailingFrames > buffer->frames + buffer->trailingFrames) {
+			// Offset to the new end after we've moved above
+			uint32_t offset = buffer->frames + buffer->trailingFrames + leadingFrames;
 			// Zero the end
-			memset(buffer->buffer + bufferTotalFrames * channelLayout.count, 0, sizeof(*buffer->buffer) * (totalFrames - bufferTotalFrames) * channelLayout.count);
+			memset(buffer->buffer + offset * channelLayout.count, 0, sizeof(*buffer->buffer) * (totalFrames - offset) * channelLayout.count);
 		}
 	}
 	buffer->pSamples = buffer->buffer + leadingFrames * channelLayout.count;
