@@ -10,6 +10,11 @@ As a bonus, we may try to document porting steps for users of this library that 
 
 ## [Unreleased]
 
+### Implemented Latency Compensation in the Mixer
+- Measure latency
+- Use latency measurements to delay tracks with lower latency to keep time parity
+- This prevents undesired comb filtering in parallel processing setups
+
 ### Complete Rework of azaDSP Plugin Interface
 - azaDSP header is very different
 	- much simplified as the dynamic allocation size was totally removed in favor of fixed struct sizes

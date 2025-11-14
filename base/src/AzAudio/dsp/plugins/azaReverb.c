@@ -202,7 +202,7 @@ int azaReverbProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 
 azaDSPSpecs azaReverbGetSpecs(void *dsp, uint32_t samplerate) {
 	azaReverb *data = (azaReverb*)dsp;
-	azaDSPSpecs specs = azaDelayGetSpecs(&data->inputDelay, samplerate);
+	azaDSPSpecs specs = {0};
 	azaDSPSpecs specsIndividualDelays = {0};
 	for (uint32_t tap = 0; tap < AZAUDIO_REVERB_DELAY_COUNT; tap++) {
 		azaDSPSpecs specTap = azaDSPGetSpecs(&data->delays[tap].header, samplerate);

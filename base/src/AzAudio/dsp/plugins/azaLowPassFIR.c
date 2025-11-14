@@ -115,9 +115,9 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	uint32_t actualRadius = azaKernelGetRadiusForRate(startKernelRate, maxKernelRadius);
 	actualRadius = AZA_CLAMP(actualRadius, 1, AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
 	azaKernel *kernel = azaKernelGetDefaultLanczos(actualRadius);
-	float minKernelRate = ceilf((float)kernel->length / 2.0f) / ceilf((float)data->config.maxKernelSamples / 2.0f);
-	startKernelRate = azaMaxf(minKernelRate, startKernelRate);
-	endKernelRate = azaMaxf(minKernelRate, endKernelRate);
+	float minKernelRate = azaMinf(ceilf((float)kernel->length / 2.0f) / ceilf((float)data->config.maxKernelSamples / 2.0f), 1.0f);
+	startKernelRate = azaClampf(startKernelRate, minKernelRate, 1.0f);
+	endKernelRate = azaClampf(endKernelRate, minKernelRate, 1.0f);
 
 	float srcFrame = data->srcFrameOffset;
 	for (uint32_t i = 0; i < dst->frames; i++) {

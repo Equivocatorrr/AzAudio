@@ -12,6 +12,16 @@
 
 #include <string.h>
 
+void azaTrackRouteInit(azaTrackRoute *data) {
+	data->channelMatrix = (azaChannelMatrix) {0};
+	azaSampleDelayInit(&data->latencyCompensationDelay, (azaSampleDelayConfig) { .delayFrames = 0 });
+}
+
+void azaTrackRouteDeinit(azaTrackRoute *data) {
+	azaChannelMatrixDeinit(&data->channelMatrix);
+	azaSampleDelayDeinit(&data->latencyCompensationDelay);
+}
+
 int azaTrackInit(azaTrack *data, uint32_t bufferFrames, azaChannelLayout bufferChannelLayout) {
 	int err = azaBufferInit(&data->buffer, bufferFrames, 0, 0, bufferChannelLayout);
 	if AZA_UNLIKELY(err) return err;
@@ -75,6 +85,7 @@ int azaTrackConnect(azaTrack *from, azaTrack *to, float gain, azaTrackRoute **ds
 		.track = from,
 		.gain = gain,
 	};
+	azaTrackRouteInit(&route);
 	int err = azaChannelMatrixInit(&route.channelMatrix, from->buffer.channelLayout.count, to->buffer.channelLayout.count);
 	if (err) return err;
 	if (!(flags & AZA_TRACK_CHANNEL_ROUTING_ZERO)) {
@@ -110,12 +121,25 @@ void azaTrackProcess_OnPluginError(azaDSP *dsp, void *userdata) {
 	}
 }
 
+static inline uint32_t azaTrackGetLatency(azaTrack *track, uint32_t samplerate) {
+	azaDSPSpecs specs = azaDSPChainGetSpecs(&track->plugins, samplerate);
+	uint32_t myLatency = specs.latencyFrames + specs.trailingFrames;
+	uint32_t maxIncomingLatency = 0;
+	for (uint32_t i = 0; i < track->receives.count; i++) {
+		azaTrackRoute *route = &track->receives.data[i];
+		if (route->mute || route->track->mute) continue;
+		uint32_t latency = azaTrackGetLatency(route->track, samplerate);
+		maxIncomingLatency = AZA_MAX(maxIncomingLatency, latency);
+	}
+	return myLatency + maxIncomingLatency;
+}
+
 int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 	if (data->processed) return AZA_SUCCESS;
 
 	// Latency measurement
 	azaDSPSpecs dspSpecs = azaDSPChainGetSpecs(&data->plugins, samplerate);
-	if (dspSpecs.leadingFrames > data->buffer.leadingFrames) {
+	if (dspSpecs.leadingFrames > data->buffer.leadingFrames || dspSpecs.trailingFrames > data->buffer.trailingFrames) {
 		int err = azaBufferResize(&data->buffer, data->buffer.frames, dspSpecs.leadingFrames, dspSpecs.trailingFrames, data->buffer.channelLayout);
 		if (err) return err;
 	}
@@ -127,18 +151,36 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 		return AZA_SUCCESS;
 	}
 	int err = AZA_SUCCESS;
+	uint32_t maxLatency = 0;
+	for (uint32_t i = 0; i < data->receives.count; i++) {
+		azaTrackRoute *route = &data->receives.data[i];
+		if (route->mute || route->track->mute) continue;
+		uint32_t latency = azaTrackGetLatency(route->track, samplerate);
+		maxLatency = AZA_MAX(maxLatency, latency);
+	}
+	azaBuffer sideBuffer;
+	uint8_t numSideBuffers = 0;
+	if (data->receives.count) {
+		sideBuffer = azaPushSideBuffer(buffer.frames, 0, 0, buffer.channelLayout.count, samplerate);
+		numSideBuffers++;
+	}
 	for (uint32_t i = 0; i < data->receives.count; i++) {
 		azaTrackRoute *route = &data->receives.data[i];
 		if (route->mute || route->track->mute) continue;
 		err = azaTrackProcess(frames, samplerate, route->track);
-		if (err) return err;
-		// TODO: Latency compensation
+		if (err) goto error;
+		uint32_t latency = azaTrackGetLatency(route->track, samplerate);
+		uint32_t latencyCompensationFrames = maxLatency - latency;
 		azaBuffer srcBuffer = azaBufferSlice(&route->track->buffer, 0, frames);
-		azaBufferMixMatrix(&buffer, 1.0f, &srcBuffer, aza_db_to_ampf(route->gain), &route->channelMatrix);
+		azaBufferMixMatrix(&sideBuffer, 0.0f, &srcBuffer, aza_db_to_ampf(route->gain), &route->channelMatrix);
+		route->latencyCompensationDelay.config.delayFrames = latencyCompensationFrames;
+		err = azaSampleDelayProcess(&route->latencyCompensationDelay, &sideBuffer, &sideBuffer, 0);
+		if (err) goto error;
+		azaBufferMix(&buffer, 1.0f, &sideBuffer, 1.0f);
 	}
 	// TODO: Check when track configuration changed so we can pass the appropriate flag
 	err = azaDSPChainProcessWithHandler(&data->plugins, &buffer, &buffer, 0, azaTrackProcess_OnPluginError, NULL);
-	if AZA_UNLIKELY(err) return err;
+	if AZA_UNLIKELY(err) goto error;
 	if (data->gain != 0.0f) {
 		float amp = aza_db_to_ampf(data->gain);
 		for (uint32_t i = 0; i < buffer.frames; i++) {
@@ -151,7 +193,9 @@ int azaTrackProcess(uint32_t frames, uint32_t samplerate, azaTrack *data) {
 		azaMetersUpdate(&data->meters, &buffer, 1.0f);
 	}
 	data->processed = true;
-	return AZA_SUCCESS;
+error:
+	azaPopSideBuffers(numSideBuffers);
+	return err;
 }
 
 int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout masterChannelLayout) {

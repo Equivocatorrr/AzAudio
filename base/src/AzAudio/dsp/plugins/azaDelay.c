@@ -170,19 +170,6 @@ error:
 	return err;
 }
 
-azaDSPSpecs azaDelayGetSpecs(void *dsp, uint32_t samplerate) {
-	azaDelay *data = (azaDelay*)dsp;
-	float maxChannelDelay_ms = 0.0f;
-	for (uint8_t c = 0; c < data->header.prevChannelCountDst; c++) {
-		maxChannelDelay_ms = azaMaxf(maxChannelDelay_ms, data->channelData[c].config.delay_ms);
-	}
-	float totalDelay_ms = data->config.delay_ms + maxChannelDelay_ms;
-	return (azaDSPSpecs) {
-		.latencyFrames = 0,
-		.leadingFrames = (uint32_t)aza_ms_to_samples(totalDelay_ms, (float)samplerate),
-	};
-}
-
 
 
 // GUI

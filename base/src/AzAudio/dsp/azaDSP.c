@@ -20,9 +20,10 @@
 #include "plugins/azaRMS.h"
 #include "plugins/azaSpatialize.h"
 #include "plugins/azaMonitorSpectrum.h"
+#include "plugins/azaDSPDebugger.h"
 
 void azaDSPSpecsCombineSerial(azaDSPSpecs *dst, azaDSPSpecs *src) {
-	dst->latencyFrames += src->latencyFrames;
+	dst->latencyFrames += src->latencyFrames + src->trailingFrames;
 	dst->leadingFrames = AZA_MAX(dst->leadingFrames, src->leadingFrames);
 	dst->trailingFrames = AZA_MAX(dst->trailingFrames, src->trailingFrames);
 }
@@ -262,6 +263,7 @@ int azaDSPRegistryInit() {
 	azaDSPAddRegEntry(azaRMSHeader, azaMakeDefaultRMS);
 	azaDSPAddRegEntry(azaSpatializeHeader, azaMakeDefaultSpatialize);
 	azaDSPAddRegEntry(azaMonitorSpectrumHeader, azaMakeDefaultMonitorSpectrum);
+	azaDSPAddRegEntry(azaDSPDebuggerHeader, azaMakeDefaultDSPDebugger);
 	return AZA_SUCCESS;
 }
 

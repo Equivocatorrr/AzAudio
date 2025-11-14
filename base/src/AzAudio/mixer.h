@@ -8,6 +8,7 @@
 #define AZAUDIO_MIXER_H
 
 #include "dsp/azaMeters.h"
+#include "dsp/azaSampleDelay.h"
 #include "backend/interface.h"
 #include "backend/threads.h"
 
@@ -19,12 +20,13 @@ typedef struct azaTrackRoute {
 	struct azaTrack *track;
 	float gain;
 	bool mute;
+	byte _reserved[3];
 	azaChannelMatrix channelMatrix;
+	azaSampleDelay latencyCompensationDelay;
 } azaTrackRoute;
 
-static inline void azaTrackRouteDeinit(azaTrackRoute *data) {
-	azaChannelMatrixDeinit(&data->channelMatrix);
-}
+void azaTrackRouteInit(azaTrackRoute *data);
+void azaTrackRouteDeinit(azaTrackRoute *data);
 
 // a track has the capabilities of a bus and can have sound sources on it
 typedef struct azaTrack {

@@ -79,9 +79,6 @@ azaDSP* azaMakeDefaultDelay();
 
 int azaDelayProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
-// Delay can't use leading frames because it depends on taking a snapshot of the buffer, possibly in the middle of a processing chain. Future plugins will change the buffer's contents, so we really do need to copy out into our own buffer for this to work in the general case.
-azaDSPSpecs azaDelayGetSpecs(void *dsp, uint32_t samplerate);
-
 
 
 void azagDrawDelay(void *dsp, azagRect bounds);

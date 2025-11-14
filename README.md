@@ -10,7 +10,9 @@ Move fast and break things! I'm currently exploring this problem space, so expec
 ### General Feature States and TODOs
 - [x] Simple spacial attenuation for speakers
 - [x] Advanced filtering for headphones (binaural modeling)
-- [x] Mixer GUI (Implemented with raylib)
+- [x] Mixer GUI
+	- [x] Raylib backend
+	- [ ] In-house backend for better DPI handling, IME input support, and multiple windows
 - [ ] Mixer state serialization (saving and loading from disk, etc.)
 - [ ] DSP technical analysis tools
 	- [x] RMS/Peak Meters (struct azaMeters)
@@ -23,10 +25,11 @@ Move fast and break things! I'm currently exploring this problem space, so expec
 - [ ] Fully dynamic control over effects, samplers, etc. (automation, probably with scheduling)
 	- [x] DSP handling config changes without crashing
 	- [ ] DSP gracefully handling config changes (without any popping, or other similar artifacts)
-- [ ] Plugin chain latency compensation
-	- [ ] Measure DSP chain latency
-	- [ ] Add delays where necessary to match timing of busses
-	- [ ] Gracefully handle latency changes (possibly with some kinda crossfade?)
+- [x] Plugin chain latency compensation
+	- [x] Measure DSP chain latency
+	- [x] Add delays where necessary to match timing of busses
+	- [ ] (Optional) Gracefully handle latency changes (possibly with some kinda crossfade?)
+		- Optional because we can also just design plugins to have fixed latency, even in automation scenarios
 - [ ] (Ongoing) DSP optimized for realtime games (possibly at the cost of some quality, also preferring lower latency if feasible)
 	- [x] Runtime CPU feature detection
 
