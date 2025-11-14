@@ -80,7 +80,7 @@ goto Arg
 	goto Done
 :Arg
 :Arg%arg%
-	echo "Usage: build.bat [clean]? [verbose]? [trace]? [install]? [All|Debug|Release]? ([run|run_debug] project_name)?"
+	echo "Usage: build.bat [clean]? [verbose]? [trace]? [install]? [All|Debug|Release|RelDbg]? ([run|run_debug] project_name)?"
 	goto EndOfScript
 :Done
 set /a argIndex+=1
