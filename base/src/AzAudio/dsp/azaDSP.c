@@ -267,6 +267,10 @@ int azaDSPRegistryInit() {
 	return AZA_SUCCESS;
 }
 
+void azaDSPRegistryDeinit() {
+	AZA_DA_DEINIT(azaDSPRegistry);
+}
+
 int azaDSPAddRegEntry(azaDSP base, azaDSP* (*fp_makeDSP)()) {
 	AZA_DA_RESERVE_ONE_AT_END(azaDSPRegistry, return AZA_ERROR_OUT_OF_MEMORY);
 	azaDSPRegEntry *dst = &azaDSPRegistry.data[azaDSPRegistry.count++];

@@ -36,6 +36,7 @@ void azaInitOscillators();
 
 int azaInit() {
 	azaCPUIDInit();
+	azaRegisterSideBufferCleanupFunction();
 	char levelStr[64];
 	char *envStr = getenv("AZAUDIO_LOG_LEVEL");
 	if (envStr) {
@@ -83,6 +84,10 @@ int azaInit() {
 
 void azaDeinit() {
 	azaBackendDeinit();
+	azaDSPRegistryDeinit();
+	for (uint32_t radius = 1; radius <= AZA_KERNEL_DEFAULT_LANCZOS_COUNT; radius++) {
+		azaKernelDeinit(&azaKernelDefaultLanczos[radius-1]);
+	}
 #ifdef AZAUDIO_ENABLE_MEMORY_DEBUGGER
 	azaCleanupSideBuffers(NULL); // Call this here so any side buffers on the main thread don't read as memory leaks
 	azaMemoryDebuggerReport("MemoryDebuggerReport.log", true, true);

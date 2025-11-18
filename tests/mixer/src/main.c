@@ -70,6 +70,7 @@ int synthProcess(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 void FreeSynth(void *dsp) {
 	Synth *data = dsp;
 	azaFreeFilter(data->filter);
+	azaDSPChainDeinit(&data->outputEffects);
 	aza_free(data);
 }
 

@@ -168,8 +168,14 @@ void azaBufferMixMatrix(azaBuffer *dst, float volumeDst, azaBuffer *src, float v
 // Side Buffers, because sometimes you need extra buffers for processing.
 // We maintain a small stack of side buffers.
 // TODO: Make them allocate from a single arena rather than having individual buffers.
+//	      Or maybe don't because that makes debugging memory errors harder.
 
 
+// This cleans up side buffers on the current thread. Will be called automatically at the end of thread execution.
+// The parameter is ignored, included only to work with tss_create
+void azaCleanupSideBuffers(void *ignored);
+
+void azaRegisterSideBufferCleanupFunction();
 
 azaBuffer azaPushSideBuffer(uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, uint32_t channels, uint32_t samplerate);
 

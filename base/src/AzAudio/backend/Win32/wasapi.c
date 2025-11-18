@@ -300,6 +300,10 @@ static void lanczosTableInit() {
 	azaKernelMakeLanczos(&lanczosResamplingKernel, AZA_LANCZOS_SAMPLES_PER_ZERO_CROSSING, AZA_RESAMPLING_WINDOW);
 }
 
+static void lanczosTableDeinit() {
+	azaKernelDeinit(&lanczosResamplingKernel);
+}
+
 // TODO: This works well in fairly trivial cases, but a better implementation needs to know about the actual function of each channel.
 static void azaMixChannels(float *dst, int dstChannels, float *src, int srcChannels, int numFrames) {
 	float amplification = AZA_MIN(1.0f, (float)dstChannels / (float)srcChannels);
@@ -619,6 +623,7 @@ static void azaWASAPIDeinit() {
 	if (azaThreadJoinable(&thread)) {
 		azaThreadJoin(&thread);
 	}
+	lanczosTableDeinit();
 	azaMutexDeinit(&mutex);
 	SAFE_RELEASE(pEnumerator);
 	SAFE_RELEASE(pDeviceCollection);

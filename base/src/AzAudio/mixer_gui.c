@@ -480,6 +480,7 @@ static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
 	isWindowOpen = false;
 	azagWindowClose();
 	azagWindowDestroy(mixerWindow);
+	AZA_DA_DEINIT(azaTrackGUIMetadatas);
 	return 0;
 }
 

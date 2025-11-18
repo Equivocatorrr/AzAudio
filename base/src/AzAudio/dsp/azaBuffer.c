@@ -439,8 +439,25 @@ azaBuffer azaBufferOneSample(float *sample, uint32_t samplerate) {
 
 // TODO: Maybe make this dynamic, and also deal with the thread_local memory leak snafu (possibly by making it not a stack, and therefore no longer thread_local)
 #define AZA_MAX_SIDE_BUFFERS 64
-thread_local azaBuffer sideBufferPool[AZA_MAX_SIDE_BUFFERS] = {{0}};
-thread_local size_t sideBuffersInUse = 0;
+static thread_local azaBuffer sideBufferPool[AZA_MAX_SIDE_BUFFERS] = {{0}};
+static thread_local size_t sideBuffersInUse = 0;
+
+void azaCleanupSideBuffers(void *ignored) {
+	(void)ignored;
+	if (sideBuffersInUse > 0) {
+		AZA_LOG_ERR("There are %zu side buffers in use at thread exit. This is either caused by thread termination or a bug.\n", sideBuffersInUse);
+	}
+	for (uint32_t i = 0; i < AZA_MAX_SIDE_BUFFERS; i++) {
+		azaBufferDeinit(&sideBufferPool[i], false);
+	}
+}
+
+void azaRegisterSideBufferCleanupFunction() {
+	// This feels really weird, but seems to be the only c-standard way to do this.
+	tss_t key;
+	tss_create(&key, azaCleanupSideBuffers);
+	tss_set(key, (void*)1337);
+}
 
 azaBuffer azaPushSideBuffer(uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, uint32_t channels, uint32_t samplerate) {
 	assert(sideBuffersInUse < AZA_MAX_SIDE_BUFFERS);

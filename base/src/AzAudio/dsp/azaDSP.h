@@ -181,6 +181,7 @@ extern azaDSPRegEntries azaDSPRegistry;
 
 // May return AZA_ERROR_OUT_OF_MEMORY
 int azaDSPRegistryInit();
+void azaDSPRegistryDeinit();
 // May return AZA_ERROR_OUT_OF_MEMORY
 int azaDSPAddRegEntry(azaDSP base, azaDSP* (*fp_makeDSP)());
 
