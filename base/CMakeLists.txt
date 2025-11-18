@@ -55,6 +55,8 @@ add_library(AzAudio STATIC
 	src/AzAudio/aza_c_std.c
 	src/AzAudio/math.h
 	src/AzAudio/math.c
+	src/AzAudio/memory_debugger.h
+	src/AzAudio/memory_debugger.c
 	src/AzAudio/easing.h
 	src/AzAudio/easing.c
 	src/AzAudio/mixer.h
@@ -138,6 +140,10 @@ target_include_directories(AzAudio PUBLIC
 
 # target_include_directories(AzAudio PRIVATE ${PROJECT_SOURCE_DIR}/external/raylib/src)
 target_link_libraries(AzAudio PRIVATE raylib)
+
+if(AZAUDIO_ENABLE_MEMORY_DEBUGGER)
+	target_compile_definitions(AzAudio PRIVATE AZAUDIO_ENABLE_MEMORY_DEBUGGER)
+endif()
 
 if (CMAKE_SYSTEM MATCHES Windows)
 	target_link_libraries(AzAudio INTERFACE ksuser Winmm)

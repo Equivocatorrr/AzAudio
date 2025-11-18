@@ -321,6 +321,14 @@ int main(int argumentCount, char** argumentValues) {
 		}
 	}
 
+	// azaLogLevel = AZA_LOG_LEVEL_TRACE;
+	int err = azaInit();
+	if (err) {
+		char buffer[64];
+		fprintf(stderr, "Failed to azaInit (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		return 1;
+	}
+
 	if (loadSoundFileIntoBuffer(&bufferCat, soundFilename)) return 1;
 	if (bufferCat.channelLayout.count == 0) {
 		fprintf(stderr, "Sound \"%s\" has no channels!\n", soundFilename);
@@ -336,14 +344,6 @@ int main(int argumentCount, char** argumentValues) {
 		}
 	}
 #endif
-
-	// azaLogLevel = AZA_LOG_LEVEL_TRACE;
-	int err = azaInit();
-	if (err) {
-		char buffer[64];
-		fprintf(stderr, "Failed to azaInit (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
-		return 1;
-	}
 
 	azaStreamConfig streamConfig = {
 		0 // .samplerate = 44100

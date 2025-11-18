@@ -24,6 +24,10 @@
 #include <time.h>
 #include <threads.h>
 
+#ifdef AZAUDIO_ENABLE_MEMORY_DEBUGGER
+#include "memory_debugger.h"
+#endif
+
 static fp_azaLogCallback azaLogCallback = azaLogDefault;
 
 AzaLogLevel azaLogLevel = AZA_LOG_LEVEL_INFO;
@@ -51,6 +55,10 @@ int azaInit() {
 	}
 	AZA_LOG_INFO("AzAudio Version: %s\n", azaVersionString);
 
+#ifdef AZAUDIO_ENABLE_MEMORY_DEBUGGER
+	azaMemoryDebuggerInit();
+#endif
+
 	int err;
 	// A resolution of 128 is 2^7, which gives the LUT a signal-to-noise ratio of 12+12*7 = 96dB
 	static const uint32_t kernelResolution = 128;
@@ -75,6 +83,11 @@ int azaInit() {
 
 void azaDeinit() {
 	azaBackendDeinit();
+#ifdef AZAUDIO_ENABLE_MEMORY_DEBUGGER
+	azaCleanupSideBuffers(NULL); // Call this here so any side buffers on the main thread don't read as memory leaks
+	azaMemoryDebuggerReport("MemoryDebuggerReport.log", true, true);
+	azaMemoryDebuggerDeinit();
+#endif
 }
 
 void azaLogDefault(AzaLogLevel level, const char* message) {

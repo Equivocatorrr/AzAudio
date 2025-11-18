@@ -50,6 +50,13 @@ typedef struct azaAllocatorCallbacks {
 } azaAllocatorCallbacks;
 extern azaAllocatorCallbacks azaAllocator;
 
+#ifdef AZAUDIO_ENABLE_MEMORY_DEBUGGER
+#define aza_calloc aza_calloc_real
+#define aza_malloc aza_malloc_real
+#define aza_realloc aza_realloc_real
+#define aza_free aza_free_real
+#endif
+
 static inline void* aza_calloc(size_t count, size_t size) {
 	return azaAllocator.fp_calloc(count, size);
 }
@@ -65,6 +72,20 @@ static inline void* aza_realloc(void *memblock, size_t size) {
 static inline void aza_free(void *block) {
 	azaAllocator.fp_free(block);
 }
+
+#ifdef AZAUDIO_ENABLE_MEMORY_DEBUGGER
+#undef aza_calloc
+#undef aza_malloc
+#undef aza_realloc
+#undef aza_free
+
+#include "memory_debugger.h"
+
+#define aza_calloc(count, size) aza_calloc_debug(__FILE__, __LINE__, (count), (size))
+#define aza_malloc(size) aza_malloc_debug(__FILE__, __LINE__, (size))
+#define aza_realloc(block, size) aza_realloc_debug(__FILE__, __LINE__, (block), (size))
+#define aza_free(block) aza_free_debug(__FILE__, __LINE__, (block))
+#endif
 
 
 

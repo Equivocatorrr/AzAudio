@@ -5,6 +5,7 @@ setlocal enabledelayedexpansion
 set BuildDebug=0
 set BuildRelease=0
 set BuildRelDbg=0
+set MemDbg=
 set has_args=0
 set run_arg=0
 set run=0
@@ -56,6 +57,9 @@ goto Arg
 :ArgDebug
 	set BuildDebug=1
 	goto Done
+:ArgMemDbg
+	set MemDbg=-DAZAUDIO_ENABLE_MEMORY_DEBUGGER=True
+	goto Done
 :Argrun
 	set run_arg=1
 	set run=1
@@ -80,7 +84,7 @@ goto Arg
 	goto Done
 :Arg
 :Arg%arg%
-	echo "Usage: build.bat [clean]? [verbose]? [trace]? [install]? [All|Debug|Release|RelDbg]? ([run|run_debug] project_name)?"
+	echo "Usage: build.bat [clean]? [verbose]? [trace]? [memdbg]? [install]? [All|Debug|Release|RelDbg]? ([run|run_debug] project_name)?"
 	goto EndOfScript
 :Done
 set /a argIndex+=1
@@ -96,7 +100,7 @@ if %BuildDebug% == 1 (
 	echo "Building Win32 Debug"
 	md build
 	cd build
-	cmake %trace% ..
+	cmake %trace% .. %MemDbg%
 	if ERRORLEVEL 1 (
 		echo "CMake configure failed! Aborting..."
 		goto EndOfScript
@@ -116,7 +120,7 @@ if %BuildRelDbg% == 1 (
 	echo "Building Win32 RelDbg"
 	md build
 	cd build
-	cmake %trace% ..
+	cmake %trace% .. %MemDbg%
 	if ERRORLEVEL 1 (
 		echo "CMake configure failed! Aborting..."
 		goto EndOfScript
@@ -136,7 +140,7 @@ if %BuildRelease% == 1 (
 	echo "Building Win32 Release"
 	md build
 	cd build
-	cmake %trace% ..
+	cmake %trace% .. %MemDbg%
 	if ERRORLEVEL 1 (
 		echo "CMake configure failed! Aborting..."
 		goto EndOfScript

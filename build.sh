@@ -4,6 +4,7 @@ BuildReleaseL=0
 BuildDebugL=0
 BuildReleaseW=0
 BuildDebugW=0
+MemDbg=""
 
 has_args=0
 run_arg=0
@@ -18,7 +19,7 @@ verbose=""
 
 usage()
 {
-	echo "Usage: build.sh [clean]? [verbose]? [trace]? [install]? [All|Debug|Release|Linux|Win32|DebugL|ReleaseL|DebugW|ReleaseW]? ([run|run_debug] project_name (<arguments>)?)?"
+	echo "Usage: build.sh [clean]? [verbose]? [trace]? [memdbg]? [install]? [All|Debug|Release|Linux|Win32|DebugL|ReleaseL|DebugW|ReleaseW]? ([run|run_debug] project_name (<arguments>)?)?"
 	exit 1
 }
 
@@ -64,6 +65,9 @@ for arg; do
 		elif [ "$arg" = "DebugW" ]
 		then
 			BuildDebugW=1
+		elif [ "$arg" = "memdbg" ]
+		then
+			MemDbg="-DAZAUDIO_ENABLE_MEMORY_DEBUGGER"
 		elif [ "$arg" = "run" ]
 		then
 			run_arg=1
@@ -117,7 +121,7 @@ then
 	echo "Building $buildName"
 	mkdir -p buildDebugL
 	cd buildDebugL
-	( set -x; cmake $trace -DCMAKE_BUILD_TYPE=Debug ../ )
+	( set -x; cmake $trace -DCMAKE_BUILD_TYPE=Debug ../ $MemDbg )
 	abort_if_failed "CMake configure failed for $buildName!"
 	( set -x; cmake --build . $verbose -j $NumThreads )
 	abort_if_failed "CMake build failed for $buildName!"
@@ -130,7 +134,7 @@ then
 	echo "Building $buildName"
 	mkdir -p buildReleaseL
 	cd buildReleaseL
-	( set -x; cmake $trace -DCMAKE_BUILD_TYPE=Release ../ )
+	( set -x; cmake $trace -DCMAKE_BUILD_TYPE=Release ../ $MemDbg )
 	abort_if_failed "CMake configure failed for $buildName!"
 	( set -x; cmake --build . $verbose -j $NumThreads )
 	abort_if_failed "CMake build failed for $buildName!"
@@ -147,7 +151,7 @@ then
 	echo "Building $buildName"
 	mkdir -p buildDebugW
 	cd buildDebugW
-	( set -x; cmake $trace -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=../mingw-w64-x86_64.cmake ../ )
+	( set -x; cmake $trace -DCMAKE_BUILD_TYPE=Debug -DCMAKE_TOOLCHAIN_FILE=../mingw-w64-x86_64.cmake ../ $MemDbg )
 	abort_if_failed "CMake configure failed for $buildName!"
 	( set -x; cmake --build . $verbose -j $NumThreads )
 	abort_if_failed "CMake build failed for $buildName!"
@@ -160,7 +164,7 @@ then
 	echo "Building $buildName"
 	mkdir -p buildReleaseW
 	cd buildReleaseW
-	( set -x; cmake $trace -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../mingw-w64-x86_64.cmake ../ )
+	( set -x; cmake $trace -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=../mingw-w64-x86_64.cmake ../ $MemDbg )
 	abort_if_failed "CMake configure failed for $buildName!"
 	( set -x; cmake --build . $verbose -j $NumThreads )
 	abort_if_failed "CMake build failed for $buildName!"
