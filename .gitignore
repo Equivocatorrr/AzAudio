@@ -1,6 +1,7 @@
 build*/
 .cache
 .vscode
+.idea
 .clang-tidy
 *.log
 *compile_commands.json*
