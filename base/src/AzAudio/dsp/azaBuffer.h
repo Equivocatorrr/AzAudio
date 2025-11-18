@@ -140,7 +140,7 @@ void azaBufferCopyChannel(azaBuffer *dst, uint8_t channelDst, azaBuffer *src, ui
 // NOTE: asserts that dst and src have the same frame count and that channelSrc is in range.
 void azaBufferBroadcastChannel(azaBuffer *dst, azaBuffer *src, uint8_t channelSrc);
 
-// Get an unownerd view into an existing buffer.
+// Get an unowned view into an existing buffer.
 azaBuffer azaBufferView(azaBuffer *src);
 
 // Get an unowned view into an existing buffer, offset by frameStart, with a length of frameCount
