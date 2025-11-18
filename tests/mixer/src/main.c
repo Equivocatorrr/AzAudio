@@ -325,8 +325,7 @@ int main(int argumentCount, char** argumentValues) {
 	// azaLogLevel = AZA_LOG_LEVEL_TRACE;
 	int err = azaInit();
 	if (err) {
-		char buffer[64];
-		fprintf(stderr, "Failed to azaInit (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		fprintf(stderr, "Failed to azaInit (%s)\n", azaErrorString(err));
 		return 1;
 	}
 
@@ -350,8 +349,7 @@ int main(int argumentCount, char** argumentValues) {
 		0 // .samplerate = 44100
 	};
 	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) {0} , streamConfig, false))) {
-		char buffer[64];
-		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err));
 		return 1;
 	}
 
@@ -368,8 +366,7 @@ int main(int argumentCount, char** argumentValues) {
 	azaTrack *track0;
 	azaChannelLayout track0Layout = azaChannelLayoutMono();
 	if ((err = azaMixerAddTrack(&mixer, -1, &track0, track0Layout, true))) {
-		char buffer[64];
-		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err));
 		return 1;
 	}
 	azaTrackSetName(track0, "Synth");
@@ -389,8 +386,7 @@ int main(int argumentCount, char** argumentValues) {
 	// azaChannelLayout track1Layout = azaChannelLayout_9_1();
 	azaChannelLayout track1Layout = mixer.master.buffer.channelLayout;
 	if ((err = azaMixerAddTrack(&mixer, -1, &track1, track1Layout, true))) {
-		char buffer[64];
-		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err));
 		return 1;
 	}
 	azaTrackSetName(track1, "Spatialized");
@@ -436,8 +432,7 @@ int main(int argumentCount, char** argumentValues) {
 	// azaChannelLayout track2Layout = azaChannelLayout_9_0();
 	azaChannelLayout track2Layout = mixer.master.buffer.channelLayout;
 	if ((err = azaMixerAddTrack(&mixer, -1, &track2, track2Layout, true))) {
-		char buffer[64];
-		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		fprintf(stderr, "Failed to azaMixerAddTrack (%s)\n", azaErrorString(err));
 		return 1;
 	}
 	azaTrackSetName(track2, "Reverb Bus");

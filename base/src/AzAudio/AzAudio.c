@@ -144,15 +144,13 @@ static const char *azaErrorStr[] = {
 };
 static_assert(sizeof(azaErrorStr) / sizeof(*azaErrorStr) == AZA_ERROR_ONE_AFTER_LAST, "Update azaErrorStr");
 
-const char* azaErrorString(int error, char *buffer, size_t bufferSize) {
+const char* azaErrorString(int error) {
+	static thread_local char buffer[32];
 	if (0 <= error && error < AZA_ERROR_ONE_AFTER_LAST) {
 		return azaErrorStr[error];
 	}
-	if (buffer && bufferSize) {
-		snprintf(buffer, bufferSize, "Unknown Error 0x%x", error);
-		return buffer;
-	}
-	return "No buffer for unknown error code :(";
+	snprintf(buffer, sizeof(buffer), "Unknown Error 0x%x", error);
+	return buffer;
 }
 
 const char* azaGetLastErrorMessage() {

@@ -72,6 +72,12 @@ typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
 - azaVersionNote as an additional indicator as to what kind of patch is in use (can be "rel", "rc", and "dev")
 - azaVersionString for the full version string in one piece
 
+### Changed
+- `azaErrorString` no longer takes in a pointer to a buffer for unknown error codes, instead putting it into a thread_local buffer and returning that.
+```C
+const char *azaErrorString(int error);
+```
+
 ## [v0.3.0](https://github.com/Equivocatorrr/AzAudio/releases/tag/v0.3.0)
 
 ### Removed

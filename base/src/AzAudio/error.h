@@ -45,8 +45,8 @@ enum {
 	// Enum count (not a forward-compatible upper bound)
 	AZA_ERROR_ONE_AFTER_LAST,
 };
-// For known error codes, buffer is unused. For unknown error codes, prints into buffer and returns it.
-const char *azaErrorString(int error, char *buffer, size_t bufferSize);
+// For known error codes, internal buffer is unused. For unknown error codes, prints into a thread_local buffer and returns it. This value is valid until the next call on the same thread.
+const char *azaErrorString(int error);
 // Returns the last error message emitted on this thread.
 const char* azaGetLastErrorMessage();
 

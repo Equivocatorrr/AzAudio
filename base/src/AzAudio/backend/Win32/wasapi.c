@@ -577,9 +577,8 @@ static void azaStreamProcess(azaStreamData *data) {
 	int err;
 	err = stream->processCallback(stream->userdata, &processingBuffer, &processingBuffer, 0);
 	if (err) {
-		char buffer[64];
 		data->isActive = false;
-		AZA_LOG_ERR("Processing stream for device \"%s\" had an error (%s). Disabling stream...\n", data->deviceInfo->name, azaErrorString(err, buffer, sizeof(buffer)));
+		AZA_LOG_ERR("Processing stream for device \"%s\" had an error (%s). Disabling stream...\n", data->deviceInfo->name, azaErrorString(err));
 	}
 
 	if (stream->deviceInterface == AZA_OUTPUT) {

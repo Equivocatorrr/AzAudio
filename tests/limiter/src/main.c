@@ -18,7 +18,6 @@ float time = 0.0f;
 
 int processCallbackOutput(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	int err = AZA_SUCCESS;
-	char errorString[64];
 	float frameDelta = 1.0f / (float)dst->samplerate;
 	float timeDelta = (float)dst->frames * frameDelta;
 	int32_t clickFrame = (int32_t)((0.5f - time) * (float)dst->samplerate);
@@ -36,7 +35,7 @@ int processCallbackOutput(void *userdata, azaBuffer *dst, azaBuffer *src, uint32
 		}
 	}
 	if ((err = azaLookaheadLimiterProcess(limiter, dst, dst, flags))) {
-		AZA_LOG_ERR("azaLookaheadLimiterProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
+		AZA_LOG_ERR("azaLookaheadLimiterProcess returned %s\n", azaErrorString(err));
 		goto done;
 	}
 done:
@@ -53,8 +52,7 @@ int main(int argumentCount, char** argumentValues) {
 	azaStream streamOutput = {0};
 	streamOutput.processCallback = processCallbackOutput;
 	if ((err = azaStreamInitDefault(&streamOutput, AZA_OUTPUT, false)) != AZA_SUCCESS) {
-		char buffer[64];
-		fprintf(stderr, "Failed to init output stream! (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		fprintf(stderr, "Failed to init output stream! (%s)\n", azaErrorString(err));
 		return 1;
 	}
 

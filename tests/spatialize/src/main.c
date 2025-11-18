@@ -99,12 +99,11 @@ void updateObjects(uint32_t count, float timeDelta) {
 int processCallbackOutput(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	float timeDelta = (float)dst->frames / (float)dst->samplerate;
 	int err = AZA_SUCCESS;
-	char errorString[64];
 	updateObjects(bufferCat.channelLayout.count, timeDelta);
 	azaBufferZero(dst);
 
 	if ((err = azaSamplerProcess(sampler, dst, src, flags))) {
-		AZA_LOG_ERR("azaSamplerProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
+		AZA_LOG_ERR("azaSamplerProcess returned %s\n", azaErrorString(err));
 		goto done;
 	}
 
@@ -122,15 +121,15 @@ int processCallbackOutput(void *userdata, azaBuffer *dst, azaBuffer *src, uint32
 	}
 	azaSpatializeSetRamps(spatialize, bufferCat.channelLayout.count, start, end, dst->frames, dst->samplerate);
 	if ((err = azaSpatializeProcess(spatialize, dst, dst, flags))) {
-		AZA_LOG_ERR("azaSpatializeProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
+		AZA_LOG_ERR("azaSpatializeProcess returned %s\n", azaErrorString(err));
 		goto done;
 	}
 	if ((err = azaReverbProcess(reverb, dst, dst, flags))) {
-		AZA_LOG_ERR("azaReverbProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
+		AZA_LOG_ERR("azaReverbProcess returned %s\n", azaErrorString(err));
 		goto done;
 	}
 	if ((err = azaLookaheadLimiterProcess(limiter, dst, dst, flags))) {
-		AZA_LOG_ERR("azaLookaheadLimiterProcess returned %s\n", azaErrorString(err, errorString, sizeof(errorString)));
+		AZA_LOG_ERR("azaLookaheadLimiterProcess returned %s\n", azaErrorString(err));
 		goto done;
 	}
 done:
@@ -173,8 +172,7 @@ int main(int argumentCount, char** argumentValues) {
 	azaStream streamOutput = {0};
 	streamOutput.processCallback = processCallbackOutput;
 	if ((err = azaStreamInitDefault(&streamOutput, AZA_OUTPUT, false)) != AZA_SUCCESS) {
-		char buffer[64];
-		fprintf(stderr, "Failed to init output stream! (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		fprintf(stderr, "Failed to init output stream! (%s)\n", azaErrorString(err));
 		return 1;
 	}
 

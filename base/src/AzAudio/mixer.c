@@ -347,8 +347,7 @@ int azaMixerStreamOpen(azaMixer *data, azaMixerConfig config, azaStreamConfig st
 	data->stream.userdata = data;
 	int err;
 	if ((err = azaStreamInit(&data->stream, streamConfig, AZA_OUTPUT, AZA_STREAM_COMMIT_FORMAT, false))) {
-		char buffer[64];
-		AZA_LOG_ERR(__FUNCTION__, " error: azaStreamInit failed (%s)\n", azaErrorString(err, buffer, sizeof(buffer)));
+		AZA_LOG_ERR(__FUNCTION__, " error: azaStreamInit failed (%s)\n", azaErrorString(err));
 		return err;
 	}
 	config.bufferFrames = AZA_MAX(config.bufferFrames, azaStreamGetBufferFrameCount(&data->stream));
