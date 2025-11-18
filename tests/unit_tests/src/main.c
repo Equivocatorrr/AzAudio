@@ -32,6 +32,8 @@ const char *utReportKindVTColor[UT_ENUM_COUNT] = {
 void runAllTests() {
 	void ut_run_azaBufferResize();
 	ut_run_azaBufferResize();
+	void ut_run_azaSampleDelay();
+	ut_run_azaSampleDelay();
 }
 
 
@@ -107,7 +109,19 @@ int main(int argumentCount, char** argumentValues) {
 		for (uint32_t testIndex = 0; testIndex < utAllTests.count; testIndex++) {
 			utTest_t *test = &utAllTests.data[testIndex];
 			if (test->result != UT_FAIL) continue;
-			printf("\t%s\n", test->name);
+			printf("\t%s, failed subtests: [ ", test->name);
+			bool once = false;
+			for (uint32_t reportIndex = 0; reportIndex < test->count; reportIndex++) {
+				utReport_t *report = &test->data[reportIndex];
+				if (report->kind == UT_FAIL && report->subtest) {
+					if (once) {
+						printf(", ");
+					}
+					once = true;
+					printf("%s", report->subtest);
+				}
+			}
+			printf(" ]\n");
 		}
 	}
 

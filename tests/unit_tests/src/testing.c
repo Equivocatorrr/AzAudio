@@ -36,7 +36,7 @@ void utEndTest() {
 }
 
 void utBeginSubtest(const char *name) {
-	currentSubtestName = name;
+	currentSubtestName = strdup(name);
 }
 
 void utEndSubtest() {

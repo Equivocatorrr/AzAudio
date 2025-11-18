@@ -5,6 +5,7 @@ add_executable(unit_tests
 	src/vt_strings.h
 	# tests
 	src/tests/azaBufferResize.c
+	src/tests/azaSampleDelay.c
 )
 
 target_include_directories(unit_tests PUBLIC ${PROJECT_SOURCE_DIR}/base/src)
