@@ -27,7 +27,7 @@ static const char *currentSubtestName = NULL;
 void utBeginTest(const char *name) {
 	AZA_DA_APPEND(utAllTests, (utTest_t){0}, assert(false && "allocfail"));
 	currentTest = &utAllTests.data[utAllTests.count-1];
-	currentTest->name = name;
+	currentTest->name = strdup(name);
 	currentSubtestName = NULL;
 }
 

@@ -111,14 +111,16 @@ int main(int argumentCount, char** argumentValues) {
 			if (test->result != UT_FAIL) continue;
 			printf("\t%s, failed subtests: [ ", test->name);
 			bool once = false;
+			const char *subtest = NULL;
 			for (uint32_t reportIndex = 0; reportIndex < test->count; reportIndex++) {
 				utReport_t *report = &test->data[reportIndex];
-				if (report->kind == UT_FAIL && report->subtest) {
+				if (report->kind == UT_FAIL && report->subtest != subtest) {
 					if (once) {
 						printf(", ");
 					}
 					once = true;
 					printf("%s", report->subtest);
+					subtest = report->subtest;
 				}
 			}
 			printf(" ]\n");
