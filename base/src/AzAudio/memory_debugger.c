@@ -407,17 +407,19 @@ void* aza_realloc_debug(const char *filepath, int line, void *block, size_t size
 			.line = line,
 			.kind = ACTION_KIND_REALLOC,
 		});
-		if (size > entry->size) {
+		// Cache this here because the entry pointer can be invalidated by Allocate
+		size_t entrySize = entry->size;
+		if (size > entrySize) {
 			entry->numFrees++; // Since this would be free'd normally, we just keep it around for full error checking.
-			statistics.bytesInUse -= entry->size;
-			statistics.bytesChurnedBestCase -= entry->size;
+			statistics.bytesInUse -= entrySize;
+			statistics.bytesChurnedBestCase -= entrySize;
 			statistics.numAllocs--; // Compensate for Allocate adding one
 			result = Allocate(size, false, (SourceLocation) {
 				.filepath = filepath,
 				.line = line,
 				.kind = ACTION_KIND_REALLOC,
 			});
-			memcpy(result, block, entry->size);
+			memcpy(result, block, entrySize);
 		}
 	} else {
 		result = Allocate(size, false, (SourceLocation) {
