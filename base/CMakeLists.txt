@@ -39,8 +39,6 @@ set(SUPPORT_SAVE_PNG OFF)
 
 add_subdirectory(${PROJECT_SOURCE_DIR}/external/raylib ${PROJECT_BINARY_DIR}/external/raylib)
 
-file(GLOB BACKEND_SOURCES "src/AzAudio/backend/${TARGET_PLATFORM_NAME}/*")
-
 add_library(AzAudio STATIC
 	src/AzAudio/AzAudio.h
 	src/AzAudio/AzAudio.c
@@ -76,7 +74,8 @@ add_library(AzAudio STATIC
 	src/AzAudio/backend/interface.h
 	src/AzAudio/backend/interface.c
 	src/AzAudio/backend/threads.h
-	${BACKEND_SOURCES}
+	src/AzAudio/backend/${TARGET_PLATFORM_NAME}/threads.c
+	src/AzAudio/backend/${TARGET_PLATFORM_NAME}/timer.c
 	# specialized implementations
 	src/AzAudio/specialized/azaBufferDeinterlace.c
 	src/AzAudio/specialized/azaBufferReinterlace.c
@@ -143,13 +142,35 @@ target_link_libraries(AzAudio PRIVATE raylib)
 
 if(AZAUDIO_ENABLE_MEMORY_DEBUGGER)
 	target_compile_definitions(AzAudio PRIVATE AZAUDIO_ENABLE_MEMORY_DEBUGGER)
+	target_sources(AzAudio PRIVATE
+		src/AzAudio/backend/backtrace.h
+		src/AzAudio/backend/${TARGET_PLATFORM_NAME}/backtrace.c
+	)
 endif()
 
 if (CMAKE_SYSTEM MATCHES Windows)
+	target_sources(AzAudio PRIVATE
+		src/AzAudio/backend/Win32/guid.cpp
+		src/AzAudio/backend/Win32/platform_util.c
+		src/AzAudio/backend/Win32/platform_util.h
+		# Audio backends
+		src/AzAudio/backend/Win32/wasapi.c
+		src/AzAudio/backend/Win32/xaudio2.c
+	)
 	target_link_libraries(AzAudio INTERFACE ksuser Winmm)
 	target_compile_definitions(AzAudio PRIVATE _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+	if(AZAUDIO_ENABLE_MEMORY_DEBUGGER)
+		target_link_libraries(AzAudio INTERFACE dbghelp)
+	endif()
 	set_property(TARGET AzAudio PROPERTY C_STANDARD 11)
 elseif (CMAKE_SYSTEM MATCHES Linux)
+	target_sources(AzAudio PRIVATE
+		# Audio backends
+		src/AzAudio/backend/Linux/alsa.c
+		src/AzAudio/backend/Linux/jack.c
+		src/AzAudio/backend/Linux/pipewire.c
+		src/AzAudio/backend/Linux/pulseaudio.c
+	)
 	target_link_libraries(AzAudio INTERFACE pthread)
 
 	find_package(PkgConfig REQUIRED)

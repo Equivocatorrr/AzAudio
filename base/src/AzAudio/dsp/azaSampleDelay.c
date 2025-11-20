@@ -16,7 +16,7 @@ void azaSampleDelayInit(azaSampleDelay *data, azaSampleDelayConfig config) {
 }
 
 void azaSampleDelayDeinit(azaSampleDelay *data) {
-	azaBufferDeinit(&data->buffer, true);
+	azaBufferDeinit(&data->buffer, false);
 }
 
 static int azaSampleDelayHandleBufferResizes(azaSampleDelay *data, azaChannelLayout layout) {

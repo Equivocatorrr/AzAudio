@@ -441,6 +441,7 @@ azaBuffer azaBufferOneSample(float *sample, uint32_t samplerate) {
 #define AZA_MAX_SIDE_BUFFERS 64
 static thread_local azaBuffer sideBufferPool[AZA_MAX_SIDE_BUFFERS] = {{0}};
 static thread_local size_t sideBuffersInUse = 0;
+static thread_local bool sideBufferCleanupInitted = false;
 
 void azaCleanupSideBuffers(void *ignored) {
 	(void)ignored;
@@ -452,7 +453,7 @@ void azaCleanupSideBuffers(void *ignored) {
 	}
 }
 
-void azaRegisterSideBufferCleanupFunction() {
+static void azaRegisterSideBufferCleanupFunction() {
 	// This feels really weird, but seems to be the only c-standard way to do this.
 	tss_t key;
 	tss_create(&key, azaCleanupSideBuffers);
@@ -460,6 +461,10 @@ void azaRegisterSideBufferCleanupFunction() {
 }
 
 azaBuffer azaPushSideBuffer(uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, uint32_t channels, uint32_t samplerate) {
+	if (!sideBufferCleanupInitted) {
+		azaRegisterSideBufferCleanupFunction();
+		sideBufferCleanupInitted = true;
+	}
 	assert(sideBuffersInUse < AZA_MAX_SIDE_BUFFERS);
 	azaBuffer *buffer = &sideBufferPool[sideBuffersInUse];
 	azaBufferResize(buffer, frames, leadingFrames, trailingFrames, (azaChannelLayout) { .count = channels });

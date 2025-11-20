@@ -36,7 +36,6 @@ void azaInitOscillators();
 
 int azaInit() {
 	azaCPUIDInit();
-	azaRegisterSideBufferCleanupFunction();
 	char levelStr[64];
 	char *envStr = getenv("AZAUDIO_LOG_LEVEL");
 	if (envStr) {

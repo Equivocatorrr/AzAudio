@@ -5,9 +5,9 @@
 
 #include "memory_debugger.h"
 #include "backend/threads.h"
+#include "backend/backtrace.h"
 
 #include <stdio.h>
-#include <sys/stat.h>
 
 #include "AzAudio.h"
 #include "math.h"
@@ -41,9 +41,11 @@ typedef struct SourceLocation {
 	const char *filepath;
 	int line;
 	ActionKind kind;
+	azaBacktrace backtrace;
 } SourceLocation;
 
-#define MEMORY_ENTRY_MAX_ACTIONS_COUNT 32
+
+#define MEMORY_ENTRY_MAX_ACTIONS_COUNT 16
 
 typedef struct MemoryEntry {
 	void *base;
@@ -204,14 +206,17 @@ static void PrintBadEntries(FILE *file, bool listAllBadBlocks) {
 			if (entry->numFrees == 0) {
 				fprintf(file, " \tnever freed");
 			}
-			fprintf(file, " \tactions: [ ");
+			fprintf(file, "\n");
 			for (uint32_t j = 0; j < entry->numActions; j++) {
-				if (j > 0) {
-					fprintf(file, ", ");
+				fprintf(file, "\t\t%7s'd %s:%d, bt: ( ", ActionKindStrings[(int)entry->actions[j].kind], FilenameFromFilepath(entry->actions[j].filepath), entry->actions[j].line);
+				for (size_t k = entry->actions[j].backtrace.count; k-- > 0;) {
+					if (k < entry->actions[j].backtrace.count-1) {
+						fprintf(file, " | ");
+					}
+					fprintf(file, "%s", entry->actions[j].backtrace.frames[k].functionName);
 				}
-				fprintf(file, "%s'd %s:%d", ActionKindStrings[(int)entry->actions[j].kind], FilenameFromFilepath(entry->actions[j].filepath), entry->actions[j].line);
+				fprintf(file, " )\n");
 			}
-			fprintf(file, " ]\n");
 		}
 	}
 	// Put them back into memory-block order, because we might keep going
@@ -319,11 +324,13 @@ void azaMemoryDebuggerInit() {
 	azaMutexInit(&mutex);
 	entries = (MemoryEntries) {0};
 	statistics = (MemoryStatistics) {0};
+	azaBacktraceInit();
 }
 
 void azaMemoryDebuggerDeinit() {
 	azaMutexDeinit(&mutex);
 	AZA_DA_DEINIT(entries);
+	azaBacktraceDeinit();
 }
 
 void azaMemoryDebuggerReport(const char *filepath, bool console, bool listAllBadBlocks) {
@@ -376,7 +383,8 @@ void* aza_calloc_debug(const char *filepath, int line, size_t count, size_t size
 	void *result = Allocate(count * size, true, (SourceLocation) {
 		.filepath = filepath,
 		.line = line,
-		.kind = ACTION_KIND_CALLOC
+		.kind = ACTION_KIND_CALLOC,
+		.backtrace = azaBacktraceGet(1),
 	});
 	azaMutexUnlock(&mutex);
 	return result;
@@ -388,7 +396,8 @@ void* aza_malloc_debug(const char *filepath, int line, size_t size) {
 	void *result = Allocate(size, false, (SourceLocation) {
 		.filepath = filepath,
 		.line = line,
-		.kind = ACTION_KIND_MALLOC
+		.kind = ACTION_KIND_MALLOC,
+		.backtrace = azaBacktraceGet(1),
 	});
 	azaMutexUnlock(&mutex);
 	return result;
@@ -406,6 +415,7 @@ void* aza_realloc_debug(const char *filepath, int line, void *block, size_t size
 			.filepath = filepath,
 			.line = line,
 			.kind = ACTION_KIND_REALLOC,
+			.backtrace = azaBacktraceGet(1),
 		});
 		// Cache this here because the entry pointer can be invalidated by Allocate
 		size_t entrySize = entry->size;
@@ -418,6 +428,7 @@ void* aza_realloc_debug(const char *filepath, int line, void *block, size_t size
 				.filepath = filepath,
 				.line = line,
 				.kind = ACTION_KIND_REALLOC,
+				.backtrace = azaBacktraceGet(1),
 			});
 			memcpy(result, block, entrySize);
 		}
@@ -426,6 +437,7 @@ void* aza_realloc_debug(const char *filepath, int line, void *block, size_t size
 			.filepath = filepath,
 			.line = line,
 			.kind = ACTION_KIND_REALLOC,
+			.backtrace = azaBacktraceGet(1),
 		});
 	}
 	azaMutexUnlock(&mutex);
@@ -443,12 +455,18 @@ void aza_free_debug(const char *filepath, int line, void *block) {
 			.filepath = filepath,
 			.line = line,
 			.kind = ACTION_KIND_FREE,
+			.backtrace = azaBacktraceGet(1),
 		});
 	} else {
 		AddMemoryEntry(&entries, (MemoryEntry) {
 			.block = block,
 			.actions = {
-				(SourceLocation) { .filepath = filepath, .line = line, .kind = ACTION_KIND_FREE },
+				(SourceLocation) {
+					.filepath = filepath,
+					.line = line,
+					.kind = ACTION_KIND_FREE,
+					.backtrace = azaBacktraceGet(1),
+				},
 			},
 			.numActions = 1,
 			.numFrees = 1,

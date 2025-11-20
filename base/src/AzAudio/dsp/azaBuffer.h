@@ -175,8 +175,6 @@ void azaBufferMixMatrix(azaBuffer *dst, float volumeDst, azaBuffer *src, float v
 // The parameter is ignored, included only to work with tss_create
 void azaCleanupSideBuffers(void *ignored);
 
-void azaRegisterSideBufferCleanupFunction();
-
 azaBuffer azaPushSideBuffer(uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, uint32_t channels, uint32_t samplerate);
 
 azaBuffer azaPushSideBufferZero(uint32_t frames, uint32_t leadingFrames, uint32_t trailingFrames, uint32_t channels, uint32_t samplerate);
