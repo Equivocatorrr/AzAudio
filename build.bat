@@ -5,7 +5,7 @@ setlocal enabledelayedexpansion
 set BuildDebug=0
 set BuildRelease=0
 set BuildRelDbg=0
-set MemDbg=
+set MemDbg=-DAZAUDIO_ENABLE_MEMORY_DEBUGGER=False
 set has_args=0
 set run_arg=0
 set run=0

@@ -4,7 +4,7 @@ BuildReleaseL=0
 BuildDebugL=0
 BuildReleaseW=0
 BuildDebugW=0
-MemDbg=""
+MemDbg="-DAZAUDIO_ENABLE_MEMORY_DEBUGGER=False"
 
 has_args=0
 run_arg=0
@@ -67,7 +67,7 @@ for arg; do
 			BuildDebugW=1
 		elif [ "$arg" = "memdbg" ]
 		then
-			MemDbg="-DAZAUDIO_ENABLE_MEMORY_DEBUGGER"
+			MemDbg="-DAZAUDIO_ENABLE_MEMORY_DEBUGGER=True"
 		elif [ "$arg" = "run" ]
 		then
 			run_arg=1
