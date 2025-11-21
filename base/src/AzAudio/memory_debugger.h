@@ -7,6 +7,7 @@
 #ifndef AZAUDIO_MEMORY_DEBUGGER_H
 #define AZAUDIO_MEMORY_DEBUGGER_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 
