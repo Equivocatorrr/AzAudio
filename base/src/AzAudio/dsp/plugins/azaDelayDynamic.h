@@ -28,7 +28,7 @@ typedef struct azaDelayDynamicConfig {
 	// dry gain in dB
 	float gainDry;
 	bool muteWet, muteDry;
-	byte _reserved[6];
+	aza_byte _reserved[6];
 	// max possible delay in ms
 	// If you increase this it will grow the buffer, filling the empty space with zeroes
 	float delayMax_ms;

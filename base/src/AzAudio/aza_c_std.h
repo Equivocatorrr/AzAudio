@@ -29,8 +29,8 @@ extern "C" {
 // Use signed char because it's considered distinct from char and unsigned char in the type system.
 // Note that this means if you ever convert this type to a wider integer type, you'll get sign extension unless you cast to uint8_t first.
 // This isn't really meant to be treated as an integer anyway, just a blob of bits to be reinterpreted or pad things out.
-typedef signed char byte;
-static_assert(sizeof(byte) == 1, "We're fucked");
+typedef signed char aza_byte;
+static_assert(sizeof(aza_byte) == 1, "We're fucked");
 
 
 

@@ -74,7 +74,7 @@ typedef struct azaSpatializeConfig {
 	// We can spatialize multiple channels at once, each with their own positions. This is how many we want to use.
 	uint8_t numSrcChannelsActive;
 
-	byte _reserved[7];
+	aza_byte _reserved[7];
 
 	// How long it takes to reach the follower target in ms
 	float targetFollowTime_ms;

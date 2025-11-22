@@ -20,7 +20,7 @@ typedef struct azaTrackRoute {
 	struct azaTrack *track;
 	float gain;
 	bool mute;
-	byte _reserved[3];
+	aza_byte _reserved[3];
 	azaChannelMatrix channelMatrix;
 	azaSampleDelay latencyCompensationDelay;
 } azaTrackRoute;

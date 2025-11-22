@@ -45,7 +45,7 @@ typedef struct azaQueue {
 	uint16_t countLimit;
 	uint16_t count;
 	uint16_t startIndex;
-	byte *buffer;
+	aza_byte *buffer;
 } azaQueue;
 
 // Inits a queue for entries of the given size and an upper bound on how many entries can be queued.

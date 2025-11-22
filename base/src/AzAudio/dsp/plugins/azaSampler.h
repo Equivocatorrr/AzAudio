@@ -24,7 +24,7 @@ typedef struct azaSamplerInstance {
 	int32_t frame;
 	float fraction;
 	bool reverse;
-	byte _reserved[3]; // Explicit padding reserved for later.
+	aza_byte _reserved[3]; // Explicit padding reserved for later.
 	azaADSRInstance envelope;
 	azaFollowerLinear speed;
 	azaFollowerLinear volume;
@@ -41,7 +41,7 @@ typedef struct azaSamplerConfig {
 	bool loop;
 	// When we hit a loop point, this will make us reverse instead of wrapping around.
 	bool pingpong;
-	byte _reserved[6]; // Explicit padding reserved for later.
+	aza_byte _reserved[6]; // Explicit padding reserved for later.
 	// Start of the looping region in frames
 	// If this value is >= buffer->frames, we treat this value as 0
 	int32_t loopStart;

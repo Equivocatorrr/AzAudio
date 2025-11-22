@@ -27,7 +27,7 @@ typedef struct azaLowPassFIRConfig {
 	// We use this information to decide the size of the kernel on the fly.
 	// If zero, we just pick an okay default.
 	uint16_t maxKernelSamples;
-	byte _reserved[2];
+	aza_byte _reserved[2];
 } azaLowPassFIRConfig;
 
 typedef struct azaLowPassFIR {

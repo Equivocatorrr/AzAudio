@@ -62,7 +62,7 @@ typedef struct azaDSP {
 	uint8_t selected; // Bitset for being selected in the mixer GUI (each bit represents a different view).
 	uint8_t prevChannelCountDst; // How many dst channels were in the last azaDSPProcess call, used for handling changes.
 	uint8_t prevChannelCountSrc; // How many src channels were in the last azaDSPProcess call, used for handling changes.
-	byte _reserved[2]; // Explicit padding bytes reserved for later.
+	aza_byte _reserved[2]; // Explicit padding bytes reserved for later.
 	int32_t error; // If nonzero, there was an error when processing, so disable this plugin until the user requests to try again. Stores the error code.
 	char name[32]; // Null-terminated string. Unused chars should be zeroed.
 	fp_azaDSPGetSpecs fp_getSpecs; // Nullable, meaning a zeroed-out struct azaDSPSpecs.
