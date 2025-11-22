@@ -124,7 +124,7 @@ azaBacktrace azaBacktraceGet(int skipFrames) {
 				strncat(frame->functionName, lineNumber, sizeof(frame->functionName));
 				strncat(frame->functionName, "]", sizeof(frame->functionName));
 			}
-			if (strcmp(frame->functionName, "invoke_main") == 0 || strcmp(frame->functionName, "register_onexit_function") == 0) {
+			if (aza_str_begins_with(frame->functionName, "invoke_main") || aza_str_begins_with(frame->functionName, "register_onexit_function")) {
 				// Don't include windows runtime frames
 				result.count--; // We've already gone 1 too far
 				break;
