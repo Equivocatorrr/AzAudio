@@ -107,7 +107,7 @@ int azaBufferResize(azaBuffer *buffer, uint32_t frames, uint32_t leadingFrames, 
 				return AZA_ERROR_OUT_OF_MEMORY;
 			}
 			buffer->buffer = newBuffer;
-			memset(buffer->buffer + buffer->bufferCapacity, 0, sizeof(*buffer->buffer) * (neededCapacity - buffer->bufferCapacity));
+			memset(buffer->buffer + buffer->bufferCapacity, 0, sizeof(*buffer->buffer) * ((int64_t)neededCapacity - (int64_t)buffer->bufferCapacity));
 		} else {
 			float *newBuffer = aza_calloc(neededCapacity, sizeof(*buffer->buffer));
 			if (!newBuffer) {
@@ -115,7 +115,8 @@ int azaBufferResize(azaBuffer *buffer, uint32_t frames, uint32_t leadingFrames, 
 			}
 			if (buffer->buffer) {
 				if (channelLayout.count == buffer->channelLayout.count) {
-					memcpy(newBuffer + (leadingFrames - buffer->leadingFrames) * channelLayout.count, buffer->buffer, sizeof(*buffer->buffer) * buffer->bufferCapacity);
+					int64_t offset = ((int64_t)leadingFrames - (int64_t)buffer->leadingFrames) * (int64_t)channelLayout.count;
+					memcpy(newBuffer + offset, buffer->buffer, sizeof(*buffer->buffer) * buffer->bufferCapacity);
 				}
 				aza_free(buffer->buffer);
 			}
@@ -126,18 +127,20 @@ int azaBufferResize(azaBuffer *buffer, uint32_t frames, uint32_t leadingFrames, 
 		uint32_t bufferTotalFrames = azaBufferGetTotalFrameCount(buffer);
 		if (leadingFrames > buffer->leadingFrames) {
 			// Move the data into the right place sir
-			memmove(buffer->buffer + (leadingFrames - buffer->leadingFrames) * channelLayout.count, buffer->buffer, sizeof(*buffer->buffer) * bufferTotalFrames * channelLayout.count);
+			int64_t offset = ((int64_t)leadingFrames - (int64_t)buffer->leadingFrames) * (int64_t)channelLayout.count;
+			memmove(buffer->buffer + offset, buffer->buffer, sizeof(*buffer->buffer) * bufferTotalFrames * channelLayout.count);
 			// Zero the start
-			memset(buffer->buffer, 0, sizeof(*buffer->buffer) * (leadingFrames - buffer->leadingFrames) * channelLayout.count);
+			memset(buffer->buffer, 0, sizeof(*buffer->buffer) * offset);
 		} else {
 			// Move the data into the left place sir
-			memmove(buffer->buffer, buffer->buffer + (buffer->leadingFrames - leadingFrames) * channelLayout.count, sizeof(*buffer->buffer) * bufferTotalFrames * channelLayout.count);
+			int64_t offset = ((int64_t)buffer->leadingFrames - (int64_t)leadingFrames) * (int64_t)channelLayout.count;
+			memmove(buffer->buffer, buffer->buffer + offset, sizeof(*buffer->buffer) * bufferTotalFrames * channelLayout.count);
 		}
 		if (frames + trailingFrames > buffer->frames + buffer->trailingFrames) {
 			// Offset to the new end after we've moved above
 			uint32_t offset = buffer->frames + buffer->trailingFrames + leadingFrames;
 			// Zero the end
-			memset(buffer->buffer + offset * channelLayout.count, 0, sizeof(*buffer->buffer) * (totalFrames - offset) * channelLayout.count);
+			memset(buffer->buffer + offset * channelLayout.count, 0, sizeof(*buffer->buffer) * ((int64_t)totalFrames - (int64_t)offset) * (int64_t)channelLayout.count);
 		}
 	}
 	buffer->pSamples = buffer->buffer + leadingFrames * channelLayout.count;

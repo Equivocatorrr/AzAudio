@@ -50,14 +50,14 @@ int azaSampleDelayProcess(azaSampleDelay *data, azaBuffer *dst, azaBuffer *src, 
 	uint32_t preserveFrames = data->buffer.frames - carryFrames;
 	uint32_t bodyFrames = dst->frames - carryFrames;
 
-	azaBuffer srcCarry = azaBufferSliceEx(&data->buffer, preserveFrames, carryFrames, 0, 0);
+	azaBuffer srcCarry = azaBufferSliceEx(&data->buffer, 0, carryFrames, 0, 0);
 	azaBuffer dstCarry = azaBufferSliceEx(dst, 0, carryFrames, 0, 0);
 	azaBufferCopy(&dstCarry, &srcCarry);
 	if (preserveFrames) {
-		memmove(data->buffer.pSamples + carryFrames * data->buffer.stride, data->buffer.pSamples, sizeof(*data->buffer.pSamples) * preserveFrames * data->buffer.stride);
+		memmove(data->buffer.pSamples, data->buffer.pSamples + carryFrames * data->buffer.stride, sizeof(*data->buffer.pSamples) * preserveFrames * data->buffer.stride);
 	}
 	srcCarry = azaBufferSliceEx(src, bodyFrames, carryFrames, 0, 0);
-	dstCarry = azaBufferSliceEx(&data->buffer, 0, carryFrames, 0, 0);
+	dstCarry = azaBufferSliceEx(&data->buffer, preserveFrames, carryFrames, 0, 0);
 	azaBufferCopy(&dstCarry, &srcCarry);
 	if (bodyFrames) {
 		azaBuffer srcBody = azaBufferSliceEx(src, 0, bodyFrames, 0, 0);

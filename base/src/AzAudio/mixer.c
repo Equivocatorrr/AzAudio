@@ -123,7 +123,7 @@ void azaTrackProcess_OnPluginError(azaDSP *dsp, void *userdata) {
 
 static inline uint32_t azaTrackGetLatency(azaTrack *track, uint32_t samplerate) {
 	azaDSPSpecs specs = azaDSPChainGetSpecs(&track->plugins, samplerate);
-	uint32_t myLatency = specs.latencyFrames + specs.trailingFrames;
+	uint32_t myLatency = specs.latencyFrames;
 	uint32_t maxIncomingLatency = 0;
 	for (uint32_t i = 0; i < track->receives.count; i++) {
 		azaTrackRoute *route = &track->receives.data[i];
