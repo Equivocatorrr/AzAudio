@@ -17,7 +17,6 @@ extern "C" {
 #endif
 
 // TODO: azaBuffer might want to know when it's silence for optimization purposes
-// TODO: azaBuffer could be expanded to allow leading and trailing frames, which would make it easy and almost free to integrate DSP latency directly without plugins needing their own buffers, and would be a silver bullet for latency compensation as well
 
 // Buffer used by DSP functions for their input/output
 typedef struct azaBuffer {
