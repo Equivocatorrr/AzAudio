@@ -264,6 +264,7 @@ void azaMixerRemoveTrack(azaMixer *data, int32_t index) {
 		azaTrackDisconnect(track, other);
 	}
 	azaTrackDeinit(data->tracks.data[index]);
+	aza_free(track);
 	AZA_DA_ERASE(data->tracks, index, 1);
 	azaMutexUnlock(&data->mutex);
 }
