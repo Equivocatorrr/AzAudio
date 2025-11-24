@@ -1069,6 +1069,7 @@ void azagDrawContextMenuBegin(const char *title) {
 	azagRectFitOnScreen(&azagContextMenuState.rect);
 	azagContextMenuState.rect.h = 0;
 	if (azagContextMenuState.title) {
+		azagContextMenuState.rect.h += azagTextHeightMargin(title, AZAG_TEXT_SCALE_TEXT);
 		int targetWidth = azagTextWidthMargin(azagContextMenuState.title, AZAG_TEXT_SCALE_TEXT);
 		azagContextMenuState.targetWidth = AZA_MAX(azagContextMenuState.targetWidth, targetWidth);
 		azagRect titleBounds = {

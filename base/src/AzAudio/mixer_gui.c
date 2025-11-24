@@ -143,12 +143,17 @@ static void azagContextMenuSendAdd() {
 		azagDrawContextMenuEnd();
 		return;
 	}
-	azagDrawContextMenuBegin(NULL);
+	azagDrawContextMenuBegin("Add Send To:");
 
 	azaTrack *target = &currentMixer->master;
 	azaTrack *track = azagContextMenuTrackFromIndex();
 	for (int32_t i = 0; i < (int32_t)currentMixer->tracks.count+1; target = currentMixer->tracks.data[i++]) {
-		if (i == contextMenuTrackIndex) continue; // Skip self
+		if (i == contextMenuTrackIndex) {
+			continue; // Skip self
+		}
+		if (azaTrackGetReceive(track, target) != NULL) {
+			continue; // Don't include sends that already exist
+		}
 		if (azagDrawContextMenuButton(target->name)) {
 			azaTrackConnect(track, target, 0.0f, NULL, 0);
 		}
