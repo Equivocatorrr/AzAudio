@@ -10,9 +10,34 @@
 #include "../../error.h"
 
 #include "../../gui/gui.h"
+#include "../../mixer.h"
+
+
+
+const azaDSP azaCompressorHeader = {
+	.header =  {
+		.size    = sizeof(azaCompressor),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Compressor",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = azaCompressorProcess,
+		.fp_free     = azaFreeCompressor,
+		.fp_draw     = azagDrawCompressor,
+	},
+};
 
 void azaCompressorInit(azaCompressor *data, azaCompressorConfig config) {
-	data->header = azaCompressorHeader;
+	data->dsp = azaCompressorHeader;
 	data->config = config;
 	data->attenuation = -120.0f;
 	data->minGain = 0.0f;
@@ -77,13 +102,13 @@ int azaCompressorProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	err = azaCheckBuffersForDSPProcess(dst, src, /* sameFrameCount: */ true, /* sameChannelCount: */ true);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaCompressorResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaCompressorResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
 	float amountInput = aza_db_to_ampf(data->config.gainInput);
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersInput, src, amountInput);
 	}
 
@@ -128,7 +153,7 @@ int azaCompressorProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	data->minGain = azaMinf(data->minGain, data->minGainShort);
 	azaPopSideBuffer();
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, src, 1.0f);
 	}
 
@@ -149,6 +174,7 @@ static const int attenuationMeterDBRange = 24;
 
 void azagDrawCompressor(void *dsp, azagRect bounds) {
 	azaCompressor *data = dsp;
+	int boundsStartX = bounds.x;
 	int usedWidth;
 	usedWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
@@ -203,5 +229,7 @@ void azagDrawCompressor(void *dsp, azagRect bounds) {
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 
 	usedWidth = azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
-	// azagRectShrinkLeftMargin(&bounds, usedWidth);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

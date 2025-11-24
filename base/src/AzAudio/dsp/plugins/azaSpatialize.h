@@ -16,6 +16,9 @@ extern "C" {
 #endif
 
 
+
+extern const azaDSP azaSpatializeHeader;
+
 /*
 struct azaSpatialize;
 // This gets called for the beginning and end of each sound source, once per ear (in this case an ear is an output channel with an associated direction, determined by azaChannelLayout.position[dstChannel]).
@@ -92,7 +95,7 @@ typedef struct azaSpatializeEvent {
 } azaSpatializeEvent;
 
 typedef struct azaSpatialize {
-	azaDSP header;
+	azaDSP dsp;
 	azaSpatializeConfig config;
 	// TODO: azaQueue eventQueue;
 
@@ -123,20 +126,6 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 
 // azaDelayDynamic's sampling kernel causes there to be a minimum latency requirement, so we'll report that here
 azaDSPSpecs azaSpatializeGetSpecs(void *dsp, uint32_t samplerate);
-
-
-
-static const azaDSP azaSpatializeHeader = {
-	/* .size         = */ sizeof(azaSpatialize),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Spatialize",
-	/* fp_getSpecs   = */ azaSpatializeGetSpecs,
-	/* fp_process    = */ azaSpatializeProcess,
-	/* fp_free       = */ azaFreeSpatialize,
-};
 
 
 

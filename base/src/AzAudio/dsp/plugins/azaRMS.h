@@ -14,6 +14,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaRMSHeader;
+
 typedef struct azaRMSConfig {
 	uint32_t windowSamples;
 	uint32_t _reserved; // Explicit padding bytes, reserved for later use.
@@ -26,7 +28,7 @@ typedef struct azaRMSChannelData {
 } azaRMSChannelData;
 
 typedef struct azaRMS {
-	azaDSP header;
+	azaDSP dsp;
 	azaRMSConfig config;
 	uint32_t index;
 	uint32_t bufferCap;
@@ -52,20 +54,6 @@ void azaFreeRMS(void *dsp);
 azaDSP* azaMakeDefaultRMS();
 
 int azaRMSProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
-
-
-
-static const azaDSP azaRMSHeader = {
-	/* .size         = */ sizeof(azaRMS),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "RMS",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ azaRMSProcess,
-	/* fp_free       = */ azaFreeRMS,
-};
 
 
 

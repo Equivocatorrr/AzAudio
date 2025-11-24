@@ -17,6 +17,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaDelayDynamicHeader;
+
 typedef struct azaDelayDynamicChannelConfig {
 	// delay in ms, target for the follower
 	float delay_ms;
@@ -53,7 +55,7 @@ typedef struct azaDelayDynamicChannelData {
 } azaDelayDynamicChannelData;
 
 typedef struct azaDelayDynamic {
-	azaDSP header;
+	azaDSP dsp;
 	azaDelayDynamicConfig config;
 
 	// You can provide a chain of effects to operate on the input (including any feedback), which only affect the wet signal
@@ -90,20 +92,6 @@ int azaDelayDynamicProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t f
 
 // DelayDynamic's sampling kernel causes there to be a minimum latency requirement, so we'll report that here
 azaDSPSpecs azaDelayDynamicGetSpecs(void *dsp, uint32_t samplerate);
-
-
-
-static const azaDSP azaDelayDynamicHeader = {
-	/* .size         = */ sizeof(azaDelayDynamic),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Dynamic Delay",
-	/* fp_getSpecs   = */ azaDelayDynamicGetSpecs,
-	/* fp_process    = */ azaDelayDynamicProcess,
-	/* fp_free       = */ azaFreeDelayDynamic,
-};
 
 
 

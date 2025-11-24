@@ -8,6 +8,31 @@
 #include "../../AzAudio.h"
 #include "../../math.h"
 #include "../../error.h"
+#include "../../mixer.h"
+
+
+
+const azaDSP azaDelayDynamicHeader = {
+	.header =  {
+		.size    = sizeof(azaDelayDynamic),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Dynamic Delay",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = azaDelayDynamicGetSpecs,
+		.fp_process  = azaDelayDynamicProcess,
+		.fp_free     = azaFreeDelayDynamic,
+		.fp_draw     = NULL,
+	},
+};
 
 enum { AZA_DELAY_DYNAMIC_DESIRED_KERNEL_RADIUS = 13 };
 
@@ -85,7 +110,7 @@ static void azaDelayDynamicPrimeBuffer(azaDelayDynamic *data, azaBuffer *src) {
 
 
 void azaDelayDynamicInit(azaDelayDynamic *data, azaDelayDynamicConfig config) {
-	data->header = azaDelayDynamicHeader;
+	data->dsp = azaDelayDynamicHeader;
 	data->config = config;
 	azaDSPChainInit(&data->inputEffects, 0);
 	data->lastSrcBufferFrames = 0;
@@ -160,12 +185,12 @@ int azaDelayDynamicProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t f
 	err = azaDelayDynamicHandleBufferResizes(data, src);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaDelayDynamicResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaDelayDynamicResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
-	if (data->header.selected) {
+	if (data->dsp.guiMetadata.selected) {
 		azaMetersUpdate(&data->metersInput, src, 1.0f);
 	}
 
@@ -256,7 +281,7 @@ int azaDelayDynamicProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t f
 		}
 	}
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, dst, 1.0f);
 	}
 

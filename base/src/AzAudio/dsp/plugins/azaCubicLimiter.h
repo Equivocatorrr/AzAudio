@@ -15,6 +15,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaCubicLimiterHeader;
+
 typedef struct azaCubicLimiterConfig {
 	// input gain in dB
 	float gainInput;
@@ -26,7 +28,7 @@ typedef struct azaCubicLimiterConfig {
 } azaCubicLimiterConfig;
 
 typedef struct azaCubicLimiter {
-	azaDSP header;
+	azaDSP dsp;
 	azaCubicLimiterConfig config;
 
 	azaMeters metersInput;
@@ -51,20 +53,6 @@ void azaFreeCubicLimiter(void *dsp);
 azaDSP* azaMakeDefaultCubicLimiter();
 
 int azaCubicLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
-
-
-
-static const azaDSP azaCubicLimiterHeader = {
-	/* .size         = */ sizeof(azaCubicLimiter),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Cubic Limiter",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ azaCubicLimiterProcess,
-	/* fp_free       = */ azaFreeCubicLimiter,
-};
 
 
 

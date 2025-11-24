@@ -8,6 +8,31 @@
 #include "../../AzAudio.h"
 #include "../../math.h"
 #include "../../error.h"
+#include "../../mixer.h"
+
+
+
+const azaDSP azaCubicLimiterHeader = {
+	.header =  {
+		.size    = sizeof(azaCubicLimiter),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Cubic Limiter",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = azaCubicLimiterProcess,
+		.fp_free     = azaFreeCubicLimiter,
+		.fp_draw     = NULL,
+	},
+};
 
 static float azaCubicLimiterSample(float sample) {
 	sample = azaClampf(sample, -1.0f, 1.0f);
@@ -16,7 +41,7 @@ static float azaCubicLimiterSample(float sample) {
 }
 
 void azaCubicLimiterInit(azaCubicLimiter *data, azaCubicLimiterConfig config) {
-	data->header = azaCubicLimiterHeader;
+	data->dsp = azaCubicLimiterHeader;
 	data->config = config;
 	azaCubicLimiterReset(data);
 }
@@ -72,7 +97,7 @@ int azaCubicLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t f
 	float amountInput = aza_db_to_ampf(data->config.gainInput - 3.5218251811136247f);
 	float amountOutput = aza_db_to_ampf(data->config.gainOutput);
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersInput, src, amountInput);
 	}
 
@@ -82,7 +107,7 @@ int azaCubicLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t f
 		}
 	}
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, src, 1.0f);
 	}
 	return AZA_SUCCESS;

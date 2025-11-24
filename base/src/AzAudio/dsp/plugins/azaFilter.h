@@ -16,6 +16,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaFilterHeader;
+
 #define AZAUDIO_FILTER_MAX_POLES 16
 
 // Constants to define number of filter poles in terms of db/octave
@@ -70,7 +72,7 @@ typedef struct azaFilterChannelData {
 } azaFilterChannelData;
 
 typedef struct azaFilter {
-	azaDSP header;
+	azaDSP dsp;
 	azaFilterConfig config;
 
 	azaMeters metersInput;
@@ -103,21 +105,6 @@ int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 void azagDrawFilter(void *dsp, azagRect bounds);
-
-
-
-static const azaDSP azaFilterHeader = {
-	/* .size         = */ sizeof(azaFilter),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Filter",
-	/* fp_getSpecs   = */ NULL, // As an IIR filter, we affect the phase, which depends on the frequency, so we report zero latency.
-	/* fp_process    = */ azaFilterProcess,
-	/* fp_free       = */ azaFreeFilter,
-	/* fp_draw       = */ azagDrawFilter,
-};
 
 
 

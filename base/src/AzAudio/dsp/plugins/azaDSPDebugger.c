@@ -11,8 +11,32 @@
 
 #include "../../gui/gui.h"
 
+
+
+const azaDSP azaDSPDebuggerHeader = {
+	.header =  {
+		.size    = sizeof(azaDSPDebugger),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "DSP Debugger",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = azaDSPDebuggerGetSpecs,
+		.fp_process  = azaDSPDebuggerProcess,
+		.fp_free     = azaFreeDSPDebugger,
+		.fp_draw     = azagDrawDSPDebugger,
+	},
+};
+
 void azaDSPDebuggerInit(azaDSPDebugger *data, azaDSPDebuggerConfig config) {
-	data->header = azaDSPDebuggerHeader;
+	data->dsp = azaDSPDebuggerHeader;
 	data->config = config;
 }
 
@@ -80,6 +104,7 @@ azaDSPSpecs azaDSPDebuggerGetSpecs(void *dsp, uint32_t samplerate) {
 
 void azagDrawDSPDebugger(void *dsp, azagRect bounds) {
 	azaDSPDebugger *data = dsp;
+	int boundsStartX = bounds.x;
 	int usedWidth;
 	float latencyFrames = (float)data->config.specsToReport.latencyFrames;
 	usedWidth = azagDrawSliderFloat(bounds, &latencyFrames, 0.0f, 48000.0f, 1.0f, 0.0f, "Latency Frames", "%.0f");
@@ -95,4 +120,6 @@ void azagDrawDSPDebugger(void *dsp, azagRect bounds) {
 	usedWidth = azagDrawSliderFloat(bounds, &trailingFrames, 0.0f, 48000.0f, 1.0f, 0.0f, "Trailing Frames", "%.0f");
 	data->config.specsToReport.trailingFrames = (uint32_t)roundf(trailingFrames);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

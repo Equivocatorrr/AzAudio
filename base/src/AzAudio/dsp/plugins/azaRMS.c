@@ -11,8 +11,30 @@
 
 
 
+const azaDSP azaRMSHeader = {
+	.header =  {
+		.size    = sizeof(azaRMS),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "RMS",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = azaRMSProcess,
+		.fp_free     = azaFreeRMS,
+		.fp_draw     = NULL,
+	},
+};
+
 void azaRMSInit(azaRMS *data, azaRMSConfig config) {
-	data->header = azaRMSHeader;
+	data->dsp = azaRMSHeader;
 	data->config = config;
 	data->index = 0;
 	data->bufferCap = 0;
@@ -100,10 +122,10 @@ int azaRMSProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	err = azaHandleRMSBuffer(data, dst->channelLayout.count);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaRMSResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaRMSResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
 	if (dst->channelLayout.count == 1 && src->channelLayout.count != 1) {
 		// Combine channels

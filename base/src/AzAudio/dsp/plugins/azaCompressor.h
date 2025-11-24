@@ -17,6 +17,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaCompressorHeader;
+
 typedef struct azaCompressorConfig {
 	// Activation threshold in dB
 	float threshold;
@@ -37,7 +39,7 @@ typedef struct azaCompressorConfig {
 } azaCompressorConfig;
 
 typedef struct azaCompressor {
-	azaDSP header;
+	azaDSP dsp;
 	azaCompressorConfig config;
 
 	azaMeters metersInput;
@@ -70,21 +72,6 @@ int azaCompressorProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 
 
 void azagDrawCompressor(void *dsp, azagRect bounds);
-
-
-
-static const azaDSP azaCompressorHeader = {
-	/* .size         = */ sizeof(azaCompressor),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Compressor",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ azaCompressorProcess,
-	/* fp_free       = */ azaFreeCompressor,
-	/* fp_draw       = */ azagDrawCompressor,
-};
 
 
 

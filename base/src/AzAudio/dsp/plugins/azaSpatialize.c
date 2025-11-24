@@ -9,6 +9,30 @@
 #include "../../math.h"
 #include "../../error.h"
 
+
+
+const azaDSP azaSpatializeHeader = {
+	.header =  {
+		.size    = sizeof(azaSpatialize),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Spatialize",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = azaSpatializeGetSpecs,
+		.fp_process  = azaSpatializeProcess,
+		.fp_free     = azaFreeSpatialize,
+		.fp_draw     = NULL,
+	},
+};
+
 #define PRINT_CHANNEL_AMPS 0
 #define PRINT_CHANNEL_DELAYS 0
 
@@ -181,7 +205,7 @@ static void azaGetChannelMetadata(azaChannelLayout channelLayout, azaVec3 *dstVe
 #define FILTER_IN_CHANNEL_DATA 1
 
 void azaSpatializeInit(azaSpatialize *data, azaSpatializeConfig config) {
-	data->header = azaSpatializeHeader;
+	data->dsp = azaSpatializeHeader;
 	data->config = config;
 	azaDelayDynamicConfig delayConfig = {
 		.gainWet = 0.0f,
@@ -296,12 +320,12 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	err = azaCheckBuffersForDSPProcess(dst, src, /* sameFrameCount: */ true, /* sameChannelCount: */ false);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaSpatializeResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaSpatializeResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
-	if (data->header.selected) {
+	if (data->dsp.guiMetadata.selected) {
 		azaMetersUpdate(&data->metersInput, src, 1.0f);
 	}
 
@@ -533,7 +557,7 @@ azaDSPSpecs azaSpatializeGetSpecs(void *dsp, uint32_t samplerate) {
 	azaSpatialize *data = dsp;
 	azaDSPSpecs specs = {0};
 	if (data->config.doDoppler || data->config.usePerChannelDelay) {
-		specs = azaDSPGetSpecs(&data->channelData[0].delay.header, samplerate);
+		specs = azaDSPGetSpecs(&data->channelData[0].delay.dsp, samplerate);
 	}
 	return specs;
 }

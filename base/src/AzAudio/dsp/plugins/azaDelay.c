@@ -10,9 +10,37 @@
 #include "../../error.h"
 
 #include "../../gui/gui.h"
+#include "../../mixer.h"
+
+
+
+const azaDSP azaDelayHeader = {
+	/* .azaDSPHeader = */ {
+		/* .size          = */ sizeof(azaDelay),
+		/* .version       = */ 1,
+		/* .owned, bypass = */ false, false,
+	},
+	/* .azaDSPProcessMetadata = */ {
+		/* .error               = */ 0,
+		/* .prevChannelCountDst = */ 0,
+		/* .prevChannelCountSrc = */ 0,
+	},
+	/* .azaDSPGUIMetadata = */ {
+		/* .name             = */ "Delay",
+		/* .selected         = */ 0,
+		/* .drawTargetWidth  = */ 0,
+		/* .drawCurrentWidth = */ 0,
+	},
+	/* .azaDSPFuncs = */ {
+		/* fp_getSpecs   = */ NULL,
+		/* fp_process    = */ azaDelayProcess,
+		/* fp_free       = */ azaFreeDelay,
+		/* fp_draw       = */ azagDrawDelay,
+	},
+};
 
 void azaDelayInit(azaDelay *data, azaDelayConfig config) {
-	data->header = azaDelayHeader;
+	data->dsp = azaDelayHeader;
 	data->config = config;
 	azaDSPChainInit(&data->inputEffects, 0);
 }
@@ -124,12 +152,12 @@ int azaDelayProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	err = azaDelayHandleBufferResizes(data, dst->samplerate, dst->channelLayout.count);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaDelayResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaDelayResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersInput, src, 1.0f);
 	}
 
@@ -162,7 +190,7 @@ int azaDelayProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 		channelData->index = index;
 	}
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, dst, 1.0f);
 	}
 error:
@@ -183,6 +211,7 @@ void azagDrawDelay(void *dsp, azagRect bounds) {
 	azaDelay *data = dsp;
 	azagRect meterBounds = bounds;
 	azagRectCutOutFaderMuteButton(&meterBounds);
+	int boundsStartX = bounds.x;
 	int usedWidth = azagDrawMeters(&data->metersInput, meterBounds, faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 
@@ -200,7 +229,7 @@ void azagDrawDelay(void *dsp, azagRect bounds) {
 	usedWidth = azagDrawSliderFloat(bounds, &data->config.pingpong, 0.0f, 1.0f, 0.02f, 0.0f, "PingPong", "%.3f");
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 
-	for (uint32_t c = 0; c < data->header.prevChannelCountDst; c++) {
+	for (uint32_t c = 0; c < data->dsp.processMetadata.prevChannelCountDst; c++) {
 		azaDelayChannelConfig *channel = &data->channelData[c].config;
 		usedWidth = azagDrawSliderFloatLog(bounds, &channel->delay_ms, 0.1f, 10000.0f, 0.1f, 0.0f, azaTextFormat("Ch %d Delay", (int)c), "%.1fms");
 		azagRectShrinkLeftMargin(&bounds, usedWidth);
@@ -210,4 +239,6 @@ void azagDrawDelay(void *dsp, azagRect bounds) {
 
 	usedWidth = azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

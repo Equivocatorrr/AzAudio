@@ -10,9 +10,34 @@
 #include "../azaKernel.h"
 
 #include "../../gui/gui.h"
+#include "../../mixer.h"
+
+
+
+const azaDSP azaLowPassFIRHeader = {
+	.header =  {
+		.size    = sizeof(azaLowPassFIR),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "LowPassFIR",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = azaLowPassFIRGetSpecs,
+		.fp_process  = azaLowPassFIRProcess,
+		.fp_free     = azaFreeLowPassFIR,
+		.fp_draw     = azagDrawLowPassFIR,
+	},
+};
 
 void azaLowPassFIRInit(azaLowPassFIR *data, azaLowPassFIRConfig config) {
-	data->header = azaLowPassFIRHeader;
+	data->dsp = azaLowPassFIRHeader;
 	data->config = config;
 	data->srcFrameOffset = 0.0f;
 	azaFollowerLinearJump(&data->frequency, config.frequency);
@@ -96,7 +121,7 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 		numSideBuffers++;
 	}
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersInput, src, 1.0f);
 	}
 
@@ -131,7 +156,7 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 		srcFrame += srcFrameRate;
 	}
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, dst, 1.0f);
 	}
 
@@ -168,6 +193,7 @@ static const int meterDBHeadroom = 12;
 
 void azagDrawLowPassFIR(void *dsp, azagRect bounds) {
 	azaLowPassFIR *data = dsp;
+	int boundsStartX = bounds.x;
 	int usedWidth;
 	usedWidth = azagDrawMeters(&data->metersInput, bounds, meterDBRange, meterDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
@@ -185,4 +211,6 @@ void azagDrawLowPassFIR(void *dsp, azagRect bounds) {
 
 	usedWidth = azagDrawMeters(&data->metersOutput, bounds, meterDBRange, meterDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

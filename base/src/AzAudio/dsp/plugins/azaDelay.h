@@ -15,6 +15,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaDelayHeader;
+
 typedef struct azaDelayConfig {
 	// effect gain in dB
 	float gainWet;
@@ -44,7 +46,7 @@ typedef struct azaDelayChannelData {
 } azaDelayChannelData;
 
 typedef struct azaDelay {
-	azaDSP header;
+	azaDSP dsp;
 	azaDelayConfig config;
 
 	// You can provide a chain of effects to operate on the input (including any feedback), which only affect the wet signal
@@ -83,20 +85,6 @@ int azaDelayProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 void azagDrawDelay(void *dsp, azagRect bounds);
 
-
-
-static const azaDSP azaDelayHeader = {
-	/* .size         = */ sizeof(azaDelay),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Delay",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ azaDelayProcess,
-	/* fp_free       = */ azaFreeDelay,
-	/* fp_draw       = */ azagDrawDelay,
-};
 
 
 #ifdef __cplusplus

@@ -18,6 +18,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaReverbHeader;
+
 typedef struct azaReverbConfig {
 	// effect gain in dB
 	float gainWet;
@@ -34,7 +36,7 @@ typedef struct azaReverbConfig {
 
 #define AZAUDIO_REVERB_DELAY_COUNT 30
 typedef struct azaReverb {
-	azaDSP header;
+	azaDSP dsp;
 	azaReverbConfig config;
 
 	azaMeters metersInput;
@@ -70,21 +72,6 @@ int azaReverbProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 void azagDrawReverb(void *dsp, azagRect bounds);
-
-
-
-static const azaDSP azaReverbHeader = {
-	/* .size         = */ sizeof(azaReverb),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Reverb",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ azaReverbProcess,
-	/* fp_free       = */ azaFreeReverb,
-	/* fp_draw       = */ azagDrawReverb,
-};
 
 
 

@@ -25,7 +25,7 @@ azaMixer mixer;
 // Track 0
 
 typedef struct Synth {
-	azaDSP header;
+	azaDSP dsp;
 	azaDSPChain outputEffects;
 	azaFilter *filter;
 	float gen[10];
@@ -75,21 +75,31 @@ void FreeSynth(void *dsp) {
 }
 
 static const azaDSP SynthHeader = {
-	/* .size         = */ sizeof(Synth),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Synth",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ synthProcess,
-	/* fp_free       = */ FreeSynth,
+	.header =  {
+		.size    = sizeof(azaReverb),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Synth",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = synthProcess,
+		.fp_free     = FreeSynth,
+		.fp_draw     = NULL,
+	},
 };
 
 azaDSP* MakeDefaultSynth() {
 	Synth *result = aza_calloc(1, sizeof(Synth));
 	if (!result) return NULL;
-	result->header = SynthHeader;
+	result->dsp = SynthHeader;
 	if (azaDSPChainInit(&result->outputEffects, 1)) {
 		goto fail;
 	}
@@ -467,7 +477,7 @@ int main(int argumentCount, char** argumentValues) {
 		.decay_ms = 500.0f,
 		.gainOutput = 6.0f,
 	});
-	compressor->header.bypass = true;
+	compressor->dsp.header.bypass = true;
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)compressor);
 
 	azaMonitorSpectrum *monitorSpectrum = (azaMonitorSpectrum*)azaMakeDefaultMonitorSpectrum();

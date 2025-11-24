@@ -10,7 +10,31 @@
 #include "../../error.h"
 
 #include "../../gui/gui.h"
+#include "../../mixer.h"
 
+
+
+const azaDSP azaFilterHeader = {
+	.header =  {
+		.size    = sizeof(azaFilter),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Filter",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = azaFilterProcess,
+		.fp_free     = azaFreeFilter,
+		.fp_draw     = azagDrawFilter,
+	},
+};
 
 const char *azaFilterKindString[] = {
 	"High Pass",
@@ -22,7 +46,7 @@ static_assert(sizeof(azaFilterKindString) / sizeof(const char*) == AZA_FILTER_KI
 
 
 void azaFilterInit(azaFilter *data, azaFilterConfig config) {
-	data->header = azaFilterHeader;
+	data->dsp = azaFilterHeader;
 	data->config = config;
 	azaFilterReset(data);
 }
@@ -79,15 +103,15 @@ int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 	err = azaCheckBuffersForDSPProcess(dst, src, /* sameFrameCount: */ true, /* sameChannelCount: */ true);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaFilterResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaFilterResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
 	float amountWet = azaClampf(1.0f - data->config.dryMix, 0.0f, 1.0f) * aza_db_to_ampf(data->config.gainWet);
 	float amountDry = azaClampf(data->config.dryMix, 0.0f, 1.0f);
 
-	if (data->header.selected) {
+	if (data->dsp.guiMetadata.selected) {
 		azaMetersUpdate(&data->metersInput, src, 1.0f);
 	}
 
@@ -142,7 +166,7 @@ int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 		}
 	}
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, src, 1.0f);
 	}
 
@@ -159,6 +183,7 @@ static const int filterKindRectWidth = 80;
 
 void azagDrawFilter(void *dsp, azagRect bounds) {
 	azaFilter *data = dsp;
+	int boundsStartX = bounds.x;
 	azagRect kindRect = bounds;
 	kindRect.w = filterKindRectWidth;
 	kindRect.h = azagTextHeightMargin("A", AZAG_TEXT_SCALE_TEXT);
@@ -200,4 +225,6 @@ void azagDrawFilter(void *dsp, azagRect bounds) {
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 	usedWidth = azagDrawSliderFloat(bounds, &data->config.dryMix, 0.0f, 1.0f, 0.1f, 0.0f, "Dry Mix", "%.2f");
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

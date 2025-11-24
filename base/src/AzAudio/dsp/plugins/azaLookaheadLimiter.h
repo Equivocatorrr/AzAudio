@@ -15,6 +15,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaLookaheadLimiterHeader;
+
 // TODO: Work on making the lookahead limiter more transparent without necessarily increasing latency. Perhaps find a way to make our linear envelope more like an S-curve? Also probably make the lookahead time configurable.
 // 128 samples at 48.0kHz is 128.0/48.0=2.7ms
 // 128 samples at 44.1kHz is 128.0/44.1=2.9ms
@@ -37,7 +39,7 @@ typedef struct azaLookaheadLimiterChannelData {
 
 // NOTE: This limiter increases latency by AZAUDIO_LOOKAHEAD_SAMPLES samples
 typedef struct azaLookaheadLimiter {
-	azaDSP header;
+	azaDSP dsp;
 	azaLookaheadLimiterConfig config;
 
 	azaMeters metersInput;
@@ -77,21 +79,6 @@ azaDSPSpecs azaLookaheadLimiterGetSpecs(void *dsp, uint32_t samplerate);
 
 
 void azagDrawLookaheadLimiter(void *dsp, azagRect bounds);
-
-
-
-static const azaDSP azaLookaheadLimiterHeader = {
-	/* .size         = */ sizeof(azaLookaheadLimiter),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Lookahead Limiter",
-	/* fp_getSpecs   = */ azaLookaheadLimiterGetSpecs,
-	/* fp_process    = */ azaLookaheadLimiterProcess,
-	/* fp_free       = */ azaFreeLookaheadLimiter,
-	/* fp_draw       = */ azagDrawLookaheadLimiter,
-};
 
 
 

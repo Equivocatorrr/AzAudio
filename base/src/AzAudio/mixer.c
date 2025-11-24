@@ -33,10 +33,10 @@ void azaTrackDeinit(azaTrack *data) {
 	azaBufferDeinit(&data->buffer, true);
 	for (uint32_t i = 0; i < data->plugins.steps.count; i++) {
 		azaDSP *dsp = data->plugins.steps.data[i].dsp;
-		if (dsp->owned) {
+		if (dsp->header.owned) {
 			if (!azaFreeDSP(dsp)) {
 				// TODO: Move this error into the GUI as well
-				AZA_LOG_ERR("Failed to free \"%s\" because a free function is not given.\n", dsp->name);
+				AZA_LOG_ERR("Failed to free \"%s\" because a free function is not given.\n", dsp->guiMetadata.name);
 			}
 		}
 	}

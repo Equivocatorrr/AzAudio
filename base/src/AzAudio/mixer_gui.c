@@ -28,7 +28,8 @@
 
 
 static azaMixer *currentMixer = NULL;
-static azaDSP *selectedDSP = NULL;
+static int dspSelectionLayer = 0;
+static int dspSelectionScroll = 0;
 static azagWindow mixerWindow = AZAG_WINDOW_INVALID;
 
 static int scrollTracksX = 0;
@@ -172,11 +173,8 @@ static void azagContextMenuTrackFX() {
 		azagContextMenuOpen(azagContextMenuTrackFXAdd);
 	}
 	if (doRemovePlugin) {
-		if (azagDrawContextMenuButton(azaTextFormat("Remove %s", contextMenuTrackFXDSP->name))) {
+		if (azagDrawContextMenuButton(azaTextFormat("Remove %s", contextMenuTrackFXDSP->guiMetadata.name))) {
 			azaTrackRemoveDSP(azagContextMenuTrackFromIndex(), contextMenuTrackFXDSP);
-			if (selectedDSP == contextMenuTrackFXDSP) {
-				selectedDSP = NULL;
-			}
 			azaFreeDSP(contextMenuTrackFXDSP);
 			contextMenuTrackFXDSP = NULL;
 		}
@@ -192,11 +190,11 @@ static void azagContextMenuTrackFXAdd() {
 
 	for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
 		if (azaDSPRegistry.data[i].fp_makeDSP == NULL) continue;
-		const char *name = azaDSPRegistry.data[i].base.name;
+		const char *name = azaDSPRegistry.data[i].base.guiMetadata.name;
 		if (azagDrawContextMenuButton(name)) {
 			azaDSP *newDSP = azaDSPRegistry.data[i].fp_makeDSP();
 			if (newDSP) {
-				newDSP->owned = true;
+				newDSP->header.owned = true;
 				azaTrackInsertDSP(track, newDSP, contextMenuTrackFXDSP);
 			} else {
 				snprintf(contextMenuError, sizeof(contextMenuError), "Failed to make \"%s\": Out of memory!\n", name);
@@ -235,34 +233,30 @@ static void azagDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azagRect bo
 		if (mouseover) {
 			azagDrawRectGradientV(pluginRect, azagThemeCurrent.dspChain.colorHighlightBGTop, azagThemeCurrent.dspChain.colorHighlightBGBot);
 			if (azagMousePressed(AZAG_MOUSE_BUTTON_LEFT)) {
-				if (selectedDSP) {
-					selectedDSP->selected = 0;
-				}
-				selectedDSP = dsp;
-				// TODO: Replace this 1 with whatever layer we have active
-				dsp->selected = 1;
+				azaMixerGUIDSPToggleSelection(dsp);
 			}
 			mouseoverDSP = dsp;
 		} else if (azagMouseInRect(muteRect)) {
-			if (dsp->error) {
+			azagSetMouseCursor(AZAG_MOUSE_CURSOR_POINTING_HAND);
+			if (dsp->processMetadata.error) {
 				azagTooltipAdd("Click to Clear Error", (azagPoint) {muteRect.x + muteRect.w, muteRect.y + muteRect.h/2}, 0.0f, 0.5f);
 				if (azagMousePressed(AZAG_MOUSE_BUTTON_LEFT)) {
-					dsp->error = 0;
+					dsp->processMetadata.error = 0;
 				}
 			} else {
 				azagTooltipAdd("Bypass", (azagPoint) {muteRect.x + muteRect.w, muteRect.y + muteRect.h/2}, 0.0f, 0.5f);
 				if (azagMousePressed(AZAG_MOUSE_BUTTON_LEFT)) {
-					dsp->bypass = !dsp->bypass;
+					dsp->header.bypass = !dsp->header.bypass;
 				}
 			}
 		}
-		azagDrawRectOutline(pluginRect, dsp == selectedDSP ? azagThemeCurrent.dspChain.colorBorderSelected : azagThemeCurrent.dspChain.colorBorder);
-		azagDrawText(dsp->name, azagPointAdd(pluginRect.xy, azagThemeCurrent.margin), AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.dspChain.colorText);
+		azagDrawRectOutline(pluginRect, azaMixerGUIDSPIsSelected(dsp) ? azagThemeCurrent.dspChain.colorBorderSelected : azagThemeCurrent.dspChain.colorBorder);
+		azagDrawText(dsp->guiMetadata.name, azagPointAdd(pluginRect.xy, azagThemeCurrent.margin), AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.dspChain.colorText);
 		// Bypass/error
-		if (dsp->error) {
+		if (dsp->processMetadata.error) {
 			azagDrawRect(muteRect, azagThemeCurrent.dspChain.colorError);
 		} else {
-			if (dsp->bypass) {
+			if (dsp->header.bypass) {
 				azagDrawRect(muteRect, azagThemeCurrent.dspChain.colorBypass);
 			} else {
 				azagDrawRectOutline(muteRect, azagThemeCurrent.dspChain.colorBypass);
@@ -325,7 +319,7 @@ static int azagDrawTrackControls(azaTrack *track, uint32_t metadataIndex, azagRe
 		usedWidth = azagDrawFader(bounds, &receive->gain, &receive->mute, false, "Master Send", trackFaderDBRange, trackFaderDBHeadroom);
 		usedWidth += azagThemeCurrent.margin.x;
 		metadata->width += usedWidth;
-		if (openedContextMenu && azagMouseInRect((azagRect) { .xy = bounds.xy, .w = usedWidth, .h = bounds.h })) {
+		if (openedContextMenu && azagMouseInRectDepth((azagRect) { .xy = bounds.xy, .w = usedWidth, .h = bounds.h }, AZAG_MOUSE_DEPTH_CONTEXT_MENU)) {
 			contextMenuTrackSend = &currentMixer->master;
 		}
 		azagRectShrinkLeft(&bounds, usedWidth);
@@ -336,7 +330,7 @@ static int azagDrawTrackControls(azaTrack *track, uint32_t metadataIndex, azagRe
 			usedWidth = azagDrawFader(bounds, &receive->gain, &receive->mute, false, azaTextFormat("%s Send", currentMixer->tracks.data[i]->name), trackFaderDBRange, trackFaderDBHeadroom);
 			usedWidth += azagThemeCurrent.margin.x;
 			metadata->width += usedWidth;
-			if (openedContextMenu && azagMouseInRect((azagRect) { .xy = bounds.xy, .w = usedWidth, .h = bounds.h })) {
+			if (openedContextMenu && azagMouseInRectDepth((azagRect) { .xy = bounds.xy, .w = usedWidth, .h = bounds.h }, AZAG_MOUSE_DEPTH_CONTEXT_MENU)) {
 				contextMenuTrackSend = currentMixer->tracks.data[i];
 			}
 			azagRectShrinkLeft(&bounds, usedWidth);
@@ -431,17 +425,65 @@ static void azagDrawSelectedDSP() {
 		azagGetScreenWidth() - azagThemeCurrent.margin.x*4,
 		pluginDrawHeight - azagThemeCurrent.margin.y*4,
 	};
-	azagDrawRectGradientV(bounds, azagThemeCurrent.plugin.colorBGTop, azagThemeCurrent.plugin.colorBGBot);
-	azagDrawRectOutline(bounds, azagThemeCurrent.plugin.colorBorder);
-	if (!selectedDSP) goto done;
-
-	azagRectShrinkAllXY(&bounds, azagPointMulScalar(azagThemeCurrent.margin, 2));
-	azagDrawTextMargin(selectedDSP->name, bounds.xy, AZAG_TEXT_SCALE_HEADER, azagThemeCurrent.plugin.colorPluginName);
-	azagRectShrinkTop(&bounds, azagTextHeightMargin(selectedDSP->name, AZAG_TEXT_SCALE_HEADER));
-	if (selectedDSP->fp_draw) {
-		selectedDSP->fp_draw(selectedDSP, bounds);
+	azagPushScissor(bounds);
+	int offsetX = bounds.x + dspSelectionScroll;
+	for (int32_t trackIndex = -1; trackIndex < (int32_t)currentMixer->tracks.count; trackIndex++) {
+		azaTrack *track = trackIndex >= 0 ? currentMixer->tracks.data[trackIndex] : &currentMixer->master;
+		for (uint32_t fxIndex = 0; fxIndex < track->plugins.steps.count; fxIndex++) {
+			azaDSP *dsp = track->plugins.steps.data[fxIndex].dsp;
+			if (dsp->funcs.fp_draw && azaMixerGUIDSPIsSelected(dsp)) {
+				int width = dsp->guiMetadata.drawCurrentWidth + azagThemeCurrent.margin.x * 2;
+				bounds.x = offsetX;
+				bounds.w = width;
+				azagDrawRectGradientV(bounds, azagThemeCurrent.plugin.colorBGTop, azagThemeCurrent.plugin.colorBGBot);
+				azagDrawRectOutline(bounds, azagThemeCurrent.plugin.colorBorder);
+				azagRect pluginRect = bounds;
+				azagRectShrinkAllXY(&pluginRect, azagPointMulScalar(azagThemeCurrent.margin, 2));
+				azagPushScissor(pluginRect);
+				if (azagTextWidthMargin(dsp->guiMetadata.name, AZAG_TEXT_SCALE_HEADER) > pluginRect.w) {
+					azagDrawTextMargin(dsp->guiMetadata.name, pluginRect.xy, AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.plugin.colorPluginName);
+				} else {
+					azagDrawTextMargin(dsp->guiMetadata.name, pluginRect.xy, AZAG_TEXT_SCALE_HEADER, azagThemeCurrent.plugin.colorPluginName);
+				}
+				azagRectShrinkTop(&pluginRect, azagTextHeightMargin(dsp->guiMetadata.name, AZAG_TEXT_SCALE_HEADER));
+				dsp->funcs.fp_draw(dsp, pluginRect);
+				azagPopScissor();
+				if (dsp->guiMetadata.drawTargetWidth == 0) {
+					azagRect rightScaleRect = {
+						.x = offsetX + width - 5,
+						.y = bounds.y,
+						.w = 10,
+						.h = bounds.h,
+					};
+					const int dragRegion = 2000;
+					const int widthMinimum = 50;
+					bool dragging = azagMouseDragUint16(rightScaleRect, &dsp->guiMetadata.drawCurrentWidth, false, dragRegion, false, widthMinimum, widthMinimum + dragRegion, true, 0, false, 25, true);
+					if (dragging || azagMouseInRect(rightScaleRect)) {
+						azagSetMouseCursor(AZAG_MOUSE_CURSOR_RESIZE_H);
+					}
+					if (dsp->guiMetadata.drawCurrentWidth <= widthMinimum) {
+						dsp->guiMetadata.drawCurrentWidth = widthMinimum;
+					}
+					const int dragWidgetHeight = bounds.h / 3;
+					int x = offsetX + width - 2;
+					const int y1 = bounds.y + bounds.h/2 - dragWidgetHeight/2;
+					const int y2 = y1 + dragWidgetHeight;
+					azagDrawRect((azagRect) { x-1, y1-1, 5, dragWidgetHeight+2 }, azagThemeCurrent.colorBG);
+					azagDrawRect((azagRect) { x, y1, 1, dragWidgetHeight }, azagThemeCurrent.colorAttenuation);
+					x += 2;
+					azagDrawRect((azagRect) { x, y1, 1, dragWidgetHeight }, azagThemeCurrent.colorAttenuation);
+				} else {
+					if (dsp->guiMetadata.drawCurrentWidth < dsp->guiMetadata.drawTargetWidth) {
+						dsp->guiMetadata.drawCurrentWidth = AZA_MIN(dsp->guiMetadata.drawTargetWidth, dsp->guiMetadata.drawCurrentWidth + 10);
+					} else if (dsp->guiMetadata.drawCurrentWidth > dsp->guiMetadata.drawTargetWidth) {
+						dsp->guiMetadata.drawCurrentWidth = AZA_MAX(dsp->guiMetadata.drawTargetWidth, dsp->guiMetadata.drawCurrentWidth - 10);
+					}
+				}
+				offsetX += width + azagThemeCurrent.track.spacing; // TODO: Make a new theme entry for fx spacing
+			}
+		}
 	}
-done:
+	azagPopScissor();
 	azaMutexUnlock(&currentMixer->mutex);
 }
 
@@ -515,15 +557,20 @@ bool azaMixerGUIIsOpen() {
 	return isWindowOpen;
 }
 
-bool azaMixerGUIHasDSPOpen(azaDSP *dsp) {
-	return dsp == selectedDSP;
+bool azaMixerGUIDSPIsSelected(azaDSP *dsp) {
+	return (dsp->guiMetadata.selected & (1u << dspSelectionLayer)) != 0;
 }
 
-void azaMixerGUIUnselectDSP(azaDSP *dsp) {
-	// TODO: This is still hacky. Probably invert the responsibility such that DSP knows when it's selected instead. This would also allow us to have multiple selected at once, which we almost definitely want.
-	if (dsp == selectedDSP) {
-		selectedDSP = NULL;
-	}
+void azaMixerGUIDSPSelect(azaDSP *dsp) {
+	dsp->guiMetadata.selected |= (1u << dspSelectionLayer);
+}
+
+void azaMixerGUIDSPUnselect(azaDSP *dsp) {
+	dsp->guiMetadata.selected &= ~(1u << dspSelectionLayer);
+}
+
+void azaMixerGUIDSPToggleSelection(azaDSP *dsp) {
+	dsp->guiMetadata.selected ^= (1u << dspSelectionLayer);
 }
 
 void azaMixerGUIShowError(const char *message) {

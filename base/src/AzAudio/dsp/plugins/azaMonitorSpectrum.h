@@ -14,6 +14,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaMonitorSpectrumHeader;
+
 typedef enum azaMonitorSpectrumMode {
 	// Reports the spectrum of a single chosen channel
 	AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL,
@@ -46,7 +48,7 @@ typedef struct azaMonitorSpectrumConfig {
 } azaMonitorSpectrumConfig;
 
 typedef struct azaMonitorSpectrum {
-	azaDSP header;
+	azaDSP dsp;
 	azaMonitorSpectrumConfig config;
 
 	uint32_t samplerate;
@@ -83,21 +85,6 @@ int azaMonitorSpectrumProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_
 
 
 void azagDrawMonitorSpectrum(void *dsp, azagRect bounds);
-
-
-
-static const azaDSP azaMonitorSpectrumHeader = {
-	/* .size         = */ sizeof(azaMonitorSpectrum),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Spectrum Monitor",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ azaMonitorSpectrumProcess,
-	/* fp_free       = */ azaFreeMonitorSpectrum,
-	/* fp_draw       = */ azagDrawMonitorSpectrum,
-};
 
 
 

@@ -9,13 +9,38 @@
 #include "../../math.h"
 #include "../../error.h"
 #include "../azaKernel.h"
+#include "../../mixer.h"
+
+
+
+const azaDSP azaSamplerHeader = {
+	.header =  {
+		.size    = sizeof(azaSampler),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Sampler",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = azaSamplerProcess,
+		.fp_free     = azaFreeSampler,
+		.fp_draw     = NULL,
+	},
+};
 
 // 13 plays nice with 8-wide SIMD
 enum { AZA_SAMPLER_DESIRED_KERNEL_RADIUS = 13 };
 static const float azaSamplerStopBand = 20000.0f;
 
 void azaSamplerInit(azaSampler *data, azaSamplerConfig config) {
-	data->header = azaSamplerHeader;
+	data->dsp = azaSamplerHeader;
 	data->config = config;
 	data->numInstances = 0;
 	azaMutexInit(&data->mutex);
@@ -198,7 +223,7 @@ int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 		}
 	}
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, dst, 1.0f);
 	}
 

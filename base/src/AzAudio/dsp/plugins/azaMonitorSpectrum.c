@@ -14,6 +14,28 @@
 
 
 
+const azaDSP azaMonitorSpectrumHeader = {
+	.header =  {
+		.size    = sizeof(azaMonitorSpectrum),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Spectrum Monitor",
+		.selected         = 0,
+		.drawTargetWidth  = 0, // 0 means user-resizeable
+		.drawCurrentWidth = 250, // Default size
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = azaMonitorSpectrumProcess,
+		.fp_free     = azaFreeMonitorSpectrum,
+		.fp_draw     = azagDrawMonitorSpectrum,
+	},
+};
+
 const char *azaMonitorSpectrumModeString[AZA_MONITOR_SPECTRUM_MODE_COUNT] = {
 	[AZA_MONITOR_SPECTRUM_MODE_ONE_CHANNEL] = "Single-Channel Mode",
 	[AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS] = "Channel-Average Mode",
@@ -24,7 +46,7 @@ const char *azaMonitorSpectrumModeString[AZA_MONITOR_SPECTRUM_MODE_COUNT] = {
 
 void azaMonitorSpectrumInit(azaMonitorSpectrum *data, azaMonitorSpectrumConfig config) {
 	memset(data, 0, sizeof(*data));
-	data->header = azaMonitorSpectrumHeader;
+	data->dsp = azaMonitorSpectrumHeader;
 	data->config = config;
 }
 
@@ -172,12 +194,12 @@ int azaMonitorSpectrumProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_
 	err = azaMonitorSpectrumHandleBufferResizes(data, src);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaMonitorSpectrumResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
-	} else if (dst->channelLayout.count < data->header.prevChannelCountDst) {
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaMonitorSpectrumResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
+	} else if (dst->channelLayout.count < data->dsp.processMetadata.prevChannelCountDst) {
 		data->config.channelChosen = AZA_MIN(dst->channelLayout.count-1, data->config.channelChosen);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
 	data->samplerate = src->samplerate;
 	for (uint32_t offset = 0, used = 0; offset < src->frames; offset += used) {

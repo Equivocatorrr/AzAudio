@@ -11,8 +11,32 @@
 
 #include "../../gui/gui.h"
 
+
+
+const azaDSP azaReverbHeader = {
+	.header =  {
+		.size    = sizeof(azaReverb),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Reverb",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = azaReverbProcess,
+		.fp_free     = azaFreeReverb,
+		.fp_draw     = azagDrawReverb,
+	},
+};
+
 void azaReverbInit(azaReverb *data, azaReverbConfig config) {
-	data->header = azaReverbHeader;
+	data->dsp = azaReverbHeader;
 	data->config = config;
 
 	azaDelayInit(&data->inputDelay, (azaDelayConfig){
@@ -145,12 +169,12 @@ int azaReverbProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 	// err = azaReverbHandleBufferResizes(data, dst->samplerate, dst->channelLayout.count);
 	// if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaReverbResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaReverbResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
-	if (data->header.selected) {
+	if (data->dsp.guiMetadata.selected) {
 		azaMetersUpdate(&data->metersInput, src, 1.0f);
 	}
 	azaBuffer inputBuffer = azaPushSideBuffer(src->frames, 0, 0, src->channelLayout.count, src->samplerate);
@@ -205,8 +229,8 @@ azaDSPSpecs azaReverbGetSpecs(void *dsp, uint32_t samplerate) {
 	azaDSPSpecs specs = {0};
 	azaDSPSpecs specsIndividualDelays = {0};
 	for (uint32_t tap = 0; tap < AZAUDIO_REVERB_DELAY_COUNT; tap++) {
-		azaDSPSpecs specTap = azaDSPGetSpecs(&data->delays[tap].header, samplerate);
-		azaDSPSpecs specFilter = azaDSPGetSpecs(&data->filters[tap].header, samplerate);
+		azaDSPSpecs specTap = azaDSPGetSpecs(&data->delays[tap].dsp, samplerate);
+		azaDSPSpecs specFilter = azaDSPGetSpecs(&data->filters[tap].dsp, samplerate);
 		azaDSPSpecsCombineSerial(&specTap, &specFilter);
 		azaDSPSpecsCombineParallel(&specsIndividualDelays, &specTap);
 	}
@@ -222,6 +246,7 @@ azaDSPSpecs azaReverbGetSpecs(void *dsp, uint32_t samplerate) {
 
 void azagDrawReverb(void *dsp, azagRect bounds) {
 	azaReverb *data = dsp;
+	int boundsStartX = bounds.x;
 	int usedWidth = azagDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, true, "Wet Gain", 36, 6);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 	usedWidth = azagDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, true, "Dry Gain", 36, 6);
@@ -231,4 +256,7 @@ void azagDrawReverb(void *dsp, azagRect bounds) {
 	usedWidth = azagDrawSliderFloat(bounds, &data->config.color, 1.0f, 5.0f, 0.25f, 2.0f, "Color", "%.2f");
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 	usedWidth = azagDrawSliderFloat(bounds, &data->config.delay_ms, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "%.1fms");
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

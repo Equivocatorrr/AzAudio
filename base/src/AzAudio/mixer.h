@@ -130,9 +130,12 @@ int azaMixerCallback(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t fl
 void azaMixerGUIOpen(azaMixer *mixer, bool onTop);
 void azaMixerGUIClose();
 bool azaMixerGUIIsOpen();
-bool azaMixerGUIHasDSPOpen(azaDSP *dsp);
-// If the dsp is selected, this unselects it, otherwise does nothing.
-void azaMixerGUIUnselectDSP(azaDSP *dsp);
+
+bool azaMixerGUIDSPIsSelected(azaDSP *dsp);
+void azaMixerGUIDSPSelect(azaDSP *dsp);
+void azaMixerGUIDSPUnselect(azaDSP *dsp);
+void azaMixerGUIDSPToggleSelection(azaDSP *dsp);
+
 void azaMixerGUIShowError(const char *message);
 
 // Opens an output stream to process this mixer and initializes it such that the tracks have enough frames.

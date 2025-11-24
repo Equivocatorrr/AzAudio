@@ -17,6 +17,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaSamplerHeader;
+
 #define AZAUDIO_SAMPLER_MAX_INSTANCES 128
 
 typedef struct azaSamplerInstance {
@@ -52,7 +54,7 @@ typedef struct azaSamplerConfig {
 } azaSamplerConfig;
 
 typedef struct azaSampler {
-	azaDSP header;
+	azaDSP dsp;
 	azaSamplerConfig config;
 	azaMutex mutex;
 
@@ -81,20 +83,6 @@ azaDSP* azaMakeDefaultSampler();
 
 int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
-
-
-
-static const azaDSP azaSamplerHeader = {
-	/* .size         = */ sizeof(azaSampler),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Sampler",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ azaSamplerProcess,
-	/* fp_free       = */ azaFreeSampler,
-};
 
 
 

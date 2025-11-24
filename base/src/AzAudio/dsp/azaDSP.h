@@ -53,25 +53,49 @@ typedef void (*fp_azaFreeDSP_t)(void *dsp);
 // Draws all plugin controls and visualizers within the given bounds.
 typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
 
-// Must be at the start of actual plugins
-typedef struct azaDSP {
+typedef struct azaDSPHeader {
 	uint32_t size; // Total size of the azaDSP derivative struct (including all config and channeldata).
 	uint8_t version; // Version of derived plugin, for use after AzAudio 1.0, and only for backwards-compatible changes.
 	bool owned; // If true, upon removal from a plugin chain via the mixer GUI we call fp_free.
 	bool bypass; // If true, our DSP doesn't get processed and instead skips to the next in the list.
-	uint8_t selected; // Bitset for being selected in the mixer GUI (each bit represents a different view).
+	aza_byte _reserved[9]; // Explicit padding bytes reserved for later.
+} azaDSPHeader;
+static_assert(sizeof(azaDSPHeader) == 16, "Please update the expected size of azaDSPHeader and remember to reserve padding explicitly.");
+
+typedef struct azaDSPProcessMetadata {
+	int32_t error; // If nonzero, there was an error when processing, so disable this plugin until the user requests to try again. Stores the error code.
 	uint8_t prevChannelCountDst; // How many dst channels were in the last azaDSPProcess call, used for handling changes.
 	uint8_t prevChannelCountSrc; // How many src channels were in the last azaDSPProcess call, used for handling changes.
-	aza_byte _reserved[2]; // Explicit padding bytes reserved for later.
-	int32_t error; // If nonzero, there was an error when processing, so disable this plugin until the user requests to try again. Stores the error code.
+	aza_byte _reserved[10];
+} azaDSPProcessMetadata;
+static_assert(sizeof(azaDSPProcessMetadata) == 16, "Please update the expected size of azaDSPProcessMetadata and remember to reserve padding explicitly.");
+
+typedef struct azaDSPGUIMetadata {
 	char name[32]; // Null-terminated string. Unused chars should be zeroed.
+	uint16_t selected; // Bitset for being selected in the mixer GUI (each bit represents a different view layer).
+	uint16_t drawTargetWidth; // How wide the plugin wants to be in the Mixer GUI. fp_draw should set this value to the used width. If left at 0, it will be resizeable by the user.
+	uint16_t drawCurrentWidth; // How wide the plugin currently is in the Mixer GUI. This will ease towards drawWidth automatically.
+	aza_byte _reserved[10];
+} azaDSPGUIMetadata;
+static_assert(sizeof(azaDSPGUIMetadata) == 48, "Please update the expected size of azaDSPGUIMetadata and remember to reserve padding explicitly.");
+
+typedef struct azaDSPFuncs {
 	fp_azaDSPGetSpecs fp_getSpecs; // Nullable, meaning a zeroed-out struct azaDSPSpecs.
 	fp_azaDSPProcess_t fp_process; // Nullable, meaning no processing is required.
 	fp_azaFreeDSP_t fp_free; // Nullable, meaning removal from a plugin chain requires no action (mostly for un-owned user plugins).
 	fp_azagDrawDSP fp_draw; // Nullable, meaning we don't draw anything.
-} azaDSP;
+	aza_byte _reserved[16];
+} azaDSPFuncs;
+static_assert(sizeof(azaDSPFuncs) == (16 + sizeof(void*)*4), "Please update the expected size of azaDSPFuncs and remember to reserve padding explicitly.");
 
-static_assert(sizeof(azaDSP) == (48 + sizeof(void*)*4), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
+// Must be at the start of actual plugins
+typedef struct azaDSP {
+	azaDSPHeader header;
+	azaDSPProcessMetadata processMetadata;
+	azaDSPGUIMetadata guiMetadata;
+	azaDSPFuncs funcs;
+} azaDSP;
+static_assert(sizeof(azaDSP) == (sizeof(azaDSPHeader) + sizeof(azaDSPProcessMetadata) + sizeof(azaDSPGUIMetadata) + sizeof(azaDSPFuncs)), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
 
 // Handles bypass and calls dsp->fp_getSpecs if applicable.
 azaDSPSpecs azaDSPGetSpecs(azaDSP *dsp, uint32_t samplerate);

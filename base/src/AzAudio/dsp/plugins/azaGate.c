@@ -10,9 +10,34 @@
 #include "../../error.h"
 
 #include "../../gui/gui.h"
+#include "../../mixer.h"
+
+
+
+const azaDSP azaGateHeader = {
+	.header =  {
+		.size    = sizeof(azaGate),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Gate",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = NULL,
+		.fp_process  = azaGateProcess,
+		.fp_free     = azaFreeGate,
+		.fp_draw     = azagDrawGate,
+	},
+};
 
 void azaGateInit(azaGate *data, azaGateConfig config) {
-	data->header = azaGateHeader;
+	data->dsp = azaGateHeader;
 	data->config = config;
 	azaDSPChainInit(&data->activationEffects, 0);
 	azaRMSInit(&data->rms, (azaRMSConfig) {
@@ -75,13 +100,13 @@ int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	err = azaCheckBuffersForDSPProcess(dst, src, /* sameFrameCount: */ true, /* sameChannelCount: */ true);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaGateResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaGateResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
 	float amountInput = aza_db_to_ampf(data->config.gainInput);
-	if (data->header.selected) {
+	if (data->dsp.guiMetadata.selected) {
 		azaMetersUpdate(&data->metersInput, src, amountInput);
 	}
 
@@ -129,7 +154,7 @@ int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 		}
 	}
 
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, dst, 1.0f);
 	}
 error:
@@ -151,6 +176,7 @@ static const int attenuationMeterDBRange = 48;
 
 void azagDrawGate(void *dsp, azagRect bounds) {
 	azaGate *data = dsp;
+	int boundsStartX = bounds.x;
 	int usedWidth;
 	usedWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
@@ -198,5 +224,7 @@ void azagDrawGate(void *dsp, azagRect bounds) {
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 
 	usedWidth = azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
-	// azagRectShrinkLeftMargin(&bounds, usedWidth);
+	azagRectShrinkLeftMargin(&bounds, usedWidth);
+	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

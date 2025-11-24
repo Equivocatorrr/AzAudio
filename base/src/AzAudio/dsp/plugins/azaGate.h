@@ -17,6 +17,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaGateHeader;
+
 typedef struct azaGateConfig {
 	// cutoff threshold in dB
 	float threshold;
@@ -37,7 +39,7 @@ typedef struct azaGateConfig {
 } azaGateConfig;
 
 typedef struct azaGate {
-	azaDSP header;
+	azaDSP dsp;
 	azaGateConfig config;
 
 	// Any effects to apply to the activation signal
@@ -71,21 +73,6 @@ azaDSP* azaMakeDefaultGate();
 int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 void azagDrawGate(void *dsp, azagRect bounds);
-
-
-
-static const azaDSP azaGateHeader = {
-	/* .size         = */ sizeof(azaGate),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "Gate",
-	/* fp_getSpecs   = */ NULL,
-	/* fp_process    = */ azaGateProcess,
-	/* fp_free       = */ azaFreeGate,
-	/* fp_draw       = */ azagDrawGate,
-};
 
 
 

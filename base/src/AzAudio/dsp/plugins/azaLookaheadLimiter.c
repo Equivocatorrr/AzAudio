@@ -9,11 +9,34 @@
 #include "../../math.h"
 #include "../../error.h"
 #include "../../gui/gui.h"
+#include "../../mixer.h"
 
 
+
+const azaDSP azaLookaheadLimiterHeader = {
+	.header =  {
+		.size    = sizeof(azaLookaheadLimiter),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
+	},
+	.processMetadata = { 0 }, // ZII
+	.guiMetadata = {
+		.name             = "Lookahead Limiter",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
+	},
+	.funcs = {
+		.fp_getSpecs = azaLookaheadLimiterGetSpecs,
+		.fp_process  = azaLookaheadLimiterProcess,
+		.fp_free     = azaFreeLookaheadLimiter,
+		.fp_draw     = azagDrawLookaheadLimiter,
+	},
+};
 
 void azaLookaheadLimiterInit(azaLookaheadLimiter *data, azaLookaheadLimiterConfig config) {
-	data->header = azaLookaheadLimiterHeader;
+	data->dsp = azaLookaheadLimiterHeader;
 	data->config = config;
 	azaLookaheadLimiterReset(data);
 }
@@ -74,14 +97,14 @@ int azaLookaheadLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32
 	err = azaCheckBuffersForDSPProcess(dst, src, /* sameFrameCount: */ true, /* sameChannelCount: */ true);
 	if AZA_UNLIKELY(err) return err;
 
-	if (dst->channelLayout.count > data->header.prevChannelCountDst) {
-		azaLookaheadLimiterResetChannels(data, data->header.prevChannelCountDst, dst->channelLayout.count - data->header.prevChannelCountDst);
+	if (dst->channelLayout.count > data->dsp.processMetadata.prevChannelCountDst) {
+		azaLookaheadLimiterResetChannels(data, data->dsp.processMetadata.prevChannelCountDst, dst->channelLayout.count - data->dsp.processMetadata.prevChannelCountDst);
 	}
-	data->header.prevChannelCountDst = dst->channelLayout.count;
+	data->dsp.processMetadata.prevChannelCountDst = dst->channelLayout.count;
 
 	float amountInput = aza_db_to_ampf(data->config.gainInput);
 	float amountOutput = aza_db_to_ampf(data->config.gainOutput);
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersInput, src, amountInput);
 	}
 	// TODO: There's some odd behavior where CPU usage jumps the instant there's any attenuation and never drops again. Pls investigate!
@@ -136,7 +159,7 @@ int azaLookaheadLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32
 			dst->pSamples[i * dst->stride + c] = out * amountOutput;
 		}
 	}
-	if (data->header.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersOutput, dst, 1.0f);
 	}
 	data->index = index;
@@ -162,6 +185,7 @@ static const int attenuationMeterDBRange = 12;
 
 void azagDrawLookaheadLimiter(void *dsp, azagRect bounds) {
 	azaLookaheadLimiter *data = dsp;
+	int boundsStartX = bounds.x;
 	int faderWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, faderWidth);
 	int metersWidth = azagDrawMeters(&data->metersInput, bounds, faderDBRange, faderDBHeadroom);
@@ -210,4 +234,6 @@ void azagDrawLookaheadLimiter(void *dsp, azagRect bounds) {
 	azagRectShrinkLeftMargin(&bounds, faderWidth);
 	azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, metersWidth);
+	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

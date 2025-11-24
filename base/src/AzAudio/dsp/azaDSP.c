@@ -35,27 +35,27 @@ void azaDSPSpecsCombineParallel(azaDSPSpecs *dst, azaDSPSpecs *src) {
 }
 
 azaDSPSpecs azaDSPGetSpecs(azaDSP *dsp, uint32_t samplerate) {
-	if (!dsp->bypass && dsp->fp_getSpecs) {
-		return dsp->fp_getSpecs(dsp, samplerate);
+	if (!dsp->header.bypass && dsp->funcs.fp_getSpecs) {
+		return dsp->funcs.fp_getSpecs(dsp, samplerate);
 	}
 	return (azaDSPSpecs) {0};
 }
 
 int azaDSPProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	if (!dsp->bypass && dsp->fp_process && dsp->error == AZA_SUCCESS) {
-		int result = dsp->fp_process(dsp, dst, src, flags);
+	if (!dsp->header.bypass && dsp->funcs.fp_process && dsp->processMetadata.error == AZA_SUCCESS) {
+		int result = dsp->funcs.fp_process(dsp, dst, src, flags);
 		if (result != AZA_SUCCESS) {
 			return result;
 		}
-		dsp->prevChannelCountDst = dst->channelLayout.count;
-		dsp->prevChannelCountSrc = src->channelLayout.count;
+		dsp->processMetadata.prevChannelCountDst = dst->channelLayout.count;
+		dsp->processMetadata.prevChannelCountSrc = src->channelLayout.count;
 	}
 	return AZA_SUCCESS;
 }
 
 bool azaFreeDSP(azaDSP *dsp) {
-	if (dsp->owned && dsp->fp_free) {
-		dsp->fp_free(dsp);
+	if (dsp->header.owned && dsp->funcs.fp_free) {
+		dsp->funcs.fp_free(dsp);
 		return true;
 	}
 	return false;
@@ -201,17 +201,17 @@ int azaDSPChainProcessWithHandler(azaDSPChain *data, azaBuffer *dst, azaBuffer *
 	if AZA_UNLIKELY(err) return err;
 	for (uint32_t i = 0; i < data->steps.count; i++) {
 		azaDSPChainStep *step = &data->steps.data[i];
-		if (step->dsp->error || step->dsp->bypass) {
+		if (step->dsp->processMetadata.error || step->dsp->header.bypass) {
 			continue; // Don't change src to dst
 		}
 		if (src->leadingFrames < step->specs.leadingFrames) {
-			AZA_LOG_ERR("Error(%s): For step %u (%s) src.leadingFrames (%u) < specs.leadingFrames(%u)\n", AZA_FUNCTION_NAME, i, step->dsp->name, src->leadingFrames, step->specs.leadingFrames);
-			step->dsp->error = AZA_ERROR_INVALID_FRAME_COUNT;
+			AZA_LOG_ERR("Error(%s): For step %u (%s) src.leadingFrames (%u) < specs.leadingFrames(%u)\n", AZA_FUNCTION_NAME, i, step->dsp->guiMetadata.name, src->leadingFrames, step->specs.leadingFrames);
+			step->dsp->processMetadata.error = AZA_ERROR_INVALID_FRAME_COUNT;
 			goto next;
 		}
 		if (src->trailingFrames < step->specs.trailingFrames) {
-			AZA_LOG_ERR("Error(%s): For step %u (%s) src.trailingFrames (%u) < specs.trailingFrames(%u)\n", AZA_FUNCTION_NAME, i, step->dsp->name, src->trailingFrames, step->specs.trailingFrames);
-			step->dsp->error = AZA_ERROR_INVALID_FRAME_COUNT;
+			AZA_LOG_ERR("Error(%s): For step %u (%s) src.trailingFrames (%u) < specs.trailingFrames(%u)\n", AZA_FUNCTION_NAME, i, step->dsp->guiMetadata.name, src->trailingFrames, step->specs.trailingFrames);
+			step->dsp->processMetadata.error = AZA_ERROR_INVALID_FRAME_COUNT;
 			goto next;
 		}
 		if (step->specs.trailingFrames) {
@@ -233,7 +233,7 @@ int azaDSPChainProcessWithHandler(azaDSPChain *data, azaBuffer *dst, azaBuffer *
 		azaBuffer limitedSrc = azaBufferSliceEx(src, 0, src->frames, step->specs.leadingFrames, step->specs.trailingFrames);
 		err = azaDSPProcess(step->dsp, dst, &limitedSrc, flags);
 		if AZA_UNLIKELY(err) {
-			step->dsp->error = err;
+			step->dsp->processMetadata.error = err;
 			if (fp_OnPluginError) {
 				fp_OnPluginError(step->dsp, userdata);
 			}

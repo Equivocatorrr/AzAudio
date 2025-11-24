@@ -20,6 +20,8 @@ extern "C" {
 
 
 
+extern const azaDSP azaLowPassFIRHeader;
+
 typedef struct azaLowPassFIRConfig {
 	float frequency;
 	float frequencyFollowTime_ms;
@@ -31,7 +33,7 @@ typedef struct azaLowPassFIRConfig {
 } azaLowPassFIRConfig;
 
 typedef struct azaLowPassFIR {
-	azaDSP header;
+	azaDSP dsp;
 	azaLowPassFIRConfig config;
 
 	azaMeters metersInput;
@@ -67,21 +69,6 @@ azaDSPSpecs azaLowPassFIRGetSpecs(void *dsp, uint32_t samplerate);
 
 
 void azagDrawLowPassFIR(void *dsp, azagRect bounds);
-
-
-
-static const azaDSP azaLowPassFIRHeader = {
-	/* .size         = */ sizeof(azaLowPassFIR),
-	/* .version      = */ 1,
-	/* .owned, bypass, selected, prevChannelCountDst, prevChannelCountSrc */ false, false, false, 0, 0,
-	/* ._reserved    = */ {0},
-	/* .error        = */ 0,
-	/* .name         = */ "FIR Low Pass",
-	/* fp_getSpecs   = */ azaLowPassFIRGetSpecs,
-	/* fp_process    = */ azaLowPassFIRProcess,
-	/* fp_free       = */ azaFreeLowPassFIR,
-	/* fp_draw       = */ azagDrawLowPassFIR,
-};
 
 
 
