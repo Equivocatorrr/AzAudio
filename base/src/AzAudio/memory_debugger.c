@@ -225,40 +225,40 @@ static void PrintBadEntries(FILE *file, bool listAllBadBlocks) {
 
 typedef struct MemoryStatistics {
 	// Includes realloc calls without an existing block
-	uint64_t numAllocs;
+	size_t numAllocs;
 	// Excludes realloc calls without an existing block
-	uint64_t numReallocs;
-	uint64_t numFrees;
-	uint64_t callsToCalloc;
-	uint64_t callsToMalloc;
-	uint64_t callsToRealloc;
-	uint64_t callsToFree;
-	uint64_t bytesInUse;
-	uint64_t maxBytesInUse;
+	size_t numReallocs;
+	size_t numFrees;
+	size_t callsToCalloc;
+	size_t callsToMalloc;
+	size_t callsToRealloc;
+	size_t callsToFree;
+	size_t bytesInUse;
+	size_t maxBytesInUse;
 	// Total number of bytes allocated summed up
 	// Includes worst-case realloc numbers as well
-	uint64_t bytesChurnedWorstCase;
+	size_t bytesChurnedWorstCase;
 	// Total number of bytes allocated summed up
 	// Includes best-case realloc numbers as well
-	uint64_t bytesChurnedBestCase;
+	size_t bytesChurnedBestCase;
 } MemoryStatistics;
 
 
 static MemoryStatistics statistics;
 
 static void PrintStatistics(FILE *file) {
-	fprintf(file, "numAllocs: %llu\n", statistics.numAllocs);
-	fprintf(file, "numReallocs: %llu\n", statistics.numReallocs);
-	fprintf(file, "numFrees: %llu\n", statistics.numFrees);
-	fprintf(file, "leaked: %llu\n", statistics.numAllocs - statistics.numFrees);
-	fprintf(file, "callsToCalloc: %llu\n", statistics.callsToCalloc);
-	fprintf(file, "callsToMalloc: %llu\n", statistics.callsToMalloc);
-	fprintf(file, "callsToRealloc: %llu\n", statistics.callsToRealloc);
-	fprintf(file, "callsToFree: %llu\n", statistics.callsToFree);
-	fprintf(file, "bytesInUse: 0x%llx\n", statistics.bytesInUse);
-	fprintf(file, "maxBytesInUse: 0x%llx\n", statistics.maxBytesInUse);
-	fprintf(file, "bytesChurnedWorstCase: 0x%llx\n", statistics.bytesChurnedWorstCase);
-	fprintf(file, "bytesChurnedBestCase: 0x%llx\n", statistics.bytesChurnedBestCase);
+	fprintf(file, "numAllocs: %zu\n", statistics.numAllocs);
+	fprintf(file, "numReallocs: %zu\n", statistics.numReallocs);
+	fprintf(file, "numFrees: %zu\n", statistics.numFrees);
+	fprintf(file, "leaked: %zu\n", statistics.numAllocs - statistics.numFrees);
+	fprintf(file, "callsToCalloc: %zu\n", statistics.callsToCalloc);
+	fprintf(file, "callsToMalloc: %zu\n", statistics.callsToMalloc);
+	fprintf(file, "callsToRealloc: %zu\n", statistics.callsToRealloc);
+	fprintf(file, "callsToFree: %zu\n", statistics.callsToFree);
+	fprintf(file, "bytesInUse: 0x%zx\n", statistics.bytesInUse);
+	fprintf(file, "maxBytesInUse: 0x%zx\n", statistics.maxBytesInUse);
+	fprintf(file, "bytesChurnedWorstCase: 0x%zx\n", statistics.bytesChurnedWorstCase);
+	fprintf(file, "bytesChurnedBestCase: 0x%zx\n", statistics.bytesChurnedBestCase);
 }
 
 static size_t GetMemoryEntryInsertIndex(MemoryEntries *ent, MemoryEntry entry) {

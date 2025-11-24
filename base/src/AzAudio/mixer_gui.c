@@ -467,7 +467,6 @@ static void azagDrawSelectedDSP() {
 					const int dragWidgetHeight = bounds.h / 3;
 					int x = offsetX + width - 2;
 					const int y1 = bounds.y + bounds.h/2 - dragWidgetHeight/2;
-					const int y2 = y1 + dragWidgetHeight;
 					azagDrawRect((azagRect) { x-1, y1-1, 5, dragWidgetHeight+2 }, azagThemeCurrent.colorBG);
 					azagDrawRect((azagRect) { x, y1, 1, dragWidgetHeight }, azagThemeCurrent.colorAttenuation);
 					x += 2;
