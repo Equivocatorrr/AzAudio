@@ -14,6 +14,11 @@
 void azaCompressorInit(azaCompressor *data, azaCompressorConfig config) {
 	data->header = azaCompressorHeader;
 	data->config = config;
+	data->attenuation = -120.0f;
+	data->minGain = 0.0f;
+	data->minGainShort = 0.0f;
+	azaMetersReset(&data->metersInput);
+	azaMetersReset(&data->metersOutput);
 	azaRMSConfig rmsConfig = (azaRMSConfig) {
 		.windowSamples = 128,
 		.combineOp = azaOpMax
