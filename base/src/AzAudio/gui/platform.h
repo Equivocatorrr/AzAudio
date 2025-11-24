@@ -99,6 +99,8 @@ bool azagMousePressed_base(azagMouseButton button);
 bool azagMouseDown_base(azagMouseButton button);
 bool azagMouseReleased_base(azagMouseButton button);
 
+void azagSetMouseCursor(azagMouseCursor cursor);
+
 
 
 // Keyboard input

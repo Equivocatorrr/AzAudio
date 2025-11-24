@@ -403,11 +403,10 @@ bool azagMouseCaptureJustStarted() {
 
 
 
-bool azagMouseDragFloat(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
+bool azagMouseDragFloat_id(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id) {
 	assert(valueMax > valueMin);
 	azagPoint mouseDelta = {0};
-	// We assume our value pointer is unique, so it works as an implicit id. Even if we had 2 knobs for the same value, this would probably still be well-behaved.
-	if (azagCaptureMouseDelta(knobRect, &mouseDelta, value)) {
+	if (azagCaptureMouseDelta(knobRect, &mouseDelta, id)) {
 		static float dragStartValue = 0.0f;
 		if (azagMouseCaptureJustStarted()) {
 			dragStartValue = *value;
@@ -442,11 +441,10 @@ bool azagMouseDragFloat(azagRect knobRect, float *value, bool inverted, int drag
 	return false;
 }
 
-bool azagMouseDragFloatLog(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
+bool azagMouseDragFloatLog_id(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id) {
 	assert(valueMax > valueMin);
 	azagPoint mouseDelta = {0};
-	// We assume our value pointer is unique, so it works as an implicit id. Even if we had 2 knobs for the same value, this would probably still be well-behaved.
-	if (azagCaptureMouseDelta(knobRect, &mouseDelta, value)) {
+	if (azagCaptureMouseDelta(knobRect, &mouseDelta, id)) {
 		static float dragStartValue = 0.0f;
 		float logValue = log10f(*value);
 		float logMin = log10f(valueMin);
@@ -487,12 +485,11 @@ bool azagMouseDragFloatLog(azagRect knobRect, float *value, bool inverted, int d
 	return false;
 }
 
-bool azagMouseDragInt(azagRect knobRect, int *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+bool azagMouseDragInt64_id(azagRect knobRect, int64_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap, void *id) {
 	assert(valueMax > valueMin);
 	azagPoint mouseDelta = {0};
-	// We assume our value pointer is unique, so it works as an implicit id. Even if we had 2 knobs for the same value, this would probably still be well-behaved.
-	if (azagCaptureMouseDelta(knobRect, &mouseDelta, value)) {
-		static int dragStartValue = 0;
+	if (azagCaptureMouseDelta(knobRect, &mouseDelta, id)) {
+		static int64_t dragStartValue = 0;
 		if (azagMouseCaptureJustStarted()) {
 			dragStartValue = *value;
 		}
@@ -516,7 +513,7 @@ bool azagMouseDragInt(azagRect knobRect, int *value, bool inverted, int dragRegi
 		}
 		*value = dragStartValue + actualDelta;
 		if (snap) {
-			*value = azaSnapi(*value, AZA_MAX(snapInterval, 1));
+			*value = azaSnapi64(*value, AZA_MAX(snapInterval, 1));
 		}
 		if (doClamp) {
 			*value = AZA_CLAMP(*value, valueMin, valueMax);
@@ -574,7 +571,7 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 		sliderBounds.w,
 		azagThemeCurrent.fader.knobHeight
 	};
-	if (azagMouseDragFloat(
+	bool dragging = azagMouseDragFloat(
 		/* knobRect: */ knobRect,
 		/* value: */ gain,
 		/* inverted: */ true,
@@ -587,10 +584,14 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 		/* doPrecise: */ true,
 		/* snapInterval */ 0.5f,
 		/* doSnap: */ true
-	)) {
+	);
+	if (dragging) {
 		yOffset = azagDBToYOffsetClamped((float)dbHeadroom - *gain, sliderBounds.h, 0, (float)dbRange);
 		knobRect.y = sliderBounds.y + yOffset - 6;
 		mouseover = true;
+	}
+	if (dragging || azagMouseInRect(knobRect)) {
+		azagSetMouseCursor(AZAG_MOUSE_CURSOR_RESIZE_V);
 	}
 	if (mouseover) {
 		azagPoint tooltipPosition = {
@@ -614,6 +615,7 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 		// azagDrawRect(muteRect, azagThemeCurrent.fader.colorBGTop);
 		// azagRectShrinkAllXY(&muteRect, azagThemeCurrent.margin);
 		if (azagMouseInRect(muteRect)) {
+			azagSetMouseCursor(AZAG_MOUSE_CURSOR_POINTING_HAND);
 			azagPoint tooltipPosition = {
 				muteRect.x + muteRect.w / 2,
 				muteRect.y + muteRect.h + azagThemeCurrent.margin.y,
@@ -680,7 +682,7 @@ int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, 
 		sliderBounds.w,
 		azagThemeCurrent.fader.knobHeight
 	};
-	if (azagMouseDragFloatLog(
+	bool dragging = azagMouseDragFloatLog(
 		/* knobRect: */ knobRect,
 		/* value: */ value,
 		/* inverted: */ step >= 0,
@@ -693,11 +695,15 @@ int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, 
 		/* doPrecise: */ true,
 		/* snapInterval */ azaAbsf(step),
 		/* doSnap: */ true
-	)) {
+	);
+	if (dragging) {
 		logValue = logf(*value);
 		yOffset = (int)((float)sliderBounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
 		knobRect.y = sliderBounds.y + yOffset - 6;
 		mouseover = true;
+	}
+	if (dragging || azagMouseInRect(knobRect)) {
+		azagSetMouseCursor(AZAG_MOUSE_CURSOR_RESIZE_V);
 	}
 	if (mouseover) {
 		azagPoint tooltipPosition = {
@@ -752,7 +758,7 @@ int azagDrawSliderFloat(azagRect bounds, float *value, float min, float max, flo
 		sliderBounds.w,
 		azagThemeCurrent.fader.knobHeight
 	};
-	if (azagMouseDragFloat(
+	bool dragging = azagMouseDragFloat(
 		/* knobRect: */ knobRect,
 		/* value: */ value,
 		/* inverted: */ step >= 0,
@@ -765,10 +771,14 @@ int azagDrawSliderFloat(azagRect bounds, float *value, float min, float max, flo
 		/* doPrecise: */ true,
 		/* snapInterval */ azaAbsf(step),
 		/* doSnap: */ true
-	)) {
+	);
+	if (dragging) {
 		yOffset = (int)((float)sliderBounds.h * (1.0f - (*value - min) / (max - min)));
 		knobRect.y = sliderBounds.y + yOffset - 6;
 		mouseover = true;
+	}
+	if (dragging || azagMouseInRect(knobRect)) {
+		azagSetMouseCursor(AZAG_MOUSE_CURSOR_RESIZE_V);
 	}
 	if (mouseover) {
 		azagPoint tooltipPosition = {
@@ -983,7 +993,7 @@ void azagDrawScrollbarHorizontal(azagRect bounds, int *value, int min, int max, 
 		scrollbarWidth,
 		bounds.h,
 	};
-	if (azagMouseDragInt(
+	if (azagMouseDragInt32(
 		/* knobRect: */ knobRect,
 		/* value: */ value,
 		/* inverted: */ step < 0,
@@ -1231,6 +1241,7 @@ void azagOnGuiOpen() {
 
 void azagOnDrawBegin() {
 	azagUpdateMousePre();
+	azagSetMouseCursor(AZAG_MOUSE_CURSOR_DEFAULT);
 }
 
 void azagOnDrawEnd() {

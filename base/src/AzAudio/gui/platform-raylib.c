@@ -13,12 +13,13 @@
 #include <stdio.h>
 
 
-
 // Internal state
 
 
 
 static int currentDPIScale = 1;
+static int mouseCursorPrevious = MOUSE_CURSOR_DEFAULT;
+static int mouseCursorCurrent = MOUSE_CURSOR_DEFAULT;
 
 
 
@@ -178,6 +179,11 @@ void azagBeginDrawing() {
 void azagEndDrawing() {
 	void azagOnDrawEnd(); // Defined in gui.c, not declared in gui.h
 	azagOnDrawEnd(); // Automagically handle internal GUI stuff
+	if (mouseCursorCurrent != mouseCursorPrevious) {
+		// We do this here instead of in the function call because rapidly setting it back and forth confuses Windows. It may do so on other platforms as well, so best just to chill it out.
+		SetMouseCursor(mouseCursorCurrent);
+		mouseCursorPrevious = mouseCursorCurrent;
+	}
 	EndDrawing();
 }
 
@@ -287,6 +293,24 @@ bool azagMouseDown_base(azagMouseButton button) {
 
 bool azagMouseReleased_base(azagMouseButton button) {
 	return IsMouseButtonReleased(RaylibMouseButton(button));
+}
+
+static int raylibCursorMap[] = {
+	[AZAG_MOUSE_CURSOR_DEFAULT]           = MOUSE_CURSOR_DEFAULT,
+	[AZAG_MOUSE_CURSOR_ARROW]             = MOUSE_CURSOR_ARROW,
+	[AZAG_MOUSE_CURSOR_IBEAM]             = MOUSE_CURSOR_IBEAM,
+	[AZAG_MOUSE_CURSOR_CROSSHAIR]         = MOUSE_CURSOR_CROSSHAIR,
+	[AZAG_MOUSE_CURSOR_POINTING_HAND]     = MOUSE_CURSOR_POINTING_HAND,
+	[AZAG_MOUSE_CURSOR_RESIZE_H]          = MOUSE_CURSOR_RESIZE_EW,
+	[AZAG_MOUSE_CURSOR_RESIZE_V]          = MOUSE_CURSOR_RESIZE_NS,
+	[AZAG_MOUSE_CURSOR_RESIZE_DIAG_TL2BR] = MOUSE_CURSOR_RESIZE_NWSE,
+	[AZAG_MOUSE_CURSOR_RESIZE_DIAG_TR2BL] = MOUSE_CURSOR_RESIZE_NESW,
+	[AZAG_MOUSE_CURSOR_RESIZE_OMNI]       = MOUSE_CURSOR_RESIZE_ALL,
+	[AZAG_MOUSE_CURSOR_NOT_ALLOWED]       = MOUSE_CURSOR_NOT_ALLOWED,
+};
+
+void azagSetMouseCursor(azagMouseCursor cursor) {
+	mouseCursorCurrent = raylibCursorMap[(int)cursor];
 }
 
 

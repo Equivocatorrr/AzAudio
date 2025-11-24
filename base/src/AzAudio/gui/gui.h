@@ -383,7 +383,13 @@ static inline void azagRectShrinkRightMargin(azagRect *rect, int additional) {
 	when doSnap is true, holding either control key enables snapping
 	returns true if we're dragging, meaning the value may have updated
 */
-bool azagMouseDragFloat(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap);
+bool azagMouseDragFloat_id(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id);
+
+// Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
+static inline bool azagMouseDragFloat(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
+	return azagMouseDragFloat_id(knobRect, value, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
+}
+
 /*
 	knobRect is the region on the screen that can be grabbed
 	value is the target value to be changed by dragging
@@ -400,7 +406,13 @@ bool azagMouseDragFloat(azagRect knobRect, float *value, bool inverted, int drag
 	NOTE: snapping is done in linear space, since basically the only reason snapping exists at all is to make the number pretty
 	returns true if we're dragging, meaning the value may have updated
 */
-bool azagMouseDragFloatLog(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap);
+bool azagMouseDragFloatLog_id(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id);
+
+// Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
+static inline bool azagMouseDragFloatLog(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
+	return azagMouseDragFloatLog_id(knobRect, value, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
+}
+
 /*
 	knobRect is the region on the screen that can be grabbed
 	value is the target value to be changed by dragging
@@ -414,9 +426,47 @@ bool azagMouseDragFloatLog(azagRect knobRect, float *value, bool inverted, int d
 	when doPrecise is true, holding either shift key enables precise dragging
 	snapInterval is the exact interval we snap to when snapping (modified by precise dragging)
 	when doSnap is true, holding either control key enables snapping
+	id is used to determine which function call is the active one
 	returns true if we're dragging, meaning the value may have updated
 */
-bool azagMouseDragInt(azagRect knobRect, int *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap);
+bool azagMouseDragInt64_id(azagRect knobRect, int64_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap, void *id);
+
+// Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
+static inline bool azagMouseDragInt64(azagRect knobRect, int64_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+	return azagMouseDragInt64_id(knobRect, value, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
+}
+
+// Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
+static inline bool azagMouseDragInt32(azagRect knobRect, int32_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+	int64_t actual = *value;
+	bool result = azagMouseDragInt64_id(knobRect, &actual, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
+	*value = (int32_t)actual;
+	return result;
+}
+
+// Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
+static inline bool azagMouseDragInt16(azagRect knobRect, int16_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+	int64_t actual = *value;
+	bool result = azagMouseDragInt64_id(knobRect, &actual, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
+	*value = (int16_t)actual;
+	return result;
+}
+
+// Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
+static inline bool azagMouseDragUint32(azagRect knobRect, uint32_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+	int64_t actual = *value;
+	bool result = azagMouseDragInt64_id(knobRect, &actual, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
+	*value = (uint32_t)AZA_MAX(0, actual);
+	return result;
+}
+
+// Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
+static inline bool azagMouseDragUint16(azagRect knobRect, uint16_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+	int64_t actual = *value;
+	bool result = azagMouseDragInt64_id(knobRect, &actual, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
+	*value = (uint16_t)AZA_MAX(0, actual);
+	return result;
+}
 
 /*
 	get a y offset for the given db reading, height, and dbRange spread across the height

@@ -81,6 +81,15 @@ static inline int azaSnapi(int value, int interval) {
 	}
 }
 
+static inline int64_t azaSnapi64(int64_t value, int64_t interval) {
+	assert(interval > 0);
+	if (value >= 0) {
+		return ((value + interval/2) / interval) * interval;
+	} else {
+		return ((value - interval/2) / interval) * interval;
+	}
+}
+
 static inline float
 azaLinstepf(float a, float min, float max) {
 	return azaClampf((a - min) / (max - min), 0.0f, 1.0f);
