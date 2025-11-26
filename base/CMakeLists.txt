@@ -202,7 +202,7 @@ install(DIRECTORY src/AzAudio
 
 # TODO: Figure out the actual proper way to do this since I'm like 80% sure this isn't enough
 
-install(TARGETS raylib
+install(TARGETS AzAudio
 	EXPORT raylib
 	CONFIGURATIONS Debug Release
 	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/AzAudio/raylib
@@ -214,7 +214,7 @@ install(EXPORT raylib
 	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/AzAudio/raylib
 )
 
-install(TARGETS glfw
+install(TARGETS AzAudio
 	EXPORT glfw
 	CONFIGURATIONS Debug Release
 	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/AzAudio/raylib/glfw
