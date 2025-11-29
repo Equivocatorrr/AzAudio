@@ -7,6 +7,7 @@
 #define AZAUDIO_TYPES_H
 
 #include "../aza_c_std.h"
+#include "../math.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,90 +15,60 @@ extern "C" {
 
 
 
-typedef struct azagPoint {
-	int x, y;
-} azagPoint;
-
-static inline azagPoint azagPointAdd(azagPoint lhs, azagPoint rhs) {
-	return AZA_CLITERAL(azagPoint) { lhs.x + rhs.x, lhs.y + rhs.y };
-}
-
-static inline azagPoint azagPointSub(azagPoint lhs, azagPoint rhs) {
-	return AZA_CLITERAL(azagPoint) { lhs.x - rhs.x, lhs.y - rhs.y };
-}
-
-static inline azagPoint azagPointMul(azagPoint lhs, azagPoint rhs) {
-	return AZA_CLITERAL(azagPoint) { lhs.x * rhs.x, lhs.y * rhs.y };
-}
-
-static inline azagPoint azagPointDiv(azagPoint lhs, azagPoint rhs) {
-	return AZA_CLITERAL(azagPoint) { lhs.x / rhs.x, lhs.y / rhs.y };
-}
-
-static inline azagPoint azagPointMulScalar(azagPoint point, int scalar) {
-	return AZA_CLITERAL(azagPoint) { point.x * scalar, point.y * scalar };
-}
-
-static inline azagPoint azagPointDivScalar(azagPoint point, int scalar) {
-	return AZA_CLITERAL(azagPoint) { point.x / scalar, point.y / scalar };
-}
-
-
-
 typedef struct azagRect {
 	union {
-		struct { int x, y; };
-		azagPoint xy;
+		struct { float x, y; };
+		azaVec2 xy;
 	};
 	union {
-		struct { int w, h; };
-		azagPoint size;
+		struct { float w, h; };
+		azaVec2 size;
 	};
 } azagRect;
 
-static inline bool azagPointInRect(azagRect rect, azagPoint point) {
+static inline bool azaVec2InRect(azagRect rect, azaVec2 point) {
 	return (point.x >= rect.x && point.y >= rect.y && point.x <= rect.x+rect.w && point.y <= rect.y+rect.h);
 }
 
-static inline void azagRectShrinkAll(azagRect *rect, int m) {
+static inline void azagRectShrinkAll(azagRect *rect, float m) {
 	rect->x += m;
 	rect->y += m;
-	rect->w -= m*2;
-	rect->h -= m*2;
+	rect->w -= m*2.0f;
+	rect->h -= m*2.0f;
 }
 
-static inline void azagRectShrinkAllXY(azagRect *rect, azagPoint xy) {
+static inline void azagRectShrinkAllXY(azagRect *rect, azaVec2 xy) {
 	rect->x += xy.x;
 	rect->y += xy.y;
-	rect->w -= xy.x*2;
-	rect->h -= xy.y*2;
+	rect->w -= xy.x*2.0f;
+	rect->h -= xy.y*2.0f;
 }
 
-static inline void azagRectShrinkAllH(azagRect *rect, int m) {
+static inline void azagRectShrinkAllH(azagRect *rect, float m) {
 	rect->x += m;
 	rect->w -= m*2;
 }
 
-static inline void azagRectShrinkAllV(azagRect *rect, int m) {
+static inline void azagRectShrinkAllV(azagRect *rect, float m) {
 	rect->y += m;
-	rect->h -= m*2;
+	rect->h -= m*2.0f;
 }
 
-static inline void azagRectShrinkTop(azagRect *rect, int h) {
+static inline void azagRectShrinkTop(azagRect *rect, float h) {
 	rect->y += h;
 	rect->h -= h;
 }
 
-static inline void azagRectShrinkBottom(azagRect *rect, int h) {
+static inline void azagRectShrinkBottom(azagRect *rect, float h) {
 	rect->h -= h;
 }
 
-static inline void azagRectShrinkLeft(azagRect *rect, int w) {
+static inline void azagRectShrinkLeft(azagRect *rect, float w) {
 	rect->x += w;
 	rect->w -= w;
 }
 
-static inline void azagRectShrinkRight(azagRect *rect, int w) {
+static inline void azagRectShrinkRight(azagRect *rect, float w) {
 	rect->w -= w;
 }
 

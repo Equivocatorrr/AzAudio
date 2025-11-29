@@ -22,8 +22,8 @@ const azaDSP azaRMSHeader = {
 	.guiMetadata = {
 		.name             = "RMS",
 		.selected         = 0,
-		.drawTargetWidth  = 0,
-		.drawCurrentWidth = 0,
+		.drawTargetWidth  = 0.0f,
+		.drawCurrentWidth = 0.0f,
 	},
 	.funcs = {
 		.fp_getSpecs = NULL,

@@ -24,8 +24,8 @@ const azaDSP azaReverbHeader = {
 	.guiMetadata = {
 		.name             = "Reverb",
 		.selected         = 0,
-		.drawTargetWidth  = 0,
-		.drawCurrentWidth = 0,
+		.drawTargetWidth  = 0.0f,
+		.drawCurrentWidth = 0.0f,
 	},
 	.funcs = {
 		.fp_getSpecs = NULL,
@@ -246,8 +246,8 @@ azaDSPSpecs azaReverbGetSpecs(void *dsp, uint32_t samplerate) {
 
 void azagDrawReverb(void *dsp, azagRect bounds) {
 	azaReverb *data = dsp;
-	int boundsStartX = bounds.x;
-	int usedWidth = azagDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, true, "Wet Gain", 36, 6);
+	float boundsStartX = bounds.x;
+	float usedWidth = azagDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, true, "Wet Gain", 36, 6);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 	usedWidth = azagDrawFader(bounds, &data->config.gainDry, &data->config.muteDry, true, "Dry Gain", 36, 6);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
@@ -257,6 +257,6 @@ void azagDrawReverb(void *dsp, azagRect bounds) {
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 	usedWidth = azagDrawSliderFloat(bounds, &data->config.delay_ms, 0.0f, 500.0f, 1.0f, 10.0f, "Early Delay", "%.1fms");
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
-	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	float totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
 	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

@@ -47,7 +47,7 @@ bool aza_str_begins_with(const char *string, const char *test) {
 			return false;
 		}
 	}
-	return false;
+	return *test == 0;
 }
 
 void aza_str_to_lower(char *dst, const char *src, size_t dstSize) {

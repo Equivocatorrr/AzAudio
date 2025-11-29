@@ -17,7 +17,7 @@
 
 
 
-static int currentDPIScale = 1;
+static float currentDPIScale = 1.0f;
 static int mouseCursorPrevious = MOUSE_CURSOR_DEFAULT;
 static int mouseCursorCurrent = MOUSE_CURSOR_DEFAULT;
 
@@ -54,16 +54,16 @@ static void azaRaylibTraceLogCallback(int logLevel, const char *text, va_list ar
 
 // TODO: For raylib on glfw, wayland support appears incredibly broken, so I guess we can't have nice things for now. Check back later for updates to raylib that might address this (even if that just means they updated the version of glfw they ship.) In the meantime, just using X11 (current default for raylib) seems to work fine.
 
-static int azagGetDPIScale() {
-	int rounded = (int)roundf(GetWindowScaleDPI().x);
-	return AZA_MAX(rounded, 1);
+static float azagGetDPIScale() {
+	float rounded = roundf(GetWindowScaleDPI().x);
+	return azaMaxf(rounded, 1.0f);
 }
 
 static void azagHandleDPIChanges() {
-	int newDPI = azagGetDPIScale();
+	float newDPI = azagGetDPIScale();
 	if (newDPI != currentDPIScale) {
 		// TODO: Check and make sure we don't re-resize if we're dragged to maximize on a different monitor.
-		SetWindowSize(GetScreenWidth() * newDPI / currentDPIScale, GetScreenHeight() * newDPI / currentDPIScale);
+		SetWindowSize((int)((float)GetScreenWidth() * newDPI / currentDPIScale), (int)((float)GetScreenHeight() * newDPI / currentDPIScale));
 		currentDPIScale = newDPI;
 	}
 }
@@ -74,6 +74,20 @@ static inline Color GetRaylibColor(azagColor color) {
 		color.g,
 		color.b,
 		color.a,
+	};
+}
+
+static inline Vector2 GetRaylibVector2(azaVec2 myVector) {
+	return (Vector2) {
+		.x = myVector.x,
+		.y = myVector.y,
+	};
+}
+
+static inline azaVec2 azaVec2FromRaylib(Vector2 rlVector) {
+	return (azaVec2) {
+		.x = rlVector.x,
+		.y = rlVector.y,
 	};
 }
 
@@ -125,7 +139,7 @@ void azagWindowSetAlwaysOnTop(bool alwaysOnTop) {
 
 int azagWindowOpen() {
 	void azagOnGuiOpen();
-	currentDPIScale = 1;
+	currentDPIScale = 1.0f;
 	SetConfigFlags(windowConfigFlags);
 	InitWindow(windowWidth, windowHeight, windowTitle);
 	SetExitKey(-1);
@@ -155,16 +169,16 @@ void azagWindowSetCurrent(azagWindow window) {
 
 
 
-int azagGetScreenWidth() {
-	return GetScreenWidth() / currentDPIScale;
+float azagGetScreenWidth() {
+	return (float)GetScreenWidth() / currentDPIScale;
 }
 
-int azagGetScreenHeight() {
-	return GetScreenHeight() / currentDPIScale;
+float azagGetScreenHeight() {
+	return (float)GetScreenHeight() / currentDPIScale;
 }
 
-azagPoint azagGetScreenSize() {
-	return (azagPoint) {
+azaVec2 azagGetScreenSize() {
+	return (azaVec2) {
 		.x = azagGetScreenWidth(),
 		.y = azagGetScreenHeight(),
 	};
@@ -192,7 +206,9 @@ void azagClearBackground(azagColor color) {
 }
 
 void azagSetScissor(azagRect rect) {
-	BeginScissorMode(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale);
+	rect.xy = azaMulVec2Scalar(rect.xy, currentDPIScale);
+	rect.size = azaMulVec2Scalar(rect.size, currentDPIScale);
+	BeginScissorMode((int)rect.x, (int)rect.y, (int)rect.w, (int)rect.h);
 }
 
 void azagResetScissor() {
@@ -201,22 +217,30 @@ void azagResetScissor() {
 
 
 
-int azagTextWidth(const char *text, azagTextScale scale) {
-	int fontSize = azagGetFontSizeForScale(scale);
-	return MeasureText(text, fontSize);
+// This is how Raylib gets spacing internally, which we need to do in some cases
+// ^ This used to be true until we replaced all the basic calls to ones where we provide spacing, so I guess we can do whatever we want now.
+static float GetRaylibTextSpacing(float fontSize) {
+	float defaultFontSize = 10.0f;
+	float spacing = azaMaxf(fontSize, defaultFontSize) / defaultFontSize;
+	return spacing;
 }
 
-int azagTextHeight(const char *text, azagTextScale scale) {
-	int fontSize = azagGetFontSizeForScale(scale);
-	return fontSize * azaTextCountLines(text);
+float azagTextWidth(const char *text, azagTextScale scale) {
+	float fontSize = azagGetFontSizeForScale(scale);
+	float spacing = GetRaylibTextSpacing(fontSize);
+	return MeasureTextEx(GetFontDefault(), text, fontSize, spacing).x;
 }
 
-azagPoint azagTextSize(const char *text, azagTextScale scale) {
-	int fontSize = azagGetFontSizeForScale(scale);
-	return (azagPoint) {
-		.x = MeasureText(text, fontSize),
-		.y = fontSize * azaTextCountLines(text),
-	};
+float azagTextHeight(const char *text, azagTextScale scale) {
+	float fontSize = azagGetFontSizeForScale(scale);
+	return fontSize * (float)azaTextCountLines(text);
+}
+
+azaVec2 azagTextSize(const char *text, azagTextScale scale) {
+	float fontSize = azagGetFontSizeForScale(scale);
+	float spacing = GetRaylibTextSpacing(fontSize);
+	azaVec2 result = azaVec2FromRaylib(MeasureTextEx(GetFontDefault(), text, fontSize, spacing));
+	return result;
 }
 
 
@@ -225,39 +249,101 @@ azagPoint azagTextSize(const char *text, azagTextScale scale) {
 
 
 
-void azagDrawText(const char *text, azagPoint position, azagTextScale textScale, azagColor color) {
-	int fontSize = azagGetFontSizeForScale(textScale);
-	DrawText(text, position.x * currentDPIScale, position.y * currentDPIScale, fontSize * currentDPIScale, GetRaylibColor(color));
+azagCharacterAdvanceX azagGetCharacterAdvanceX(const char *text, azagTextScale scale) {
+	// We use MeasureTextEx as a reference for how Raylib advances per-character and extract that same behavior
+	Font font = GetFontDefault();
+	int codepointSize = 0;
+	int codepoint = GetCodepointNext(text, &codepointSize);
+	int index = GetGlyphIndex(font, codepoint);
+	float fontSize = (float)azagGetFontSizeForScale(scale);
+	float scaleFactor = fontSize/(float)font.baseSize;
+	float spacing = GetRaylibTextSpacing(fontSize);
+	azagCharacterAdvanceX result = {
+		.characterBytes = codepointSize,
+		.advance = spacing,
+		.width = 0.0f,
+	};
+	if (codepoint != '\n') {
+		result.width = (font.recs[index].width + (float)font.glyphs[index].offsetX) * scaleFactor;
+		if (font.glyphs[index].advanceX > 0) {
+			result.advance = ((float)font.glyphs[index].advanceX) * scaleFactor + spacing;
+		} else {
+			result.advance = result.width + spacing;
+		}
+	}
+	return result;
 }
 
-void azagDrawLine(azagPoint posStart, azagPoint posEnd, azagColor color) {
-	DrawLine(posStart.x * currentDPIScale, posStart.y * currentDPIScale, posEnd.x * currentDPIScale, posEnd.y * currentDPIScale, GetRaylibColor(color));
+void azagDrawText(const char *text, azaVec2 position, azagTextScale textScale, azagColor color) {
+	Font font = GetFontDefault();
+	float fontSize = azagGetFontSizeForScale(textScale) * currentDPIScale;
+	float spacing = GetRaylibTextSpacing(fontSize);
+	// round position because Raylib's default font looks horrible if you don't
+	position = (azaVec2) {
+		.x = roundf(position.x * currentDPIScale),
+		.y = roundf(position.y * currentDPIScale),
+	};
+	Vector2 rlPos = GetRaylibVector2(position);
+	DrawTextEx(font, text, rlPos, fontSize, spacing, GetRaylibColor(color));
+}
+
+void azagDrawTextRotated(const char *text, azaVec2 position, azagTextScale textScale, azagColor color, float rotationDegrees, azaVec2 origin) {
+	Font font = GetFontDefault();
+	float fontSize = azagGetFontSizeForScale(textScale) * currentDPIScale;
+	float spacing = GetRaylibTextSpacing(fontSize);
+	// round position because Raylib's default font looks horrible if you don't
+	position = (azaVec2) {
+		.x = roundf(position.x * currentDPIScale),
+		.y = roundf(position.y * currentDPIScale),
+	};
+	Vector2 rlPos = GetRaylibVector2(position);
+	azaVec2 textSize = azaVec2FromRaylib(MeasureTextEx(GetFontDefault(), text, fontSize, spacing));
+	// textSize = azaMulVec2Scalar(textSize, currentDPIScale);
+	Vector2 rlOrigin = GetRaylibVector2(azaMulVec2(origin, textSize));
+	DrawTextPro(font, text, rlPos, rlOrigin, rotationDegrees, fontSize, spacing, GetRaylibColor(color));
+}
+
+void azagDrawLineThickness(azaVec2 posStart, azaVec2 posEnd, float lineThickness, azagColor color) {
+	posStart = azaMulVec2Scalar(posStart, currentDPIScale);
+	posEnd = azaMulVec2Scalar(posEnd, currentDPIScale);
+	lineThickness = azaMaxf(1.0f, lineThickness * currentDPIScale);
+	DrawLineEx(GetRaylibVector2(posStart), GetRaylibVector2(posEnd), lineThickness, GetRaylibColor(color));
 }
 
 void azagDrawRect(azagRect rect, azagColor color) {
-	DrawRectangle(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale, GetRaylibColor(color));
+	rect.xy = azaMulVec2Scalar(rect.xy, currentDPIScale);
+	rect.size = azaMulVec2Scalar(rect.size, currentDPIScale);
+	DrawRectangleV(GetRaylibVector2(rect.xy), GetRaylibVector2(rect.size), GetRaylibColor(color));
 }
 
-void azagDrawRectOutline(azagRect rect, azagColor color) {
-	DrawRectangleLines(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale, GetRaylibColor(color));
+void azagDrawRectOutlineThickness(azagRect rect, float lineThickness, azagColor color) {
+	Rectangle rlRect = {
+		.x = rect.x * currentDPIScale,
+		.y = rect.y * currentDPIScale,
+		.width = rect.w * currentDPIScale,
+		.height = rect.h * currentDPIScale,
+	};
+	lineThickness = azaMaxf(1.0f, lineThickness * currentDPIScale);
+	DrawRectangleLinesEx(rlRect, lineThickness, GetRaylibColor(color));
 }
 
 void azagDrawRectGradient(azagRect rect, azagColor topLeft, azagColor bottomLeft, azagColor topRight, azagColor bottomRight) {
 	Rectangle rec = {
-		(float)rect.x,
-		(float)rect.y,
-		(float)rect.w,
-		(float)rect.h,
+		.x = rect.x * currentDPIScale,
+		.y = rect.y * currentDPIScale,
+		.width = rect.w * currentDPIScale,
+		.height = rect.h * currentDPIScale,
 	};
-	DrawRectangleGradientEx(rec, GetRaylibColor(topLeft), GetRaylibColor(bottomLeft), GetRaylibColor(topRight), GetRaylibColor(bottomRight));
+	// DrawRectangleGradientEx has incorrect parameter names, so we pass them in according to function, not name.
+	DrawRectangleGradientEx(rec, GetRaylibColor(topLeft), GetRaylibColor(bottomLeft), GetRaylibColor(bottomRight), GetRaylibColor(topRight));
 }
 
 void azagDrawRectGradientV(azagRect rect, azagColor top, azagColor bottom) {
-	DrawRectangleGradientV(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale, GetRaylibColor(top), GetRaylibColor(bottom));
+	azagDrawRectGradient(rect, top, bottom, top, bottom);
 }
 
 void azagDrawRectGradientH(azagRect rect, azagColor left, azagColor right) {
-	DrawRectangleGradientH(rect.x * currentDPIScale, rect.y * currentDPIScale, rect.w * currentDPIScale, rect.h * currentDPIScale, GetRaylibColor(left), GetRaylibColor(right));
+	azagDrawRectGradient(rect, left, left, right, right);
 }
 
 
@@ -270,9 +356,9 @@ static inline int RaylibMouseButton(azagMouseButton button) {
 	return (int)button;
 }
 
-azagPoint azagMousePosition() {
+azaVec2 azagMousePosition() {
 	Vector2 mouse = GetMousePosition();
-	return (azagPoint) { (int)mouse.x / currentDPIScale, (int)mouse.y / currentDPIScale };
+	return (azaVec2) { mouse.x / currentDPIScale, mouse.y / currentDPIScale };
 }
 
 float azagMouseWheelV() {

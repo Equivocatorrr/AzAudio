@@ -25,8 +25,8 @@ const azaDSP azaMonitorSpectrumHeader = {
 	.guiMetadata = {
 		.name             = "Spectrum Monitor",
 		.selected         = 0,
-		.drawTargetWidth  = 0, // 0 means user-resizeable
-		.drawCurrentWidth = 250, // Default size
+		.drawTargetWidth  = 0.0f, // 0 means user-resizeable
+		.drawCurrentWidth = 250.0f, // Default size
 	},
 	.funcs = {
 		.fp_getSpecs = NULL,
@@ -305,7 +305,7 @@ static const azagColor colorDBTickUnity = { 100,  70,  50, 128 };
 
 // static const azagColor colorControl = { 10, 15, 20, 255 };
 // static const azagColor colorControlHighlight = { 50, 70, 100, 255 };
-static const int windowControlWidth = 45;
+static const float windowControlWidth = 45.0f;
 static const int maxWindow = 8192;
 static const int minWindow = 64;
 static const int maxSmoothing = 63;
@@ -315,27 +315,27 @@ static const int maxDynamicRange = 240;
 static const int minDynamicRange = -240;
 
 
-static int azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, uint32_t width, uint32_t i) {
+static float azaMonitorSpectrumBarXFromIndex(azaMonitorSpectrum *data, float width, uint32_t i) {
 	// float nyquist = (float)data->samplerate / 2.0f;
 	// float baseFreq = (float)data->samplerate / (float)data->config.window;
 	uint32_t window = (data->config.window >> 1)+1;
 	float baseLog = log2f((float)window);
 	if (i) {
-		return (int)roundf((float)width * (log2f(((float)i + 0.75f) / (float)window) + baseLog) / baseLog);
+		return width * (log2f(((float)i + 0.75f) / (float)window) + baseLog) / baseLog;
 	} else {
-		return 0;
+		return 0.0f;
 	}
 }
 
-static int azaMonitorSpectrumBarXFromFreq(azaMonitorSpectrum *data, uint32_t width, float freq) {
+static float azaMonitorSpectrumBarXFromFreq(azaMonitorSpectrum *data, float width, float freq) {
 	float nyquist = (float)data->samplerate / 2.0f;
 	float baseFreq = (float)data->samplerate / (float)data->config.window;
 	uint32_t window = (data->config.window >> 1)+1;
 	float baseLog = log2f((float)window);
 	if (freq >= baseFreq && freq <= nyquist) {
-		return (int)roundf((float)width * (log2f(0.75f / (float)window + freq / nyquist) + baseLog) / baseLog);
+		return width * (log2f(0.75f / (float)window + freq / nyquist) + baseLog) / baseLog;
 	} else {
-		return 0;
+		return 0.0f;
 	}
 }
 
@@ -348,7 +348,7 @@ static int azagDrawSwitch(azagRect bounds, const char *label, const char *toolti
 	azagDrawRect(bounds, mouseover ? colorBGHighlight : colorBG);
 	azagDrawTextMargin(label, bounds.xy, AZAG_TEXT_SCALE_TEXT, colorText);
 	if (mouseover) {
-		azagTooltipAdd(tooltip, (azagPoint) {bounds.x + bounds.w, bounds.y + bounds.h/2}, 0.0f, 0.5f);
+		azagTooltipAdd(tooltip, (azaVec2) {bounds.x + bounds.w, bounds.y + bounds.h/2}, (azaVec2) { 0.0f, 0.5f });
 		result += (int)azagMouseWheelV();
 		result += (int)azagMousePressed(AZAG_MOUSE_BUTTON_LEFT);
 		result -= (int)azagMousePressed(AZAG_MOUSE_BUTTON_RIGHT);
@@ -462,9 +462,9 @@ void azagDrawMonitorSpectrum(void *dsp, azagRect bounds) {
 		float magnitude = data->outputBuffer[i];
 		// float phase = data->outputBuffer[i + data->config.window] / AZA_TAU + 0.5f;
 		float magDB = aza_amp_to_dbf(magnitude);
-		int yOffset = azagDBToYOffsetClamped((float)data->config.ceiling - magDB, spectrumRect.h, 0, (float)(data->config.ceiling - data->config.floor));
+		float yOffset = azagDBToYOffsetClamped((float)data->config.ceiling - magDB, spectrumRect.h, 0, (float)(data->config.ceiling - data->config.floor));
 		bar.x = azaMonitorSpectrumBarXFromIndex(data, spectrumRect.w-1, i);
-		int right = azaMonitorSpectrumBarXFromIndex(data, spectrumRect.w-1, i+1);
+		float right = azaMonitorSpectrumBarXFromIndex(data, spectrumRect.w-1, i+1);
 		bar.w = AZA_MAX(right - bar.x, 1);
 		bar.y = yOffset;
 		bar.h = spectrumRect.h - bar.y;
@@ -476,7 +476,7 @@ void azagDrawMonitorSpectrum(void *dsp, azagRect bounds) {
 #if AZA_MONITOR_SPECTRUM_DEBUG_FREQUENCY_MARKS
 		float freq = baseFreq * i;
 		if (freq / lastFreq >= 2.0f) {
-			azagDrawLine(bar.x, spectrumRect.y, bar.x, spectrumRect.y + spectrumRect.h + textMargin, (Color) {255,0,0,64});
+			azagDrawLine((azaVec2) { bar.x, spectrumRect.y }, (azaVec2) { bar.x, spectrumRect.y + spectrumRect.h + azagThemeCurrent.marginText.y }, (azagColor) { 255, 0, 0, 64 });
 			if (bar.x - lastX >= lastWidth+10) {
 				int intFreq = (int)roundf(freq);
 				const char *str;
@@ -485,11 +485,11 @@ void azagDrawMonitorSpectrum(void *dsp, azagRect bounds) {
 				} else {
 					str = azaTextFormat("%d", intFreq);
 				}
-				int width = azagTextWidth(str, AZAG_TEXT_SCALE_TEXT);
-				int x = bar.x-width/2;
+				float width = azagTextWidth(str, AZAG_TEXT_SCALE_TEXT);
+				float x = bar.x-width/2;
 				x = AZA_MAX(spectrumRect.x, x);
 				x = AZA_MIN(x, spectrumRect.x + spectrumRect.w - width);
-				azagDrawText(str, x, spectrumRect.y + spectrumRect.h + margin + textMargin, 10, (Color) {255, 0, 0, 64});
+				azagDrawText(str, (azaVec2) { x, spectrumRect.y + spectrumRect.h + azagThemeCurrent.margin.y + azagThemeCurrent.marginText.y }, 10, (azagColor) { 255, 0, 0, 64 });
 				lastWidth = width;
 				lastX = x;
 			}
@@ -508,14 +508,14 @@ void azagDrawMonitorSpectrum(void *dsp, azagRect bounds) {
 		16000, 18000, 20000, 22000, 24000,
 		48000, 96000,
 	};
-	int xPrev[2] = {0};
+	float xPrev[2] = {0};
 	for (uint32_t i = 0; i < sizeof(freqTicks) / sizeof(freqTicks[0]); i++) {
 		uint32_t freq = freqTicks[i];
 		if (freq > data->samplerate/2) break;
 		float fFreq = (float)freq;
 		if (fFreq < baseFreq) continue;
 
-		int x = azaMonitorSpectrumBarXFromFreq(data, spectrumRect.w-1, fFreq);
+		float x = azaMonitorSpectrumBarXFromFreq(data, spectrumRect.w-1, fFreq);
 		x += spectrumRect.x;
 		const char *str;
 		if (freq % 1000 == 0) {
@@ -523,12 +523,12 @@ void azagDrawMonitorSpectrum(void *dsp, azagRect bounds) {
 		} else {
 			str = azaTextFormat("%d", freq);
 		}
-		int width = azagTextWidth(str, AZAG_TEXT_SCALE_TEXT);
-		int textX = x - width/2;
-		textX = AZA_MAX(spectrumRect.x, textX);
-		textX = AZA_MIN(textX, spectrumRect.x + spectrumRect.w - width);
+		float width = azagTextWidth(str, AZAG_TEXT_SCALE_TEXT);
+		float textX = x - width / 2.0f;
+		textX = azaMaxf(spectrumRect.x, textX);
+		textX = azaMinf(textX, spectrumRect.x + spectrumRect.w - width);
 		int line = 0;
-		int lineOffset = 0;
+		float lineOffset = 0;
 		if (textX - xPrev[0] >= azagThemeCurrent.margin.x) {
 			line = 1;
 			lineOffset = azagThemeCurrent.marginText.y;
@@ -537,11 +537,11 @@ void azagDrawMonitorSpectrum(void *dsp, azagRect bounds) {
 			lineOffset = azagThemeCurrent.marginText.y + azagTextHeight("A", AZAG_TEXT_SCALE_TEXT);
 		}
 
-		azagDrawLine((azagPoint) {x, spectrumRect.y}, (azagPoint) {x, spectrumRect.y + spectrumRect.h + lineOffset}, (azagColor) {0,0,0,128});
+		azagDrawLine((azaVec2) {x, spectrumRect.y}, (azaVec2) {x, spectrumRect.y + spectrumRect.h + lineOffset}, (azagColor) {0,0,0,128});
 		if (line) {
-			azagDrawText(str, (azagPoint) {textX, spectrumRect.y + spectrumRect.h + azagThemeCurrent.margin.y + lineOffset}, AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.colorText);
+			azagDrawText(str, (azaVec2) {textX, spectrumRect.y + spectrumRect.h + azagThemeCurrent.margin.y + lineOffset}, AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.colorText);
 			xPrev[line-1] = textX + width;
 		}
 	}
-	azagDrawDBTicks(spectrumRect, data->config.ceiling - data->config.floor, data->config.ceiling, colorDBTick, colorDBTickUnity);
+	azagDrawDBTicks(spectrumRect, (float)(data->config.ceiling - data->config.floor), (float)data->config.ceiling, colorDBTick, colorDBTickUnity);
 }

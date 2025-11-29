@@ -85,8 +85,8 @@ static const azaDSP SynthHeader = {
 	.guiMetadata = {
 		.name             = "Synth",
 		.selected         = 0,
-		.drawTargetWidth  = 0,
-		.drawCurrentWidth = 0,
+		.drawTargetWidth  = 0.0f,
+		.drawCurrentWidth = 0.0f,
 	},
 	.funcs = {
 		.fp_getSpecs = NULL,

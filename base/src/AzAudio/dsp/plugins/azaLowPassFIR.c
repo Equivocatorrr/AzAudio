@@ -25,8 +25,8 @@ const azaDSP azaLowPassFIRHeader = {
 	.guiMetadata = {
 		.name             = "LowPassFIR",
 		.selected         = 0,
-		.drawTargetWidth  = 0,
-		.drawCurrentWidth = 0,
+		.drawTargetWidth  = 0.0f,
+		.drawCurrentWidth = 0.0f,
 	},
 	.funcs = {
 		.fp_getSpecs = azaLowPassFIRGetSpecs,
@@ -188,13 +188,13 @@ azaDSPSpecs azaLowPassFIRGetSpecs(void *dsp, uint32_t samplerate) {
 
 
 
-static const int meterDBRange = 48;
-static const int meterDBHeadroom = 12;
+static const float meterDBRange = 48.0f;
+static const float meterDBHeadroom = 12.0f;
 
 void azagDrawLowPassFIR(void *dsp, azagRect bounds) {
 	azaLowPassFIR *data = dsp;
-	int boundsStartX = bounds.x;
-	int usedWidth;
+	float boundsStartX = bounds.x;
+	float usedWidth;
 	usedWidth = azagDrawMeters(&data->metersInput, bounds, meterDBRange, meterDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 
@@ -211,6 +211,6 @@ void azagDrawLowPassFIR(void *dsp, azagRect bounds) {
 
 	usedWidth = azagDrawMeters(&data->metersOutput, bounds, meterDBRange, meterDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
-	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	float totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
 	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

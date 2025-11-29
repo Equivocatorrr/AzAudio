@@ -204,15 +204,15 @@ error:
 
 
 
-static const int faderDBRange = 48;
-static const int faderDBHeadroom = 12;
+static const float faderDBRange = 48.0f;
+static const float faderDBHeadroom = 12.0f;
 
 void azagDrawDelay(void *dsp, azagRect bounds) {
 	azaDelay *data = dsp;
 	azagRect meterBounds = bounds;
 	azagRectCutOutFaderMuteButton(&meterBounds);
-	int boundsStartX = bounds.x;
-	int usedWidth = azagDrawMeters(&data->metersInput, meterBounds, faderDBRange, faderDBHeadroom);
+	float boundsStartX = bounds.x;
+	float usedWidth = azagDrawMeters(&data->metersInput, meterBounds, faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 
 	usedWidth = azagDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, false, "Wet Gain", faderDBRange, faderDBHeadroom);
@@ -239,6 +239,6 @@ void azagDrawDelay(void *dsp, azagRect bounds) {
 
 	usedWidth = azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
-	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	float totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
 	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

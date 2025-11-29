@@ -24,8 +24,8 @@ const azaDSP azaLookaheadLimiterHeader = {
 	.guiMetadata = {
 		.name             = "Lookahead Limiter",
 		.selected         = 0,
-		.drawTargetWidth  = 0,
-		.drawCurrentWidth = 0,
+		.drawTargetWidth  = 0.0f,
+		.drawCurrentWidth = 0.0f,
 	},
 	.funcs = {
 		.fp_getSpecs = azaLookaheadLimiterGetSpecs,
@@ -179,16 +179,16 @@ azaDSPSpecs azaLookaheadLimiterGetSpecs(void *dsp, uint32_t samplerate) {
 
 
 
-static const int faderDBRange = 48;
-static const int faderDBHeadroom = 12;
-static const int attenuationMeterDBRange = 12;
+static const float faderDBRange = 48.0f;
+static const float faderDBHeadroom = 12.0f;
+static const float attenuationMeterDBRange = 12.0f;
 
 void azagDrawLookaheadLimiter(void *dsp, azagRect bounds) {
 	azaLookaheadLimiter *data = dsp;
-	int boundsStartX = bounds.x;
-	int faderWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);
+	float boundsStartX = bounds.x;
+	float faderWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, faderWidth);
-	int metersWidth = azagDrawMeters(&data->metersInput, bounds, faderDBRange, faderDBHeadroom);
+	float metersWidth = azagDrawMeters(&data->metersInput, bounds, faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, metersWidth);
 
 	azagRect attenuationRect = {
@@ -200,11 +200,12 @@ void azagDrawLookaheadLimiter(void *dsp, azagRect bounds) {
 	azagRectShrinkLeftMargin(&bounds, attenuationRect.w);
 	bool attenuationMouseover = azagMouseInRect(attenuationRect);
 	if (attenuationMouseover) {
-		azagTooltipAdd("Attenuation", (azagPoint) {attenuationRect.x + attenuationRect.w/2, attenuationRect.y - azagThemeCurrent.margin.y}, 0.5f, 1.0f);
+		azagTooltipAdd("Attenuation", (azaVec2) {attenuationRect.x + attenuationRect.w/2, attenuationRect.y - azagThemeCurrent.margin.y}, (azaVec2) { 0.5f, 1.0f
+	});
 	}
 	azagDrawMeterBackground(attenuationRect, attenuationMeterDBRange, 0);
 	azagRectShrinkAllXY(&attenuationRect, azagThemeCurrent.margin);
-	int yOffset;
+	float yOffset;
 	yOffset = azagDBToYOffsetClamped(-aza_amp_to_dbf(data->minAmpShort), attenuationRect.h, 0, (float)attenuationMeterDBRange);
 	azagDrawRect((azagRect) {
 		attenuationRect.x,
@@ -215,14 +216,14 @@ void azagDrawLookaheadLimiter(void *dsp, azagRect bounds) {
 	float attenuationPeakDB = aza_amp_to_dbf(data->minAmp);
 	yOffset = azagDBToYOffsetClamped(-attenuationPeakDB, attenuationRect.h, 0, (float)attenuationMeterDBRange);
 	if (attenuationMouseover) {
-		azagTooltipAdd(azaTextFormat("%+.1fdb", attenuationPeakDB), (azagPoint) {
+		azagTooltipAdd(azaTextFormat("%+.1fdb", attenuationPeakDB), (azaVec2) {
 			attenuationRect.x + attenuationRect.w + azagThemeCurrent.margin.x,
 			attenuationRect.y + yOffset
-		}, 0.0f, 0.5f);
+		}, (azaVec2) { 0.0f, 0.5f });
 	}
 	azagDrawLine(
-		(azagPoint) {attenuationRect.x,                     attenuationRect.y + yOffset},
-		(azagPoint) {attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset},
+		(azaVec2) {attenuationRect.x,                     attenuationRect.y + yOffset},
+		(azaVec2) {attenuationRect.x + attenuationRect.w, attenuationRect.y + yOffset},
 		azagThemeCurrent.colorAttenuation
 	);
 	if (azagMousePressedInRect(AZAG_MOUSE_BUTTON_LEFT, attenuationRect)) {
@@ -234,6 +235,6 @@ void azagDrawLookaheadLimiter(void *dsp, azagRect bounds) {
 	azagRectShrinkLeftMargin(&bounds, faderWidth);
 	azagDrawMeters(&data->metersOutput, bounds, faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, metersWidth);
-	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	float totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
 	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

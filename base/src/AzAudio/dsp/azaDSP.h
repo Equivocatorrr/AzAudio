@@ -71,11 +71,11 @@ typedef struct azaDSPProcessMetadata {
 static_assert(sizeof(azaDSPProcessMetadata) == 16, "Please update the expected size of azaDSPProcessMetadata and remember to reserve padding explicitly.");
 
 typedef struct azaDSPGUIMetadata {
-	char name[32]; // Null-terminated string. Unused chars should be zeroed.
+	char name[30]; // Null-terminated string. Unused chars should be zeroed.
 	uint16_t selected; // Bitset for being selected in the mixer GUI (each bit represents a different view layer).
-	uint16_t drawTargetWidth; // How wide the plugin wants to be in the Mixer GUI. fp_draw should set this value to the used width. If left at 0, it will be resizeable by the user.
-	uint16_t drawCurrentWidth; // How wide the plugin currently is in the Mixer GUI. This will ease towards drawWidth automatically.
-	aza_byte _reserved[10];
+	float drawTargetWidth; // How wide the plugin wants to be in the Mixer GUI. fp_draw should set this value to the used width. If left at 0, it will be resizeable by the user.
+	float drawCurrentWidth; // How wide the plugin currently is in the Mixer GUI. This will ease towards drawWidth automatically.
+	aza_byte _reserved[8];
 } azaDSPGUIMetadata;
 static_assert(sizeof(azaDSPGUIMetadata) == 48, "Please update the expected size of azaDSPGUIMetadata and remember to reserve padding explicitly.");
 

@@ -25,8 +25,8 @@ const azaDSP azaFilterHeader = {
 	.guiMetadata = {
 		.name             = "Filter",
 		.selected         = 0,
-		.drawTargetWidth  = 0,
-		.drawCurrentWidth = 0,
+		.drawTargetWidth  = 0.0f,
+		.drawCurrentWidth = 0.0f,
 	},
 	.funcs = {
 		.fp_getSpecs = NULL,
@@ -111,7 +111,7 @@ int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 	float amountWet = azaClampf(1.0f - data->config.dryMix, 0.0f, 1.0f) * aza_db_to_ampf(data->config.gainWet);
 	float amountDry = azaClampf(data->config.dryMix, 0.0f, 1.0f);
 
-	if (data->dsp.guiMetadata.selected) {
+	if (azaMixerGUIDSPIsSelected(dsp)) {
 		azaMetersUpdate(&data->metersInput, src, 1.0f);
 	}
 
@@ -179,11 +179,11 @@ int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 
 
 
-static const int filterKindRectWidth = 80;
+static const float filterKindRectWidth = 80.0f;
 
 void azagDrawFilter(void *dsp, azagRect bounds) {
 	azaFilter *data = dsp;
-	int boundsStartX = bounds.x;
+	float boundsStartX = bounds.x;
 	azagRect kindRect = bounds;
 	kindRect.w = filterKindRectWidth;
 	kindRect.h = azagTextHeightMargin("A", AZAG_TEXT_SCALE_TEXT);
@@ -221,10 +221,10 @@ void azagDrawFilter(void *dsp, azagRect bounds) {
 		azagDrawTextMargin(azaTextFormat("%udB/oct", poles*6), kindRect.xy, AZAG_TEXT_SCALE_TEXT, colorText);
 	}
 	azagRectShrinkLeftMargin(&bounds, kindRect.w);
-	int usedWidth = azagDrawSliderFloatLog(bounds, &data->config.frequency, 5.0f, 24000.0f, 0.1f, 500.0f, "Cutoff Frequency", "%.1fHz");
+	float usedWidth = azagDrawSliderFloatLog(bounds, &data->config.frequency, 5.0f, 24000.0f, 0.1f, 500.0f, "Cutoff Frequency", "%.1fHz");
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
 	usedWidth = azagDrawSliderFloat(bounds, &data->config.dryMix, 0.0f, 1.0f, 0.1f, 0.0f, "Dry Mix", "%.2f");
 	azagRectShrinkLeftMargin(&bounds, usedWidth);
-	int totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
+	float totalWidth = bounds.x - boundsStartX + azagThemeCurrent.margin.x;
 	data->dsp.guiMetadata.drawTargetWidth = totalWidth;
 }

@@ -29,15 +29,17 @@
 
 static azaMixer *currentMixer = NULL;
 static int dspSelectionLayer = 0;
-static int dspSelectionScroll = 0;
+static float dspSelectionScroll = 0;
 static azagWindow mixerWindow = AZAG_WINDOW_INVALID;
 
-static int scrollTracksX = 0;
+static float scrollTracksX = 0.0f;
+// Allows us to target a specific track to scroll towards
+static int trackScrollTarget = -1;
 
 typedef struct azaTrackGUIMetadata {
-	int scrollFXY;
-	int scrollSendsX;
-	int width;
+	float scrollFXY;
+	float scrollSendsX;
+	float width;
 } azaTrackGUIMetadata;
 
 static struct {
@@ -102,14 +104,16 @@ static void azagContextMenuTrack() {
 		// TODO: Come up with a better auto name
 		azaTrackSetName(track, azaTextFormat("Track %d", contextMenuTrackIndex));
 		AZA_DA_INSERT(azaTrackGUIMetadatas, contextMenuTrackIndex+1, (azaTrackGUIMetadata){0}, do{}while(0));
+		// Scroll to see new track
+		trackScrollTarget = contextMenuTrackIndex+1;
 	}
 	if (doRemoveTrack) {
 		if (azagDrawContextMenuButton("Remove Track")) {
-			azagContextMenuOpen(azagContextMenuTrackRemove);
+			azagContextMenuOpenSub(azagContextMenuTrackRemove);
 		}
 	}
 	if (azagDrawContextMenuButton("Add Send")) {
-		azagContextMenuOpen(azagContextMenuSendAdd);
+		azagContextMenuOpenSub(azagContextMenuSendAdd);
 	}
 	if (doRemoveSend) {
 		if (azagDrawContextMenuButton(azaTextFormat("Remove Send to %s", contextMenuTrackSend->name))) {
@@ -170,7 +174,7 @@ static void azagContextMenuTrackFX() {
 	azagDrawContextMenuBegin(NULL);
 
 	if (azagDrawContextMenuButton("Add Plugin")) {
-		azagContextMenuOpen(azagContextMenuTrackFXAdd);
+		azagContextMenuOpenSub(azagContextMenuTrackFXAdd);
 	}
 	if (doRemovePlugin) {
 		if (azagDrawContextMenuButton(azaTextFormat("Remove %s", contextMenuTrackFXDSP->guiMetadata.name))) {
@@ -199,7 +203,7 @@ static void azagContextMenuTrackFXAdd() {
 			} else {
 				snprintf(contextMenuError, sizeof(contextMenuError), "Failed to make \"%s\": Out of memory!\n", name);
 				AZA_LOG_ERR(contextMenuError);
-				azagContextMenuOpen(azagContextMenuErrorReport);
+				azagContextMenuOpenSub(azagContextMenuErrorReport);
 			}
 		}
 	}
@@ -222,7 +226,7 @@ static void azagDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azagRect bo
 	azaTrackGUIMetadata *metadata = &azaTrackGUIMetadatas.data[metadataIndex];
 	azagRect pluginRect = bounds;
 	pluginRect.y += metadata->scrollFXY;
-	pluginRect.h = azagGetFontSizeForScale(AZAG_TEXT_SCALE_TEXT) + azagThemeCurrent.margin.y * 2;
+	pluginRect.h = azagGetFontSizeForScale(AZAG_TEXT_SCALE_TEXT) + azagThemeCurrent.margin.y * 2.0f;
 	azagRect muteRect = pluginRect;
 	azagRectShrinkRightMargin(&pluginRect, pluginRect.h);
 	azagRectShrinkLeftMargin(&muteRect, pluginRect.w);
@@ -239,19 +243,19 @@ static void azagDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azagRect bo
 		} else if (azagMouseInRect(muteRect)) {
 			azagSetMouseCursor(AZAG_MOUSE_CURSOR_POINTING_HAND);
 			if (dsp->processMetadata.error) {
-				azagTooltipAdd("Click to Clear Error", (azagPoint) {muteRect.x + muteRect.w, muteRect.y + muteRect.h/2}, 0.0f, 0.5f);
+				azagTooltipAdd("Click to Clear Error", (azaVec2) {muteRect.x + muteRect.w, muteRect.y + muteRect.h/2}, (azaVec2) { 0.0f, 0.5f });
 				if (azagMousePressed(AZAG_MOUSE_BUTTON_LEFT)) {
 					dsp->processMetadata.error = 0;
 				}
 			} else {
-				azagTooltipAdd("Bypass", (azagPoint) {muteRect.x + muteRect.w, muteRect.y + muteRect.h/2}, 0.0f, 0.5f);
+				azagTooltipAdd("Bypass", (azaVec2) {muteRect.x + muteRect.w, muteRect.y + muteRect.h/2}, (azaVec2) { 0.0f, 0.5f });
 				if (azagMousePressed(AZAG_MOUSE_BUTTON_LEFT)) {
 					dsp->header.bypass = !dsp->header.bypass;
 				}
 			}
 		}
 		azagDrawRectOutline(pluginRect, azaMixerGUIDSPIsSelected(dsp) ? azagThemeCurrent.dspChain.colorBorderSelected : azagThemeCurrent.dspChain.colorBorder);
-		azagDrawText(dsp->guiMetadata.name, azagPointAdd(pluginRect.xy, azagThemeCurrent.margin), AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.dspChain.colorText);
+		azagDrawText(dsp->guiMetadata.name, azaAddVec2(pluginRect.xy, azagThemeCurrent.margin), AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.dspChain.colorText);
 		// Bypass/error
 		if (dsp->processMetadata.error) {
 			azagDrawRect(muteRect, azagThemeCurrent.dspChain.colorError);
@@ -267,41 +271,41 @@ static void azagDrawTrackFX(azaTrack *track, uint32_t metadataIndex, azagRect bo
 	}
 	if (azagMouseInRect(bounds)) {
 		bool trackFXCanScrollDown = (pluginRect.y + pluginRect.h > bounds.y + bounds.h);
-		int scroll = (int)(azagMouseWheelV() * 8.0f);
+		float scroll = azagMouseWheelV() * 8.0f;
 		if (!trackFXCanScrollDown && scroll < 0) scroll = 0;
 		metadata->scrollFXY += scroll;
 		if (metadata->scrollFXY > 0) metadata->scrollFXY = 0;
 		trackFXCanScrollDown = false;
 	}
 	azagPopScissor();
-	if (azagMousePressedInRect(AZAG_MOUSE_BUTTON_RIGHT, bounds)) {
+	if (azagMousePressedInRectDepth(AZAG_MOUSE_BUTTON_RIGHT, bounds, AZAG_MOUSE_DEPTH_CONTEXT_MENU)) {
 		azagContextMenuSetIndexFromTrack(track);
 		contextMenuTrackFXDSP = mouseoverDSP;
 		azagContextMenuOpen(azagContextMenuTrackFX);
 	}
 }
 
-static const int trackMeterDBRange = 72;
-static const int trackMeterDBHeadroom = 12;
-static const int trackFaderDBRange = 72;
-static const int trackFaderDBHeadroom = 12;
+static const float trackMeterDBRange = 72;
+static const float trackMeterDBHeadroom = 12;
+static const float trackFaderDBRange = 72;
+static const float trackFaderDBHeadroom = 12;
 
 // returns used width
-static int azagDrawTrackControls(azaTrack *track, uint32_t metadataIndex, azagRect bounds) {
+static float azagDrawTrackControls(azaTrack *track, uint32_t metadataIndex, azagRect bounds) {
 	azaTrackGUIMetadata *metadata = &azaTrackGUIMetadatas.data[metadataIndex];
-	int takenWidth = bounds.w = metadata->width;
+	float takenWidth = bounds.w = metadata->width;
 	metadata->width = azagThemeCurrent.margin.x;
 	bool openedContextMenu = false;
-	if (azagMousePressedInRect(AZAG_MOUSE_BUTTON_RIGHT, bounds)) {
+	if (azagMousePressedInRectDepth(AZAG_MOUSE_BUTTON_RIGHT, bounds, AZAG_MOUSE_DEPTH_CONTEXT_MENU)) {
 		azagContextMenuSetIndexFromTrack(track);
 		azagContextMenuOpen(azagContextMenuTrack);
 		contextMenuTrackSend = NULL;
 		openedContextMenu = true;
 	}
 	azagDrawRectGradientV(bounds, azagThemeCurrent.track.colorControlsBGTop, azagThemeCurrent.track.colorControlsBGBot);
-	azagRectShrinkMargin(&bounds, 0);
+	azagRectShrinkMargin(&bounds, 0.0f);
 	// Fader
-	int usedWidth = azagDrawFader(bounds, &track->gain, &track->mute, false, "Track Gain", trackFaderDBRange, trackFaderDBHeadroom);
+	float usedWidth = azagDrawFader(bounds, &track->gain, &track->mute, false, "Track Gain", trackFaderDBRange, trackFaderDBHeadroom);
 	usedWidth += azagThemeCurrent.margin.x;
 	metadata->width += usedWidth;
 	azagRectShrinkLeft(&bounds, usedWidth);
@@ -342,18 +346,18 @@ static int azagDrawTrackControls(azaTrack *track, uint32_t metadataIndex, azagRe
 }
 
 // returns used width
-static int azagDrawTrack(azaTrack *track, uint32_t metadataIndex, azagRect bounds) {
+static float azagDrawTrack(azaTrack *track, uint32_t metadataIndex, azagRect bounds) {
 	azagRectShrinkAllXY(&bounds, azagThemeCurrent.margin);
-	int labelDrawHeight = azagGetFontSizeForScale(AZAG_TEXT_SCALE_TEXT) + azagThemeCurrent.marginText.y * 2;
-	int fxOffset = labelDrawHeight + azagThemeCurrent.margin.y;
-	int controlsOffset = fxOffset + azagThemeCurrent.track.fxHeight + azagThemeCurrent.margin.y*2;
+	float labelDrawHeight = azagGetFontSizeForScale(AZAG_TEXT_SCALE_TEXT) + azagThemeCurrent.marginText.y * 2.0f;
+	float fxOffset = labelDrawHeight + azagThemeCurrent.margin.y;
+	float controlsOffset = fxOffset + azagThemeCurrent.track.fxHeight + azagThemeCurrent.margin.y * 2.0f;
 	azagRect controlsRect = {
 		bounds.x,
 		bounds.y + controlsOffset,
 		bounds.w,
 		bounds.h - controlsOffset,
 	};
-	int usedWidth = azagDrawTrackControls(track, metadataIndex, controlsRect);
+	float usedWidth = azagDrawTrackControls(track, metadataIndex, controlsRect);
 	azagRect fxRect = {
 		bounds.x,
 		bounds.y + fxOffset,
@@ -368,6 +372,17 @@ static int azagDrawTrack(azaTrack *track, uint32_t metadataIndex, azagRect bound
 	};
 	azagDrawTextBox(nameRect, track->name, sizeof(track->name));
 	azagDrawTrackFX(track, metadataIndex, fxRect);
+	if (trackScrollTarget == metadataIndex) {
+		bool offLeft = fxRect.x < azagThemeCurrent.margin.x;
+		bool offRight = fxRect.x + fxRect.w > azagGetScreenWidth() - azagThemeCurrent.margin.x;
+		if (offLeft && !offRight) {
+			scrollTracksX += 5.0f;
+		} else if (offRight && !offLeft) {
+			scrollTracksX -= 5.0f;
+		} else {
+			trackScrollTarget = -1;
+		}
+	}
 	return usedWidth;
 }
 
@@ -380,25 +395,28 @@ static int azagDrawTrack(azaTrack *track, uint32_t metadataIndex, azagRect bound
 static void azagDrawMixer() {
 	// TODO: This granularity might get in the way of audio processing. Probably only lock the mutex when it matters most.
 	azaMutexLock(&currentMixer->mutex);
-	int screenWidth = azagGetScreenWidth();
-	int pluginDrawHeight = azagGetScreenHeight() - (azagThemeCurrent.track.size.y + azagThemeCurrent.scrollbar.thickness + azagThemeCurrent.margin.y);
+	float screenWidth = azagGetScreenWidth();
+	float pluginDrawHeight = azagGetScreenHeight() - (azagThemeCurrent.track.size.y + azagThemeCurrent.scrollbar.thickness + azagThemeCurrent.margin.y);
 	azagRect tracksRect = {
 		azagThemeCurrent.margin.x,
 		pluginDrawHeight,
-		screenWidth - azagThemeCurrent.margin.x*2,
+		screenWidth - azagThemeCurrent.margin.x * 2.0f,
 		azagThemeCurrent.track.size.y,
 	};
 	azagPushScissor(tracksRect);
 	tracksRect.x += scrollTracksX;
-	AZA_DA_RESERVE_COUNT(azaTrackGUIMetadatas, currentMixer->tracks.count+1, do{}while(0));
+	float totalWidth = 0.0f;
+	AZA_DA_RESERVE_COUNT(azaTrackGUIMetadatas, currentMixer->tracks.count+1,
+		/* onAllocFail: */ AZA_LOG_ERR_ONCE("Failed to allocate %u track metadatas\n", currentMixer->tracks.count+1); goto noMetadatas);
 	azaTrackGUIMetadatas.count = currentMixer->tracks.count+1;
-	int usedWidth = azagDrawTrack(&currentMixer->master, 0, tracksRect);
-	int totalWidth = usedWidth;
+	float usedWidth = azagDrawTrack(&currentMixer->master, 0, tracksRect);
+	totalWidth = usedWidth;
 	for (uint32_t i = 0; i < currentMixer->tracks.count; i++) {
 		azagRectShrinkLeft(&tracksRect, usedWidth + azagThemeCurrent.track.spacing);
 		usedWidth = azagDrawTrack(currentMixer->tracks.data[i], i+1, tracksRect);
 		totalWidth += usedWidth + azagThemeCurrent.track.spacing;
 	}
+noMetadatas:
 	azagPopScissor();
 	azagRect scrollbarRect = {
 		0,
@@ -406,76 +424,121 @@ static void azagDrawMixer() {
 		screenWidth,
 		azagThemeCurrent.scrollbar.thickness,
 	};
-	int scrollableWidth = screenWidth - (totalWidth + azagThemeCurrent.margin.x*2);
+	float scrollableWidth = screenWidth - (totalWidth + azagThemeCurrent.margin.x*2);
 	azagDrawScrollbarHorizontal(scrollbarRect, &scrollTracksX, AZA_MIN(scrollableWidth, 0), 0, -azagThemeCurrent.track.size.x / 3);
-	azagTooltipAdd(azaTextFormat("CPU: %.2f%%", currentMixer->cpuPercentSlow), (azagPoint) {screenWidth, 0}, 0.0f, 0.0f);
+	azagTooltipAdd(azaTextFormat("CPU: %.2f%%", currentMixer->cpuPercentSlow), (azaVec2) {screenWidth, 0}, (azaVec2) { 0.0f, 0.0f });
 	if (currentMixer->hasCircularRouting) {
-		azagTooltipAddError("Circular Routing Detected!!!", (azagPoint) {0, pluginDrawHeight}, 0.0f, 1.0f);
+		azagTooltipAddError("Circular Routing Detected!!!", (azaVec2) {0, pluginDrawHeight}, (azaVec2) { 0.0f, 1.0f });
 	}
 	azaMutexUnlock(&currentMixer->mutex);
 }
 
-
+static const float pluginDrawHeightDefault = 200.0f;
 
 static void azagDrawSelectedDSP() {
 	azaMutexLock(&currentMixer->mutex);
-	int pluginDrawHeight = azagGetScreenHeight() - (azagThemeCurrent.track.size.y + azagThemeCurrent.scrollbar.thickness);
+	float pluginDrawHeight = azagGetScreenHeight() - (azagThemeCurrent.track.size.y + azagThemeCurrent.scrollbar.thickness);
 	azagRect bounds = {
-		.xy = azagPointMulScalar(azagThemeCurrent.margin, 2),
+		.xy = azaMulVec2Scalar(azagThemeCurrent.margin, 2.0f),
 		azagGetScreenWidth() - azagThemeCurrent.margin.x*4,
 		pluginDrawHeight - azagThemeCurrent.margin.y*4,
 	};
 	azagPushScissor(bounds);
-	int offsetX = bounds.x + dspSelectionScroll;
+	int pluginLines = AZA_MAX(1, (int)(bounds.h * 4.0f / (3.0f * pluginDrawHeightDefault)));
+	pluginDrawHeight /= pluginLines;
+	bounds.h = pluginDrawHeight - azagThemeCurrent.margin.y*4;
+	float offsetX = bounds.x + dspSelectionScroll;
 	for (int32_t trackIndex = -1; trackIndex < (int32_t)currentMixer->tracks.count; trackIndex++) {
 		azaTrack *track = trackIndex >= 0 ? currentMixer->tracks.data[trackIndex] : &currentMixer->master;
+		bool once = true, again = false;
 		for (uint32_t fxIndex = 0; fxIndex < track->plugins.steps.count; fxIndex++) {
 			azaDSP *dsp = track->plugins.steps.data[fxIndex].dsp;
 			if (dsp->funcs.fp_draw && azaMixerGUIDSPIsSelected(dsp)) {
-				int width = dsp->guiMetadata.drawCurrentWidth + azagThemeCurrent.margin.x * 2;
+				float width = dsp->guiMetadata.drawCurrentWidth + azagThemeCurrent.margin.x * 2.0f;
+				{
+					// Check if we need to go to a new line, using a guess as to how big the header will be
+					// TODO: This could be improved to use the actual header size with a little bit of work. The guess works well enough for now though.
+					float headerWidth = azagTextHeightMargin(track->name, AZAG_TEXT_SCALE_HEADER) + azagThemeCurrent.track.spacing;
+					float right = offsetX + width + (once ? headerWidth : 0.0f);
+					if (right > (azagGetScreenWidth() - azagThemeCurrent.margin.x * 2.0f)) {
+						again = !once; // Only again if we've printed once already
+						offsetX = azagThemeCurrent.margin.x * 2.0f + dspSelectionScroll;
+						bounds.y += bounds.h + azagThemeCurrent.track.spacing;
+					}
+				}
+				char trackNameHeader[64];
+				if (again) {
+					snprintf(trackNameHeader, sizeof(trackNameHeader), "%s Cont.", track->name);
+				} else {
+					aza_strcpy(trackNameHeader, track->name, sizeof(trackNameHeader));
+				}
+				if (once || again) {
+					// Track name
+					azaVec2 pos = {
+						offsetX + azagThemeCurrent.marginText.y,
+						bounds.y + azagThemeCurrent.marginText.x,
+					};
+					float headerHeight = azagTextWidthMargin(trackNameHeader, AZAG_TEXT_SCALE_HEADER);
+					azagTextScale headerTextScale = AZAG_TEXT_SCALE_HEADER;
+					if (headerHeight > bounds.h) {
+						headerTextScale = AZAG_TEXT_SCALE_TEXT;
+						headerHeight = azagTextWidthMargin(trackNameHeader, headerTextScale);
+						if (headerHeight > bounds.h) {
+							azagTextInsertNewlinesInPlace(trackNameHeader, sizeof(trackNameHeader), headerTextScale, bounds.h - azagThemeCurrent.marginText.x*2.0f, true);
+						}
+					}
+					azagDrawTextRotated(trackNameHeader, pos, headerTextScale, azagThemeCurrent.colorText, 90.0f, (azaVec2) { 0.0f, 1.0f });
+					offsetX += azagTextHeightMargin(trackNameHeader, headerTextScale) + azagThemeCurrent.track.spacing;
+					once = false;
+					again = false;
+				}
 				bounds.x = offsetX;
 				bounds.w = width;
 				azagDrawRectGradientV(bounds, azagThemeCurrent.plugin.colorBGTop, azagThemeCurrent.plugin.colorBGBot);
 				azagDrawRectOutline(bounds, azagThemeCurrent.plugin.colorBorder);
 				azagRect pluginRect = bounds;
-				azagRectShrinkAllXY(&pluginRect, azagPointMulScalar(azagThemeCurrent.margin, 2));
+				azagRectShrinkAllXY(&pluginRect, azaMulVec2Scalar(azagThemeCurrent.margin, 2.0f));
 				azagPushScissor(pluginRect);
+				char pluginNameHeader[64];
+				azagTextScale pluginHeaderTextScale = AZAG_TEXT_SCALE_HEADER;
 				if (azagTextWidthMargin(dsp->guiMetadata.name, AZAG_TEXT_SCALE_HEADER) > pluginRect.w) {
-					azagDrawTextMargin(dsp->guiMetadata.name, pluginRect.xy, AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.plugin.colorPluginName);
+					pluginHeaderTextScale = AZAG_TEXT_SCALE_TEXT;
+					azagTextInsertNewlines(pluginNameHeader, sizeof(pluginNameHeader), dsp->guiMetadata.name, pluginHeaderTextScale, pluginRect.w - azagThemeCurrent.marginText.x*2.0f, true);
 				} else {
-					azagDrawTextMargin(dsp->guiMetadata.name, pluginRect.xy, AZAG_TEXT_SCALE_HEADER, azagThemeCurrent.plugin.colorPluginName);
+					aza_strcpy(pluginNameHeader, dsp->guiMetadata.name, sizeof(pluginNameHeader));
 				}
-				azagRectShrinkTop(&pluginRect, azagTextHeightMargin(dsp->guiMetadata.name, AZAG_TEXT_SCALE_HEADER));
+				azagDrawTextMargin(pluginNameHeader, pluginRect.xy, pluginHeaderTextScale, azagThemeCurrent.plugin.colorPluginName);
+				azagRectShrinkTopMargin(&pluginRect, azagTextHeightMargin(pluginNameHeader, pluginHeaderTextScale));
 				dsp->funcs.fp_draw(dsp, pluginRect);
 				azagPopScissor();
 				if (dsp->guiMetadata.drawTargetWidth == 0) {
 					azagRect rightScaleRect = {
-						.x = offsetX + width - 5,
+						.x = offsetX + width - 5.0f,
 						.y = bounds.y,
-						.w = 10,
+						.w = 10.0f,
 						.h = bounds.h,
 					};
-					const int dragRegion = 2000;
-					const int widthMinimum = 50;
-					bool dragging = azagMouseDragUint16(rightScaleRect, &dsp->guiMetadata.drawCurrentWidth, false, dragRegion, false, widthMinimum, widthMinimum + dragRegion, true, 0, false, 25, true);
+					const float dragRegion = 2000.0f;
+					const float widthMinimum = 50.0f;
+					bool dragging = azagMouseDragFloat(rightScaleRect, &dsp->guiMetadata.drawCurrentWidth, false, dragRegion, false, widthMinimum, (widthMinimum + dragRegion), true, 0.0f, false, 25.0f, true);
 					if (dragging || azagMouseInRect(rightScaleRect)) {
 						azagSetMouseCursor(AZAG_MOUSE_CURSOR_RESIZE_H);
 					}
 					if (dsp->guiMetadata.drawCurrentWidth <= widthMinimum) {
 						dsp->guiMetadata.drawCurrentWidth = widthMinimum;
 					}
-					const int dragWidgetHeight = bounds.h / 3;
-					int x = offsetX + width - 2;
-					const int y1 = bounds.y + bounds.h/2 - dragWidgetHeight/2;
-					azagDrawRect((azagRect) { x-1, y1-1, 5, dragWidgetHeight+2 }, azagThemeCurrent.colorBG);
-					azagDrawRect((azagRect) { x, y1, 1, dragWidgetHeight }, azagThemeCurrent.colorAttenuation);
-					x += 2;
-					azagDrawRect((azagRect) { x, y1, 1, dragWidgetHeight }, azagThemeCurrent.colorAttenuation);
+					const float dragWidgetHeight = bounds.h / 3.0f;
+					float x = offsetX + width - 2.0f;
+					const float y1 = bounds.y + bounds.h / 2.0f - dragWidgetHeight / 2.0f;
+					azagDrawRect((azagRect) { x - 1.0f, y1 - 1.0f, 5.0f, dragWidgetHeight + 2.0f }, azagThemeCurrent.colorBG);
+					azagDrawRect((azagRect) { x, y1, 1.0f, dragWidgetHeight }, azagThemeCurrent.colorAttenuation);
+					x += 2.0f;
+					azagDrawRect((azagRect) { x, y1, 1.0f, dragWidgetHeight }, azagThemeCurrent.colorAttenuation);
 				} else {
 					if (dsp->guiMetadata.drawCurrentWidth < dsp->guiMetadata.drawTargetWidth) {
-						dsp->guiMetadata.drawCurrentWidth = AZA_MIN(dsp->guiMetadata.drawTargetWidth, dsp->guiMetadata.drawCurrentWidth + 10);
+						dsp->guiMetadata.drawCurrentWidth = azaMinf(dsp->guiMetadata.drawTargetWidth, dsp->guiMetadata.drawCurrentWidth + 10.0f);
 					} else if (dsp->guiMetadata.drawCurrentWidth > dsp->guiMetadata.drawTargetWidth) {
-						dsp->guiMetadata.drawCurrentWidth = AZA_MAX(dsp->guiMetadata.drawTargetWidth, dsp->guiMetadata.drawCurrentWidth - 10);
+						dsp->guiMetadata.drawCurrentWidth = azaMaxf(dsp->guiMetadata.drawTargetWidth, dsp->guiMetadata.drawCurrentWidth - 10.0f);
 					}
 				}
 				offsetX += width + azagThemeCurrent.track.spacing; // TODO: Make a new theme entry for fx spacing
@@ -496,12 +559,11 @@ static void azagDrawSelectedDSP() {
 
 static azaThread thread;
 static bool isWindowOpen = false;
-static const int pluginDrawHeightDefault = 200;
 static bool alwaysOnTop = false;
 
 static AZA_THREAD_PROC_DEF(azaMixerGUIThreadProc, userdata) {
-	int width = AZA_MIN((azagThemeCurrent.track.size.x + azagThemeCurrent.margin.x*2) * (1 + currentMixer->tracks.count) + azagThemeCurrent.margin.x*2, 640);
-	int height = pluginDrawHeightDefault + azagThemeCurrent.track.size.y + azagThemeCurrent.scrollbar.thickness;
+	int width = AZA_MIN((int)((azagThemeCurrent.track.size.x + azagThemeCurrent.margin.x*2) * (1 + currentMixer->tracks.count) + azagThemeCurrent.margin.x*2), 640);
+	int height = (int)(pluginDrawHeightDefault + azagThemeCurrent.track.size.y + azagThemeCurrent.scrollbar.thickness);
 	mixerWindow = azagWindowCreate(width, height, "AzAudio Mixer");
 	if (mixerWindow == AZAG_WINDOW_INVALID) {
 		AZA_LOG_ERR("We couldn't create a window for the mixer!\n");

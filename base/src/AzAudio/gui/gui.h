@@ -35,25 +35,25 @@ typedef struct azagTooltipTheme {
 	- Uses the tooltipBasic theme from the current UI theme.
 	position is the screen position to draw the tooltip
 	anchorX and anchorY describe the position on the tooltip (in the range 0 to 1) that corresponds to the given screen position.
-	- an anchorX of 0.0f means the left side
-	- an anchorX of 0.5f means the middle
-	- an anchorX of 1.0f means the right side
-	- an anchorY of 0.0f means the top
-	- an anchorY of 0.5f means the middle
-	- an anchorY of 1.0f means the bottom
+	- an anchor.x of 0.0f means the left side
+	- an anchor.x of 0.5f means the middle
+	- an anchor.x of 1.0f means the right side
+	- an anchor.y of 0.0f means the top
+	- an anchor.y of 0.5f means the middle
+	- an anchor.y of 1.0f means the bottom
 	The text will be copied out, so it's OK to use temporary buffers.
 */
-void azagTooltipAdd(const char *text, azagPoint position, float anchorX, float anchorY);
+void azagTooltipAdd(const char *text, azaVec2 position, azaVec2 anchor);
 /*
 	Adds an error tooltip.
 	- Uses the tooltipError theme from the current UI theme.
 */
-void azagTooltipAddError(const char *text, azagPoint position, float anchorX, float anchorY);
+void azagTooltipAddError(const char *text, azaVec2 position, azaVec2 anchor);
 /*
 	Adds a generic tooltip.
 	- Uses the provided tooltip theme.
 */
-void azagTooltipAddThemed(const char *text, azagPoint position, float anchorX, float anchorY, azagTooltipTheme theme);
+void azagTooltipAddThemed(const char *text, azaVec2 position, azaVec2 anchor, azagTooltipTheme theme);
 
 
 
@@ -80,28 +80,49 @@ static inline bool azagMouseInRect(azagRect rect) {
 	return azagMouseInRectDepth(rect, AZAG_MOUSE_DEPTH_BASE);
 }
 
+bool azagMousePressedDepthIgnoreScissor(azagMouseButton button, azagMouseDepth depth);
+static inline bool azagMousePressedIgnoreScissor(azagMouseButton button) {
+	return azagMousePressedDepthIgnoreScissor(button, AZAG_MOUSE_DEPTH_BASE);
+}
 bool azagMousePressedDepth(azagMouseButton button, azagMouseDepth depth);
 static inline bool azagMousePressed(azagMouseButton button) {
 	return azagMousePressedDepth(button, AZAG_MOUSE_DEPTH_BASE);
 }
+
 bool azagMousePressedInRectDepth(azagMouseButton button, azagRect rect, azagMouseDepth depth);
 static inline bool azagMousePressedInRect(azagMouseButton button, azagRect rect) {
 	return azagMousePressedInRectDepth(button, rect, AZAG_MOUSE_DEPTH_BASE);
+}
+bool azagMousePressedInRectDepthIgnoreScissor(azagMouseButton button, azagRect rect, azagMouseDepth depth);
+static inline bool azagMousePressedInRectIgnoreScissor(azagMouseButton button, azagRect rect) {
+	return azagMousePressedInRectDepthIgnoreScissor(button, rect, AZAG_MOUSE_DEPTH_BASE);
 }
 
 bool azagMouseDownDepth(azagMouseButton button, azagMouseDepth depth);
 static inline bool azagMouseDown(azagMouseButton button) {
 	return azagMouseDownDepth(button, AZAG_MOUSE_DEPTH_BASE);
 }
+bool azagMouseDownDepthIgnoreScissor(azagMouseButton button, azagMouseDepth depth);
+static inline bool azagMouseDownIgnoreScissor(azagMouseButton button) {
+	return azagMouseDownDepthIgnoreScissor(button, AZAG_MOUSE_DEPTH_BASE);
+}
 
 bool azagMouseReleasedDepth(azagMouseButton button, azagMouseDepth depth);
 static inline bool azagMouseReleased(azagMouseButton button) {
 	return azagMouseReleasedDepth(button, AZAG_MOUSE_DEPTH_BASE);
 }
+bool azagMouseReleasedDepthIgnoreScissor(azagMouseButton button, azagMouseDepth depth);
+static inline bool azagMouseReleasedIgnoreScissor(azagMouseButton button) {
+	return azagMouseReleasedDepthIgnoreScissor(button, AZAG_MOUSE_DEPTH_BASE);
+}
 
 bool azagDoubleClickDepth(azagMouseDepth depth);
 static inline bool azagDoubleClick() {
 	return azagDoubleClickDepth(AZAG_MOUSE_DEPTH_BASE);
+}
+bool azagDoubleClickDepthIgnoreScissor(azagMouseDepth depth);
+static inline bool azagDoubleClickIgnoreScissor() {
+	return azagDoubleClickDepthIgnoreScissor(AZAG_MOUSE_DEPTH_BASE);
 }
 
 /*
@@ -111,7 +132,7 @@ static inline bool azagDoubleClick() {
 	out_delta will be set relative to the drag start position unless you call azaMouseCaptureResetDelta().
 	if we're capturing the mouse, returns true, else returns false and zeroes out_delta.
 */
-bool azagCaptureMouseDelta(azagRect bounds, azagPoint *out_delta, void *id);
+bool azagCaptureMouseDelta(azagRect bounds, azaVec2 *out_delta, void *id);
 
 // Resets the mouse drag origin to the current mouse position. Useful for handling the switch to and from precise dragging modes.
 void azagMouseCaptureResetDelta();
@@ -161,7 +182,10 @@ static inline bool azagIsAltReleased() {
 
 typedef void (*fp_azagContextMenu)();
 
+// Opens a new context menu at the current mouse position
 void azagContextMenuOpen(fp_azagContextMenu menu);
+// Opens a different context menu at the same position as the last one
+void azagContextMenuOpenSub(fp_azagContextMenu menu);
 void azagContextMenuClose();
 // Helper functions for implementing context menus
 void azagDrawContextMenuBegin(const char *title);
@@ -180,14 +204,14 @@ void azagContextMenuErrorReport();
 
 typedef struct azagTheme {
 	// General margins for most UI element spacing
-	azagPoint margin;
+	azaVec2 margin;
 	// Margin around text
-	azagPoint marginText;
-	int textScaleFontSize[AZAG_TEXT_SCALE_ENUM_COUNT];
+	azaVec2 marginText;
+	float textScaleFontSize[AZAG_TEXT_SCALE_ENUM_COUNT];
 	// Some generic values for plugin implementations to use
 	azagColor colorBG;
 	azagColor colorText;
-	int attenuationMeterWidth;
+	float attenuationMeterWidth;
 	azagColor colorAttenuation;
 	azagColor colorSwitch;
 	azagColor colorSwitchHighlight;
@@ -195,7 +219,7 @@ typedef struct azagTheme {
 	azagTooltipTheme tooltipBasic;
 	azagTooltipTheme tooltipError;
 	struct {
-		int minWidth;
+		float minWidth;
 		azagColor colorBGLeft;
 		azagColor colorBGRight;
 		azagColor colorHighlightLeft;
@@ -205,9 +229,9 @@ typedef struct azagTheme {
 		azagColor colorTextButton;
 	} contextMenu;
 	struct {
-		azagPoint size;
-		int fxHeight;
-		int spacing; // Spacing between tracks
+		azaVec2 size;
+		float fxHeight;
+		float spacing; // Spacing between tracks
 		azagColor colorFXBGTop;
 		azagColor colorFXBGBot;
 		azagColor colorControlsBGTop;
@@ -230,9 +254,9 @@ typedef struct azagTheme {
 		azagColor colorText;
 	} plugin;
 	struct {
-		int channelDrawWidthPeak;
-		int channelDrawWidthRMS;
-		int channelMargin;
+		float channelDrawWidthPeak;
+		float channelDrawWidthRMS;
+		float channelMargin;
 		azagColor colorBGTop;
 		azagColor colorBGBot;
 		azagColor colorDBTick;
@@ -244,8 +268,8 @@ typedef struct azagTheme {
 		azagColor colorRMSOver;
 	} meter;
 	struct {
-		int width;
-		int knobHeight;
+		float width;
+		float knobHeight;
 		azagColor colorBGTop;
 		azagColor colorBGBot;
 		azagColor colorDBTick;
@@ -257,8 +281,8 @@ typedef struct azagTheme {
 		azagColor colorMuteButton;
 	} fader;
 	struct {
-		int width;
-		int knobHeight;
+		float width;
+		float knobHeight;
 		azagColor colorBGHighlight;
 		azagColor colorBGTop;
 		azagColor colorBGBot;
@@ -275,7 +299,7 @@ typedef struct azagTheme {
 		azagColor colorCursor;
 	} textbox;
 	struct {
-		int thickness;
+		float thickness;
 		azagColor colorBGLo; // For horizontal, this is left, for vertical this is top
 		azagColor colorBGHi; // For horizontal, this is right, for vertical this is bottom
 		azagColor colorFGLo;
@@ -287,82 +311,86 @@ extern azagTheme azagThemeCurrent;
 
 void azagSetDefaultTheme();
 void azagSetTheme(const azagTheme *theme);
-int azagGetFontSizeForScale(azagTextScale scale);
+float azagGetFontSizeForScale(azagTextScale scale);
 
 
 
 // General utilities
 
 
+// Takes text in src, copying it to dst while inserting newlines to keep it within the allotted width.
+// if hyphenate is true, then it can break up English words with hyphens, else it only replaces spaces with newlines.
+// returns the new text length in bytes
+size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTextScale scale, float availableWidth, bool hyphenate);
+
+static inline size_t azagTextInsertNewlinesInPlace(char *text, size_t textSize, azagTextScale scale, float availableWidth, bool hyphenate) {
+	char *srcBuffer = alloca(textSize);
+	aza_strcpy(srcBuffer, text, textSize);
+	return azagTextInsertNewlines(text, textSize, srcBuffer, scale, availableWidth, hyphenate);
+}
 
 // Gets the width of the text including text margin
-static inline int azagTextWidthMargin(const char *text, azagTextScale scale) {
-	return azagTextWidth(text, scale) + azagThemeCurrent.marginText.x * 2;
+static inline float azagTextWidthMargin(const char *text, azagTextScale scale) {
+	return azagTextWidth(text, scale) + azagThemeCurrent.marginText.x * 2.0f;
 }
 // Gets the height of the text including text margin
-static inline int azagTextHeightMargin(const char *text, azagTextScale scale) {
-	return azagTextHeight(text, scale) + azagThemeCurrent.marginText.y * 2;
+static inline float azagTextHeightMargin(const char *text, azagTextScale scale) {
+	return azagTextHeight(text, scale) + azagThemeCurrent.marginText.y * 2.0f;
 }
 // Gets the size of the text including text margin
-static inline azagPoint azagTextSizeMargin(const char *text, azagTextScale scale) {
-	azagPoint totalMargin = azagPointAdd(azagThemeCurrent.marginText, azagThemeCurrent.marginText);
-	return azagPointAdd(azagTextSize(text, scale), totalMargin);
+static inline azaVec2 azagTextSizeMargin(const char *text, azagTextScale scale) {
+	azaVec2 totalMargin = azaAddVec2(azagThemeCurrent.marginText, azagThemeCurrent.marginText);
+	return azaAddVec2(azagTextSize(text, scale), totalMargin);
 }
 
 // Draw the text like normal, just offset by text margin
-static inline void azagDrawTextMargin(const char *text, azagPoint position, azagTextScale textScale, azagColor color) {
-	azagDrawText(text, azagPointAdd(position, azagThemeCurrent.marginText), textScale, color);
+static inline void azagDrawTextMargin(const char *text, azaVec2 position, azagTextScale textScale, azagColor color) {
+	azagDrawText(text, azaAddVec2(position, azagThemeCurrent.marginText), textScale, color);
 }
 // anchor of {0,0} means top left
-static inline void azagDrawTextAligned(const char *text, azagPoint position, azagTextScale textScale, azagColor color, float anchorX, float anchorY) {
-	azagPoint textSize = azagTextSize(text, textScale);
-	azagPoint offset = {
-		(int)((float)textSize.x * anchorX),
-		(int)((float)textSize.y * anchorY),
-	};
-	azagDrawText(text, azagPointAdd(position, offset), textScale, color);
+static inline void azagDrawTextAligned(const char *text, azaVec2 position, azagTextScale textScale, azagColor color, azaVec2 anchor) {
+	azaVec2 textSize = azagTextSize(text, textScale);
+	azaVec2 offset = azaMulVec2(textSize, anchor);
+	azagDrawText(text, azaAddVec2(position, offset), textScale, color);
 }
 // anchor of {0,0} means top left, including text margin
-static inline void azagDrawTextAlignedMargin(const char *text, azagPoint position, azagTextScale textScale, azagColor color, float anchorX, float anchorY) {
-	azagPoint textSize = azagTextSizeMargin(text, textScale);
-	azagPoint offset = {
-		(int)((float)textSize.x * anchorX),
-		(int)((float)textSize.y * anchorY),
-	};
-	azagDrawTextMargin(text, azagPointAdd(position, offset), textScale, color);
+static inline void azagDrawTextAlignedMargin(const char *text, azaVec2 position, azagTextScale textScale, azagColor color, azaVec2 anchor) {
+	azaVec2 textSize = azagTextSizeMargin(text, textScale);
+	azaVec2 offset = azaMulVec2(textSize, anchor);
+	azagDrawTextMargin(text, azaAddVec2(position, offset), textScale, color);
 }
 
 // Rect shrinking functions that add the theme's margin internally so you don't have to write it out so much.
 
-static inline void azagRectShrinkMargin(azagRect *rect, int additional) {
-	azagRectShrinkAllXY(rect, azagPointAdd(azagThemeCurrent.margin, (azagPoint) {additional, additional}));
+static inline void azagRectShrinkMargin(azagRect *rect, float additional) {
+	azagRectShrinkAllXY(rect, azaAddVec2(azagThemeCurrent.margin, (azaVec2) {additional, additional}));
 }
 
-static inline void azagRectShrinkMarginXY(azagRect *rect, azagPoint additional) {
-	azagRectShrinkAllXY(rect, azagPointAdd(azagThemeCurrent.margin, additional));
+static inline void azagRectShrinkMarginXY(azagRect *rect, azaVec2 additional) {
+	azagRectShrinkAllXY(rect, azaAddVec2(azagThemeCurrent.margin, additional));
 }
 
-static inline void azagRectShrinkMarginH(azagRect *rect, int additional) {
+static inline void azagRectShrinkMarginH(azagRect *rect, float additional) {
 	azagRectShrinkAllH(rect, azagThemeCurrent.margin.x + additional);
 }
 
-static inline void azagRectShrinkMarginV(azagRect *rect, int additional) {
+static inline void azagRectShrinkMarginV(azagRect *rect, float additional) {
 	azagRectShrinkAllV(rect, azagThemeCurrent.margin.y + additional);
 }
 
-static inline void azagRectShrinkTopMargin(azagRect *rect, int additional) {
+static inline void azagRectShrinkTopMargin(azagRect *rect, float additional) {
 	azagRectShrinkTop(rect, azagThemeCurrent.margin.y + additional);
 }
 
-static inline void azagRectShrinkBottomMargin(azagRect *rect, int additional) {
+static inline void azagRectShrinkBottomMargin(azagRect *rect, float additional) {
 	azagRectShrinkBottom(rect, azagThemeCurrent.margin.y + additional);
 }
 
-static inline void azagRectShrinkLeftMargin(azagRect *rect, int additional) {
+static inline void azagRectShrinkLeftMargin(azagRect *rect, float additional) {
 	azagRectShrinkLeft(rect, azagThemeCurrent.margin.x + additional);
 }
 
-static inline void azagRectShrinkRightMargin(azagRect *rect, int additional) {
+static inline void azagRectShrinkRightMargin(azagRect *rect, float additional) {
 	azagRectShrinkRight(rect, azagThemeCurrent.margin.x + additional);
 }
 
@@ -383,10 +411,10 @@ static inline void azagRectShrinkRightMargin(azagRect *rect, int additional) {
 	when doSnap is true, holding either control key enables snapping
 	returns true if we're dragging, meaning the value may have updated
 */
-bool azagMouseDragFloat_id(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id);
+bool azagMouseDragFloat_id(azagRect knobRect, float *value, bool inverted, float dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id);
 
 // Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
-static inline bool azagMouseDragFloat(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
+static inline bool azagMouseDragFloat(azagRect knobRect, float *value, bool inverted, float dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
 	return azagMouseDragFloat_id(knobRect, value, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
 }
 
@@ -406,10 +434,10 @@ static inline bool azagMouseDragFloat(azagRect knobRect, float *value, bool inve
 	NOTE: snapping is done in linear space, since basically the only reason snapping exists at all is to make the number pretty
 	returns true if we're dragging, meaning the value may have updated
 */
-bool azagMouseDragFloatLog_id(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id);
+bool azagMouseDragFloatLog_id(azagRect knobRect, float *value, bool inverted, float dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id);
 
 // Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
-static inline bool azagMouseDragFloatLog(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
+static inline bool azagMouseDragFloatLog(azagRect knobRect, float *value, bool inverted, float dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap) {
 	return azagMouseDragFloatLog_id(knobRect, value, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
 }
 
@@ -429,15 +457,15 @@ static inline bool azagMouseDragFloatLog(azagRect knobRect, float *value, bool i
 	id is used to determine which function call is the active one
 	returns true if we're dragging, meaning the value may have updated
 */
-bool azagMouseDragInt64_id(azagRect knobRect, int64_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap, void *id);
+bool azagMouseDragInt64_id(azagRect knobRect, int64_t *value, bool inverted, float dragRegion, bool vertical, int64_t valueMin, int64_t valueMax, bool doClamp, int64_t preciseDiv, bool doPrecise, int64_t snapInterval, bool doSnap, void *id);
 
 // Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
-static inline bool azagMouseDragInt64(azagRect knobRect, int64_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+static inline bool azagMouseDragInt64(azagRect knobRect, int64_t *value, bool inverted, float dragRegion, bool vertical, int64_t valueMin, int64_t valueMax, bool doClamp, int64_t preciseDiv, bool doPrecise, int64_t snapInterval, bool doSnap) {
 	return azagMouseDragInt64_id(knobRect, value, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
 }
 
 // Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
-static inline bool azagMouseDragInt32(azagRect knobRect, int32_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+static inline bool azagMouseDragInt32(azagRect knobRect, int32_t *value, bool inverted, float dragRegion, bool vertical, int32_t valueMin, int32_t valueMax, bool doClamp, int32_t preciseDiv, bool doPrecise, int32_t snapInterval, bool doSnap) {
 	int64_t actual = *value;
 	bool result = azagMouseDragInt64_id(knobRect, &actual, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
 	*value = (int32_t)actual;
@@ -445,7 +473,7 @@ static inline bool azagMouseDragInt32(azagRect knobRect, int32_t *value, bool in
 }
 
 // Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
-static inline bool azagMouseDragInt16(azagRect knobRect, int16_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+static inline bool azagMouseDragInt16(azagRect knobRect, int16_t *value, bool inverted, float dragRegion, bool vertical, int64_t valueMin, int64_t valueMax, bool doClamp, int64_t preciseDiv, bool doPrecise, int64_t snapInterval, bool doSnap) {
 	int64_t actual = *value;
 	bool result = azagMouseDragInt64_id(knobRect, &actual, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
 	*value = (int16_t)actual;
@@ -453,7 +481,7 @@ static inline bool azagMouseDragInt16(azagRect knobRect, int16_t *value, bool in
 }
 
 // Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
-static inline bool azagMouseDragUint32(azagRect knobRect, uint32_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+static inline bool azagMouseDragUint32(azagRect knobRect, uint32_t *value, bool inverted, float dragRegion, bool vertical, uint32_t valueMin, uint32_t valueMax, bool doClamp, uint32_t preciseDiv, bool doPrecise, uint32_t snapInterval, bool doSnap) {
 	int64_t actual = *value;
 	bool result = azagMouseDragInt64_id(knobRect, &actual, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
 	*value = (uint32_t)AZA_MAX(0, actual);
@@ -461,7 +489,7 @@ static inline bool azagMouseDragUint32(azagRect knobRect, uint32_t *value, bool 
 }
 
 // Uses value as id (only works when value is actually unique, so don't point it to something on the stack in a loop or anything like that)
-static inline bool azagMouseDragUint16(azagRect knobRect, uint16_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap) {
+static inline bool azagMouseDragUint16(azagRect knobRect, uint16_t *value, bool inverted, float dragRegion, bool vertical, uint16_t valueMin, uint16_t valueMax, bool doClamp, uint16_t preciseDiv, bool doPrecise, uint16_t snapInterval, bool doSnap) {
 	int64_t actual = *value;
 	bool result = azagMouseDragInt64_id(knobRect, &actual, inverted, dragRegion, vertical, valueMin, valueMax, doClamp, preciseDiv, doPrecise, snapInterval, doSnap, value);
 	*value = (uint16_t)AZA_MAX(0, actual);
@@ -472,16 +500,16 @@ static inline bool azagMouseDragUint16(azagRect knobRect, uint16_t *value, bool 
 	get a y offset for the given db reading, height, and dbRange spread across the height
 	cannot go beyond height
 */
-static inline int azagDBToYOffset(float db, int height, float dbRange) {
-	return (int)AZA_MIN(db * (float)height / dbRange, height);
+static inline float azagDBToYOffset(float db, float height, float dbRange) {
+	return azaMinf(db * height / dbRange, height);
 }
 /*
 	get a y offset for the given db reading, height, and dbRange spread across the height
 	cannot go beyond height, or below minY
 */
-static inline int azagDBToYOffsetClamped(float db, int height, int minY, float dbRange) {
-	int result = azagDBToYOffset(db, height, dbRange);
-	return AZA_MAX(result, minY);
+static inline float azagDBToYOffsetClamped(float db, float height, float minY, float dbRange) {
+	float result = azagDBToYOffset(db, height, dbRange);
+	return azaMaxf(result, minY);
 }
 
 
@@ -495,7 +523,7 @@ static inline int azagDBToYOffsetClamped(float db, int height, int minY, float d
 	dbRange is the total number of ticks
 	dbOffset determines which tick is considered unity
 */
-void azagDrawDBTicks(azagRect bounds, int dbRange, int dbOffset, azagColor color, azagColor colorUnity);
+void azagDrawDBTicks(azagRect bounds, float dbRange, float dbOffset, azagColor color, azagColor colorUnity);
 
 void azagRectCutOutFaderMuteButton(azagRect *rect);
 
@@ -512,7 +540,7 @@ void azagRectCutOutFaderMuteButton(azagRect *rect);
 	The actual range represented goes from dbHeadroom-dbRange to dbHeadroom from bottom to top.
 	returns used width
 */
-int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMuteButton, const char *label, int dbRange, int dbHeadroom);
+float azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMuteButton, const char *label, float dbRange, float dbHeadroom);
 
 /*
 	Logarithmic slider allowing values between min and max.
@@ -521,7 +549,7 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 	valueFormat is a printf-style format string, used for formatting the tooltip string, where the argument is *value. If NULL, defaults to "%+.1f"
 	returns used width
 */
-int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat);
+float azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat);
 /*
 	Linear slider allowing values between min and max.
 	Scrolling up adds step and scrolling down subtracts step.
@@ -529,7 +557,7 @@ int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, 
 	valueFormat is a printf-style format string, used for formatting the tooltip string, where the argument is *value. If NULL, defaults to "%+.1f"
 	returns used width
 */
-int azagDrawSliderFloat(azagRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat);
+float azagDrawSliderFloat(azagRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat);
 
 
 
@@ -538,7 +566,7 @@ void azagDrawTextBox(azagRect bounds, char *text, uint32_t textCapacity);
 
 
 
-void azagDrawScrollbarHorizontal(azagRect bounds, int *value, int min, int max, int step);
+void azagDrawScrollbarHorizontal(azagRect bounds, float *value, float min, float max, float step);
 
 
 

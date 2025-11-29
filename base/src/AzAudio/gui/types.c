@@ -7,13 +7,30 @@
 #include "gui.h"
 
 #include "../math.h"
-
+#include "AzAudio/easing.h"
 
 
 void azagRectFitOnScreen(azagRect *rect) {
-	azagPoint size = azagGetScreenSize();
-	rect->x = AZA_CLAMP(rect->x, 0, size.x - rect->w);
-	rect->y = AZA_CLAMP(rect->y, 0, size.y - rect->h);
+	// NOTE: The auto-scroll thing works for context menus, but doesn't help with tooltips in the general case.
+	//       That probably doesn't really matter though because tooltips are supposed to be small, and the auto-scroll
+	//       only applies to rather extreme cases. The important thing is that we don't crash due to the assert in azaClampf.
+	azaVec2 size = azagGetScreenSize();
+	if (rect->w <= size.x) {
+		rect->x = azaClampf(rect->x, 0.0f, size.x - rect->w);
+	} else {
+		// Auto-scroll based on mouse position
+		float overwidth = rect->w - size.x;
+		float mouseProgress = azaEaseCosineInOut(azaClampf((azagMousePosition().x / size.x - 0.25f) * 2.0f, 0.0f, 1.0f));
+		rect->x = -overwidth * mouseProgress;
+	}
+	if (rect->h <= size.y) {
+		rect->y = azaClampf(rect->y, 0.0f, size.y - rect->h);
+	} else {
+		// Auto-scroll based on mouse position
+		float overheight = rect->h - size.y;
+		float mouseProgress = azaEaseCosineInOut(azaClampf((azagMousePosition().y / size.y - 0.25f) * 2.0f, 0.0f, 1.0f));
+		rect->y = -overheight * mouseProgress;
+	}
 }
 
 

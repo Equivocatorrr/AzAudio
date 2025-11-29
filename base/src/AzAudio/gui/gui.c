@@ -18,12 +18,12 @@
 azagTheme azagThemeCurrent;
 
 static const azagTheme azagThemeDefault = {
-	.margin = { 2, 2 },
-	.marginText = { 5, 5 },
-	.textScaleFontSize = {10, 20},
+	.margin = { 2.0f, 2.0f },
+	.marginText = { 5.0f, 5.0f },
+	.textScaleFontSize = { 10.0f, 20.0f },
 	.colorBG                 = {  15,  25,  50, 255 },
 	.colorText               = { 255, 255, 255, 255 },
-	.attenuationMeterWidth   = 14,
+	.attenuationMeterWidth   = 14.0f,
 	.colorAttenuation        = {  50, 255, 150, 255 },
 	.colorSwitch             = {  20,  40,  40, 255 },
 	.colorSwitchHighlight    = {  30,  60,  60, 255 },
@@ -44,7 +44,7 @@ static const azagTheme azagThemeDefault = {
 		.colorTextShadow      = {   0,   0,   0, 255 },
 	},
 	.contextMenu = {
-		.minWidth             = 80,
+		.minWidth             = 80.0f,
 		.colorBGLeft          = {   5,  10,  15, 255 },
 		.colorBGRight         = {  10,  20,  25, 255 },
 		.colorHighlightLeft   = {  15,  25,  35, 255 },
@@ -57,9 +57,9 @@ static const azagTheme azagThemeDefault = {
 		// To let the fader db ticks be pixel-perfect, this height can be calculated from a formula:
 		// (trackMeterDBRange + trackMeterDBHeadroom) * 2 + margin.y*6 + fader.width + fxDrawHeight + spacing
 		// (72 + 12) * 2 + 2*6 + 14 + 80 + 4 = 278
-		.size                 = { 120, 278 },
-		.fxHeight             = 80,
-		.spacing              = 4,
+		.size                 = { 120.0f, 278.0f },
+		.fxHeight             = 80.0f,
+		.spacing              = 4.0f,
 		.colorFXBGTop         = {  65,  65, 120, 255 },
 		.colorFXBGBot         = {  40,  50, 110, 255 },
 		.colorControlsBGTop   = {  40,  45, 100, 255 },
@@ -82,9 +82,9 @@ static const azagTheme azagThemeDefault = {
 		.colorText            = { 255, 255, 255, 255 },
 	},
 	.meter = {
-		.channelDrawWidthPeak = 2,
-		.channelDrawWidthRMS  = 4,
-		.channelMargin        = 2,
+		.channelDrawWidthPeak = 2.0f,
+		.channelDrawWidthRMS  = 4.0f,
+		.channelMargin        = 2.0f,
 		.colorBGTop           = {  10,  25,  20, 255 },
 		.colorBGBot           = {  10,  40,  30, 255 },
 		.colorDBTick          = { 100, 200, 140, 192 },
@@ -96,8 +96,8 @@ static const azagTheme azagThemeDefault = {
 		.colorRMSOver         = { 255,   0,   0, 255 },
 	},
 	.fader = {
-		.width                = 14,
-		.knobHeight           = 12,
+		.width                = 14.0f,
+		.knobHeight           = 12.0f,
 		.colorBGTop           = {  10,  20,  30, 255 },
 		.colorBGBot           = {  10,  35,  60, 255 },
 		.colorDBTick          = { 100, 140, 200, 192 },
@@ -109,8 +109,8 @@ static const azagTheme azagThemeDefault = {
 		.colorMuteButton      = { 140,  40, 240, 255 },
 	},
 	.slider = {
-		.width                = 14,
-		.knobHeight           = 12,
+		.width                = 14.0f,
+		.knobHeight           = 12.0f,
 		.colorBGHighlight     = { 255, 255, 255,  64 },
 		.colorBGTop           = {  30,  20,  10, 255 },
 		.colorBGBot           = {  60,  35,  10, 255 },
@@ -127,7 +127,7 @@ static const azagTheme azagThemeDefault = {
 		.colorCursor          = { 200, 200, 200, 255 },
 	},
 	.scrollbar = {
-		.thickness            = 12,
+		.thickness            = 12.0f,
 		.colorBGLo            = {  10,  20,  60, 255 },
 		.colorBGHi            = {  20,  40, 100, 255 },
 		.colorFGLo            = {  45,  90, 240, 255 },
@@ -143,9 +143,9 @@ void azagSetTheme(const azagTheme *theme) {
 	azagThemeCurrent = *theme;
 }
 
-int azagGetFontSizeForScale(azagTextScale scale) {
-	assert((int)scale < AZAG_TEXT_SCALE_ENUM_COUNT);
-	int fontSize = azagThemeCurrent.textScaleFontSize[scale];
+float azagGetFontSizeForScale(azagTextScale scale) {
+	assert((uint32_t)scale < AZAG_TEXT_SCALE_ENUM_COUNT);
+	float fontSize = azagThemeCurrent.textScaleFontSize[scale];
 	return fontSize;
 }
 
@@ -156,7 +156,7 @@ int azagGetFontSizeForScale(azagTextScale scale) {
 
 
 typedef struct azagTooltip {
-	azagPoint position;
+	azaVec2 position;
 	azagTooltipTheme theme;
 } azagTooltip;
 
@@ -176,40 +176,37 @@ static void azagTooltipsReset() {
 	tooltips.count = 0;
 }
 
-void azagTooltipAddThemed(const char *text, azagPoint position, float anchorX, float anchorY, azagTooltipTheme theme) {
+void azagTooltipAddThemed(const char *text, azaVec2 position, azaVec2 anchor, azagTooltipTheme theme) {
 	assert(text);
 	assert(tooltips.bufferCount < sizeof(tooltips.buffer));
 	assert(tooltips.count < sizeof(tooltips.tooltips) / sizeof(*tooltips.tooltips));
 	uint32_t count = (uint32_t)strlen(text) + 1;
 	memcpy(tooltips.buffer + tooltips.bufferCount, text, count);
 	tooltips.bufferCount += count;
-	azagPoint size = azagTextSizeMargin(text, AZAG_TEXT_SCALE_TEXT);
+	azaVec2 size = azagTextSizeMargin(text, AZAG_TEXT_SCALE_TEXT);
 	tooltips.tooltips[tooltips.count] = (azagTooltip) {
-		.position = azagPointSub(position, (azagPoint) {
-			(int)((float)size.x * anchorX),
-			(int)((float)size.y * anchorY),
-		}),
+		.position = azaSubVec2(position, azaMulVec2(size, anchor)),
 		.theme = theme,
 	};
 	tooltips.count++;
 }
 
-void azagTooltipAdd(const char *text, azagPoint position, float anchorX, float anchorY) {
-	azagTooltipAddThemed(text, position, anchorX, anchorY, azagThemeCurrent.tooltipBasic);
+void azagTooltipAdd(const char *text, azaVec2 position, azaVec2 anchor) {
+	azagTooltipAddThemed(text, position, anchor, azagThemeCurrent.tooltipBasic);
 }
 
-void azagTooltipAddError(const char *text, azagPoint position, float anchorX, float anchorY) {
-	azagTooltipAddThemed(text, position, anchorX, anchorY, azagThemeCurrent.tooltipError);
+void azagTooltipAddError(const char *text, azaVec2 position, azaVec2 anchor) {
+	azagTooltipAddThemed(text, position, anchor, azagThemeCurrent.tooltipError);
 }
 
 static void azagDrawTooltips() {
 	const char *text = tooltips.buffer;
 	for (uint32_t i = 0; i < tooltips.count; i++) {
 		azagTooltip *tooltip = &tooltips.tooltips[i];
-		azagPoint textSize = azagTextSize(text, AZAG_TEXT_SCALE_TEXT);
+		azaVec2 textSize = azagTextSize(text, AZAG_TEXT_SCALE_TEXT);
 		azagRect rect = {
 			.xy = tooltip->position,
-			.size = azagPointAdd(textSize, azagPointMulScalar(azagThemeCurrent.marginText, 2)),
+			.size = azaAddVec2(textSize, azaMulVec2Scalar(azagThemeCurrent.marginText, 2.0f)),
 		};
 		azagRectFitOnScreen(&rect);
 		azagDrawRect((azagRect) {
@@ -221,7 +218,7 @@ static void azagDrawTooltips() {
 		azagDrawRectGradientH(rect, tooltip->theme.colorBGLeft, tooltip->theme.colorBGRight);
 		azagDrawRectOutline(rect, tooltip->theme.colorBorder);
 		azagRectShrinkAllXY(&rect, azagThemeCurrent.marginText);
-		azagDrawText(text, azagPointAdd(rect.xy, (azagPoint) { 1, 1 }), AZAG_TEXT_SCALE_TEXT, tooltip->theme.colorTextShadow);
+		azagDrawText(text, azaAddVec2(rect.xy, (azaVec2) { 1, 1 }), AZAG_TEXT_SCALE_TEXT, tooltip->theme.colorTextShadow);
 		azagDrawText(text, rect.xy, AZAG_TEXT_SCALE_TEXT, tooltip->theme.colorText);
 		text += strlen(text) + 1;
 	}
@@ -245,14 +242,14 @@ void azagPushScissor(azagRect rect) {
 	assert(scissorStack.count < sizeof(scissorStack.scissors) / sizeof(scissorStack.scissors[0]));
 	if (scissorStack.count > 0) {
 		azagRect up = scissorStack.scissors[scissorStack.count-1];
-		int right = rect.x + rect.w;
-		int bottom = rect.y + rect.h;
-		rect.x = AZA_MAX(rect.x, up.x);
-		rect.y = AZA_MAX(rect.y, up.y);
-		int upRight = up.x + up.w;
-		int upBottom = up.y + up.h;
-		right = AZA_MIN(right, upRight);
-		bottom = AZA_MIN(bottom, upBottom);
+		float right = rect.x + rect.w;
+		float bottom = rect.y + rect.h;
+		rect.x = azaMaxf(rect.x, up.x);
+		rect.y = azaMaxf(rect.y, up.y);
+		float upRight = up.x + up.w;
+		float upBottom = up.y + up.h;
+		right = azaMinf(right, upRight);
+		bottom = azaMinf(bottom, upBottom);
 		rect.w = right - rect.x;
 		rect.h = bottom - rect.y;
 	}
@@ -290,13 +287,13 @@ azagRect azagGetCurrentScissor() {
 
 
 static azagMouseDepth mouseDepth = AZAG_MOUSE_DEPTH_BASE;
-static azagPoint mousePos = {0};
-static azagPoint mousePosPrev = {0};
+static azaVec2 mousePos = {0};
+static azaVec2 mousePosPrev = {0};
 
 static void *mouseDragID = NULL;
 static int64_t currentFrameTimestamp = 0;
 static int64_t mouseDragTimestamp = 0;
-static azagPoint mouseDragStart = {0};
+static azaVec2 mouseDragStart = {0};
 
 // Used for detecting double clicks
 static int64_t lastClickTime = 0;
@@ -333,7 +330,7 @@ static void azagUpdateMousePost() {
 }
 
 bool azagMouseInRect_base(azagRect rect) {
-	return azagPointInRect(rect, azagMousePosition());
+	return azaVec2InRect(rect, azagMousePosition());
 }
 
 bool azagMouseInScissor() {
@@ -344,16 +341,32 @@ bool azagMouseInRectDepth(azagRect rect, azagMouseDepth depth) {
 	return depth >= mouseDepth && azagMouseInScissor() && azagMouseInRect_base(rect);
 }
 
+bool azagMousePressedDepthIgnoreScissor(azagMouseButton button, azagMouseDepth depth) {
+	return depth >= mouseDepth && azagMousePressed_base(button);
+}
+
 bool azagMousePressedDepth(azagMouseButton button, azagMouseDepth depth) {
 	return depth >= mouseDepth && azagMouseInScissor() && azagMousePressed_base(button);
+}
+
+bool azagMousePressedInRectDepthIgnoreScissor(azagMouseButton button, azagRect rect, azagMouseDepth depth) {
+	return azagMousePressedDepthIgnoreScissor(button, depth) && azagMouseInRect_base(rect);
 }
 
 bool azagMousePressedInRectDepth(azagMouseButton button, azagRect rect, azagMouseDepth depth) {
 	return azagMousePressedDepth(button, depth) && azagMouseInRect_base(rect);
 }
 
+bool azagMouseDownDepthIgnoreScissor(azagMouseButton button, azagMouseDepth depth) {
+	return depth >= mouseDepth && azagMouseDown_base(button);
+}
+
 bool azagMouseDownDepth(azagMouseButton button, azagMouseDepth depth) {
 	return depth >= mouseDepth && azagMouseInScissor() && azagMouseDown_base(button);
+}
+
+bool azagMouseReleasedDepthIgnoreScissor(azagMouseButton button, azagMouseDepth depth) {
+	return depth >= mouseDepth && azagMouseReleased_base(button);
 }
 
 bool azagMouseReleasedDepth(azagMouseButton button, azagMouseDepth depth) {
@@ -369,11 +382,20 @@ bool azagDoubleClickDepth(azagMouseDepth depth) {
 	return false;
 }
 
-bool azagCaptureMouseDelta(azagRect bounds, azagPoint *out_delta, void *id) {
+bool azagDoubleClickDepthIgnoreScissor(azagMouseDepth depth) {
+	if (azagMousePressedDepthIgnoreScissor(AZAG_MOUSE_BUTTON_LEFT, depth)) {
+		int64_t delta = azaGetTimestamp() - lastClickTime;
+		int64_t delta_ns = azaGetTimestampDeltaNanoseconds(delta);
+		if (delta_ns < 250 * 1000000) return true;
+	}
+	return false;
+}
+
+bool azagCaptureMouseDelta(azagRect bounds, azaVec2 *out_delta, void *id) {
 	assert(out_delta);
 	assert(id);
-	azagPoint mouse = azagMousePosition();
-	*out_delta = (azagPoint) {0};
+	azaVec2 mouse = azagMousePosition();
+	*out_delta = (azaVec2) {0};
 
 	if (mouseDragID == NULL) {
 		if (azagMousePressedInRect(AZAG_MOUSE_BUTTON_LEFT, bounds)) {
@@ -387,7 +409,7 @@ bool azagCaptureMouseDelta(azagRect bounds, azagPoint *out_delta, void *id) {
 			return false;
 		}
 		mouseDragTimestamp = azaGetTimestamp();
-		*out_delta = azagPointSub(mouse, mouseDragStart);
+		*out_delta = azaSubVec2(mouse, mouseDragStart);
 		return true;
 	}
 	return false;
@@ -403,9 +425,68 @@ bool azagMouseCaptureJustStarted() {
 
 
 
-bool azagMouseDragFloat_id(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id) {
+size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTextScale scale, float availableWidth, bool hyphenate) {
+	size_t srcCur = 0;
+	size_t dstCur = 0;
+	size_t lastSpaceSrc = 0;
+	size_t lastSpaceDst = 0;
+	size_t dstSizeRemaining = dstSize-1; // Leave space for the null terminator
+	float cursor = 0.0f;
+	float width = 0.0f; // Because of kerning, actual text width may at times be wider than the cursor's position plus the last character's advance. This is the actual width of the text.
+	while (src[srcCur] != 0 && dstSizeRemaining != 0) {
+		if (src[srcCur] == '\n') {
+			lastSpaceDst = 0;
+			cursor = 0.0f;
+			width = 0.0f;
+		} else {
+			azagCharacterAdvanceX advanceX = azagGetCharacterAdvanceX(src + srcCur, scale);
+			if (advanceX.characterBytes > dstSizeRemaining) {
+				// Stop here, the codepoint is too long to insert, so omit it completely.
+				break;
+			}
+			if (src[srcCur] == ' ' || src[srcCur] == '\t') {
+				lastSpaceSrc = srcCur;
+				lastSpaceDst = dstCur;
+			} else {
+				width = cursor + advanceX.width;
+				if (width > availableWidth) {
+					// Time to break up the line
+					if (lastSpaceDst) {
+						dst[lastSpaceDst] = '\n';
+						// Now go back and redo the line from the start
+						srcCur = lastSpaceSrc+1;
+						dstCur = lastSpaceDst+1;
+						dstSizeRemaining = dstSize-1 - dstCur;
+						lastSpaceDst = 0; // Don't use this space again, it's not a space any more
+						cursor = 0.0f;
+						width = 0.0f;
+						continue;
+					}
+					// TODO: Hyphenation, as we won't always have spaces to fall back to.
+					// Last-ditch fallback that just breaks the word in-place (probably ugly)
+					dst[dstCur++] = '\n';
+					dstSizeRemaining--;
+					cursor = 0.0f;
+					width = 0.0f;
+					continue;
+				}
+			}
+			memcpy(dst + dstCur, src + srcCur, advanceX.characterBytes);
+			srcCur += advanceX.characterBytes;
+			dstCur += advanceX.characterBytes;
+			cursor += advanceX.advance;
+		}
+	}
+	assert(dstCur < dstSize);
+	dst[dstCur] = 0;
+	return dstCur;
+}
+
+
+
+bool azagMouseDragFloat_id(azagRect knobRect, float *value, bool inverted, float dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id) {
 	assert(valueMax > valueMin);
-	azagPoint mouseDelta = {0};
+	azaVec2 mouseDelta = {0};
 	if (azagCaptureMouseDelta(knobRect, &mouseDelta, id)) {
 		static float dragStartValue = 0.0f;
 		if (azagMouseCaptureJustStarted()) {
@@ -417,11 +498,11 @@ bool azagMouseDragFloat_id(azagRect knobRect, float *value, bool inverted, int d
 			// Transition between precise and not precise, reset the offsets and values so the knob doesn't jump.
 			dragStartValue = *value;
 			azagMouseCaptureResetDelta();
-			mouseDelta = (azagPoint) {0};
+			mouseDelta = (azaVec2) {0};
 		}
-		int usefulDelta = vertical ? mouseDelta.y : mouseDelta.x;
+		float usefulDelta = vertical ? mouseDelta.y : mouseDelta.x;
 		float valueRange = valueMax - valueMin;
-		float actualDelta = (float)usefulDelta * valueRange / (float)dragRegion;
+		float actualDelta = usefulDelta * valueRange / dragRegion;
 		if (inverted) {
 			actualDelta = -actualDelta;
 		}
@@ -441,9 +522,9 @@ bool azagMouseDragFloat_id(azagRect knobRect, float *value, bool inverted, int d
 	return false;
 }
 
-bool azagMouseDragFloatLog_id(azagRect knobRect, float *value, bool inverted, int dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id) {
+bool azagMouseDragFloatLog_id(azagRect knobRect, float *value, bool inverted, float dragRegion, bool vertical, float valueMin, float valueMax, bool doClamp, float preciseDiv, bool doPrecise, float snapInterval, bool doSnap, void *id) {
 	assert(valueMax > valueMin);
-	azagPoint mouseDelta = {0};
+	azaVec2 mouseDelta = {0};
 	if (azagCaptureMouseDelta(knobRect, &mouseDelta, id)) {
 		static float dragStartValue = 0.0f;
 		float logValue = log10f(*value);
@@ -458,11 +539,11 @@ bool azagMouseDragFloatLog_id(azagRect knobRect, float *value, bool inverted, in
 			// Transition between precise and not precise, reset the offsets and values so the knob doesn't jump.
 			dragStartValue = logValue;
 			azagMouseCaptureResetDelta();
-			mouseDelta = (azagPoint) {0};
+			mouseDelta = (azaVec2) {0};
 		}
-		int usefulDelta = vertical ? mouseDelta.y : mouseDelta.x;
+		float usefulDelta = vertical ? mouseDelta.y : mouseDelta.x;
 		float valueRange = logMax - logMin;
-		float actualDelta = (float)usefulDelta * valueRange / (float)dragRegion;
+		float actualDelta = usefulDelta * valueRange / dragRegion;
 		if (inverted) {
 			actualDelta = -actualDelta;
 		}
@@ -485,9 +566,9 @@ bool azagMouseDragFloatLog_id(azagRect knobRect, float *value, bool inverted, in
 	return false;
 }
 
-bool azagMouseDragInt64_id(azagRect knobRect, int64_t *value, bool inverted, int dragRegion, bool vertical, int valueMin, int valueMax, bool doClamp, int preciseDiv, bool doPrecise, int snapInterval, bool doSnap, void *id) {
+bool azagMouseDragInt64_id(azagRect knobRect, int64_t *value, bool inverted, float dragRegion, bool vertical, int64_t valueMin, int64_t valueMax, bool doClamp, int64_t preciseDiv, bool doPrecise, int64_t snapInterval, bool doSnap, void *id) {
 	assert(valueMax > valueMin);
-	azagPoint mouseDelta = {0};
+	azaVec2 mouseDelta = {0};
 	if (azagCaptureMouseDelta(knobRect, &mouseDelta, id)) {
 		static int64_t dragStartValue = 0;
 		if (azagMouseCaptureJustStarted()) {
@@ -499,11 +580,11 @@ bool azagMouseDragInt64_id(azagRect knobRect, int64_t *value, bool inverted, int
 			// Transition between precise and not precise, reset the offsets and values so the knob doesn't jump.
 			dragStartValue = *value;
 			azagMouseCaptureResetDelta();
-			mouseDelta = (azagPoint) {0};
+			mouseDelta = (azaVec2) {0};
 		}
-		int usefulDelta = vertical ? mouseDelta.y : mouseDelta.x;
-		int valueRange = valueMax - valueMin;
-		int actualDelta = usefulDelta * valueRange / dragRegion;
+		int64_t usefulDelta = vertical ? (int64_t)mouseDelta.y : (int64_t)mouseDelta.x;
+		int64_t valueRange = valueMax - valueMin;
+		int64_t actualDelta = (int64_t)round((double)(usefulDelta * valueRange) / (double)dragRegion);
 		if (inverted) {
 			actualDelta = -actualDelta;
 		}
@@ -529,29 +610,31 @@ bool azagMouseDragInt64_id(azagRect knobRect, int64_t *value, bool inverted, int
 
 
 
-void azagDrawDBTicks(azagRect bounds, int dbRange, int dbOffset, azagColor color, azagColor colorUnity) {
+void azagDrawDBTicks(azagRect bounds, float dbRange, float dbOffset, azagColor color, azagColor colorUnity) {
+	int dbOffsetInt = (int)floorf(dbOffset);
+	float dbOffsetFrac = dbOffset - (float)dbOffsetInt;
 	for (int i = 0; i <= dbRange; i++) {
-		int db = i + dbOffset;
-		azagColor myColor = i == dbOffset ? colorUnity : color;
+		int db = i + dbOffsetInt;
+		azagColor myColor = i == dbOffsetInt ? colorUnity : color;
 		myColor.a = (int)myColor.a * (64 + (db%6==0)*128 + (db%3==0)*63) / 255;
-		int yOffset = i * bounds.h / dbRange;
-		azagDrawLine((azagPoint) {bounds.x, bounds.y+yOffset}, (azagPoint) {bounds.x+bounds.w, bounds.y+yOffset}, myColor);
+		float yOffset = ((float)i + dbOffsetFrac) * bounds.h / dbRange;
+		azagDrawLine((azaVec2) {bounds.x, bounds.y+yOffset}, (azaVec2) {bounds.x+bounds.w, bounds.y+yOffset}, myColor);
 	}
 }
 
-static inline void azagDrawFaderBackground(azagRect bounds, int dbRange, int dbHeadroom) {
+static inline void azagDrawFaderBackground(azagRect bounds, float dbRange, float dbHeadroom) {
 	azagDrawRectGradientV(bounds, azagThemeCurrent.fader.colorBGTop, azagThemeCurrent.fader.colorBGBot);
 	azagRectShrinkAllV(&bounds, azagThemeCurrent.margin.y);
 	azagDrawDBTicks(bounds, dbRange, dbHeadroom, azagThemeCurrent.fader.colorDBTick, azagThemeCurrent.fader.colorDBTickUnity);
 }
 
-void azagRectCutOutFaderMuteButton(azagRect *bounds) {
-	azagRectShrinkTop(bounds, azagThemeCurrent.fader.width + azagThemeCurrent.margin.y);
+void azagRectCutOutFaderMuteButton(azagRect *rect) {
+	azagRectShrinkTop(rect, azagThemeCurrent.fader.width + azagThemeCurrent.margin.y);
 }
 
 #define FADER_GAIN_IN_TITLE 0
 
-int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMuteButton, const char *label, int dbRange, int dbHeadroom) {
+float azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMuteButton, const char *label, float dbRange, float dbHeadroom) {
 	bounds.w = azagThemeCurrent.fader.width;
 	bool mouseover = azagMouseInRect(bounds);
 	if (mouseover && azagDoubleClick()) {
@@ -564,7 +647,7 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 	}
 	azagRect sliderBounds = faderBounds;
 	azagRectShrinkAllXY(&sliderBounds, azagThemeCurrent.margin);
-	int yOffset = azagDBToYOffsetClamped((float)dbHeadroom - *gain, sliderBounds.h, 0, (float)dbRange);
+	float yOffset = azagDBToYOffsetClamped(dbHeadroom - *gain, sliderBounds.h, 0.0f, dbRange);
 	azagRect knobRect = {
 		sliderBounds.x,
 		sliderBounds.y + yOffset - azagThemeCurrent.fader.knobHeight/2,
@@ -577,8 +660,8 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 		/* inverted: */ true,
 		/* dragRegion: */ sliderBounds.h,
 		/* vertical: */ true,
-		/* valueMin: */ (float)(dbHeadroom-dbRange),
-		/* valueMax: */ (float)dbHeadroom,
+		/* valueMin: */ dbHeadroom-dbRange,
+		/* valueMax: */ dbHeadroom,
 		/* doClamp: */ false,
 		/* preciseDiv: */ 10.0f,
 		/* doPrecise: */ true,
@@ -586,27 +669,27 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 		/* doSnap: */ true
 	);
 	if (dragging) {
-		yOffset = azagDBToYOffsetClamped((float)dbHeadroom - *gain, sliderBounds.h, 0, (float)dbRange);
-		knobRect.y = sliderBounds.y + yOffset - 6;
+		yOffset = azagDBToYOffsetClamped(dbHeadroom - *gain, sliderBounds.h, 0.0f, dbRange);
+		knobRect.y = sliderBounds.y + yOffset - 6.0f;
 		mouseover = true;
 	}
 	if (dragging || azagMouseInRect(knobRect)) {
 		azagSetMouseCursor(AZAG_MOUSE_CURSOR_RESIZE_V);
 	}
 	if (mouseover) {
-		azagPoint tooltipPosition = {
+		azaVec2 tooltipPosition = {
 			bounds.x + bounds.w / 2,
 			bounds.y - azagThemeCurrent.margin.y,
 		};
 #if FADER_GAIN_IN_TITLE
 		azagTooltipAdd(azaTextFormat(precise ? "%s %+.2fdb" : "%s %+.1fdb", label, *gain), tooltipPosition, 0.5f, 1.0f);
 #else
-		azagTooltipAdd(label, tooltipPosition, 0.5f, 1.0f);
-		tooltipPosition = (azagPoint) {
+		azagTooltipAdd(label, tooltipPosition, (azaVec2) { 0.5f, 1.0f });
+		tooltipPosition = (azaVec2) {
 			bounds.x + bounds.w,
 			sliderBounds.y + yOffset,
 		};
-		azagTooltipAdd(azaTextFormat(precise ? "%+.2fdb" : "%+.1fdb", *gain), tooltipPosition, 0.0f, 0.5f);
+		azagTooltipAdd(azaTextFormat(precise ? "%+.2fdb" : "%+.1fdb", *gain), tooltipPosition, (azaVec2) { 0.0f, 0.5f });
 #endif
 	}
 	if (mute) {
@@ -616,11 +699,11 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 		// azagRectShrinkAllXY(&muteRect, azagThemeCurrent.margin);
 		if (azagMouseInRect(muteRect)) {
 			azagSetMouseCursor(AZAG_MOUSE_CURSOR_POINTING_HAND);
-			azagPoint tooltipPosition = {
-				muteRect.x + muteRect.w / 2,
+			azaVec2 tooltipPosition = {
+				muteRect.x + muteRect.w / 2.0f,
 				muteRect.y + muteRect.h + azagThemeCurrent.margin.y,
 			};
-			azagTooltipAdd("Mute", tooltipPosition, 0.5f, 0.0f);
+			azagTooltipAdd("Mute", tooltipPosition, (azaVec2) { 0.5f, 0.0f });
 			if (azagMousePressed(AZAG_MOUSE_BUTTON_LEFT)) {
 				*mute = !*mute;
 			}
@@ -640,7 +723,7 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 	}
 	azagPushScissor(faderBounds);
 	azagDrawRectGradientV(knobRect, azagThemeCurrent.fader.colorKnobTop, azagThemeCurrent.fader.colorKnobBot);
-	azagDrawLine((azagPoint) {sliderBounds.x, sliderBounds.y + yOffset}, (azagPoint) {sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset}, azagThemeCurrent.fader.colorKnobCenterLine);
+	azagDrawLine((azaVec2) {sliderBounds.x, sliderBounds.y + yOffset}, (azaVec2) {sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset}, azagThemeCurrent.fader.colorKnobCenterLine);
 	azagPopScissor();
 	return azagThemeCurrent.fader.width;
 }
@@ -649,7 +732,7 @@ int azagDrawFader(azagRect bounds, float *gain, bool *mute, bool cutOutMissingMu
 
 
 
-int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat) {
+float azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat) {
 	assert(min > 0.0f);
 	assert(max > min);
 	bounds.w = azagThemeCurrent.slider.width;
@@ -660,7 +743,7 @@ int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, 
 	float logValue = logf(*value);
 	float logMin = logf(min);
 	float logMax = logf(max);
-	int yOffset = (int)((float)sliderBounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
+	float yOffset = sliderBounds.h * (1.0f - (logValue - logMin) / (logMax - logMin));
 	if (mouseover) {
 		float delta = azagMouseWheelV();
 		if (azagIsShiftDown()) {
@@ -678,14 +761,14 @@ int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, 
 	}
 	azagRect knobRect = {
 		sliderBounds.x,
-		sliderBounds.y + yOffset - azagThemeCurrent.fader.knobHeight/2,
+		sliderBounds.y + yOffset - azagThemeCurrent.fader.knobHeight/2.0f,
 		sliderBounds.w,
 		azagThemeCurrent.fader.knobHeight
 	};
 	bool dragging = azagMouseDragFloatLog(
 		/* knobRect: */ knobRect,
 		/* value: */ value,
-		/* inverted: */ step >= 0,
+		/* inverted: */ step >= 0.0f,
 		/* dragRegion: */ sliderBounds.h,
 		/* vertical: */ true,
 		/* valueMin: */ min,
@@ -698,28 +781,28 @@ int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, 
 	);
 	if (dragging) {
 		logValue = logf(*value);
-		yOffset = (int)((float)sliderBounds.h * (1.0f - (logValue - logMin) / (logMax - logMin)));
-		knobRect.y = sliderBounds.y + yOffset - 6;
+		yOffset = sliderBounds.h * (1.0f - (logValue - logMin) / (logMax - logMin));
+		knobRect.y = sliderBounds.y + yOffset - 6.0f;
 		mouseover = true;
 	}
 	if (dragging || azagMouseInRect(knobRect)) {
 		azagSetMouseCursor(AZAG_MOUSE_CURSOR_RESIZE_V);
 	}
 	if (mouseover) {
-		azagPoint tooltipPosition = {
+		azaVec2 tooltipPosition = {
 			bounds.x + bounds.w / 2,
 			bounds.y - azagThemeCurrent.margin.y,
 		};
-		azagTooltipAdd(label, tooltipPosition, 0.5f, 1.0f);
+		azagTooltipAdd(label, tooltipPosition, (azaVec2) { 0.5f, 1.0f });
 		azagDrawRect(sliderBounds, azagThemeCurrent.slider.colorBGHighlight);
 		if (!valueFormat) {
 			valueFormat = "%+.1f";
 		}
-		tooltipPosition = (azagPoint) {
+		tooltipPosition = (azaVec2) {
 			bounds.x + bounds.w,
 			sliderBounds.y + yOffset,
 		};
-		azagTooltipAdd(azaTextFormat(valueFormat, *value), tooltipPosition, 0.0f, 0.5f);
+		azagTooltipAdd(azaTextFormat(valueFormat, *value), tooltipPosition, (azaVec2) { 0.0f, 0.5f });
 	}
 	azagPushScissor(sliderBounds);
 	azagDrawRectGradientV((azagRect) {
@@ -728,19 +811,19 @@ int azagDrawSliderFloatLog(azagRect bounds, float *value, float min, float max, 
 		sliderBounds.w,
 		12
 	}, azagThemeCurrent.slider.colorKnobTop, azagThemeCurrent.slider.colorKnobBot);
-	azagDrawLine((azagPoint) {sliderBounds.x, sliderBounds.y + yOffset}, (azagPoint) {sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset}, azagThemeCurrent.slider.colorKnobCenterLine);
+	azagDrawLine((azaVec2) {sliderBounds.x, sliderBounds.y + yOffset}, (azaVec2) {sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset}, azagThemeCurrent.slider.colorKnobCenterLine);
 	azagPopScissor();
 	return azagThemeCurrent.slider.width;
 }
 
-int azagDrawSliderFloat(azagRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat) {
+float azagDrawSliderFloat(azagRect bounds, float *value, float min, float max, float step, float def, const char *label, const char *valueFormat) {
 	assert(max > min);
 	bounds.w = azagThemeCurrent.slider.width;
 	bool mouseover = azagMouseInRect(bounds);
 	azagDrawRectGradientV(bounds, azagThemeCurrent.slider.colorBGTop, azagThemeCurrent.slider.colorBGBot);
 	azagRect sliderBounds = bounds;
 	azagRectShrinkAllXY(&sliderBounds, azagThemeCurrent.margin);
-	int yOffset = (int)((float)sliderBounds.h * (1.0f - (*value - min) / (max - min)));
+	float yOffset = sliderBounds.h * (1.0f - (*value - min) / (max - min));
 	if (mouseover) {
 		float delta = azagMouseWheelV();
 		if (azagIsShiftDown()) {
@@ -761,7 +844,7 @@ int azagDrawSliderFloat(azagRect bounds, float *value, float min, float max, flo
 	bool dragging = azagMouseDragFloat(
 		/* knobRect: */ knobRect,
 		/* value: */ value,
-		/* inverted: */ step >= 0,
+		/* inverted: */ step >= 0.0f,
 		/* dragRegion: */ sliderBounds.h,
 		/* vertical: */ true,
 		/* valueMin: */ min,
@@ -773,32 +856,32 @@ int azagDrawSliderFloat(azagRect bounds, float *value, float min, float max, flo
 		/* doSnap: */ true
 	);
 	if (dragging) {
-		yOffset = (int)((float)sliderBounds.h * (1.0f - (*value - min) / (max - min)));
-		knobRect.y = sliderBounds.y + yOffset - 6;
+		yOffset = sliderBounds.h * (1.0f - (*value - min) / (max - min));
+		knobRect.y = sliderBounds.y + yOffset - 6.0f;
 		mouseover = true;
 	}
 	if (dragging || azagMouseInRect(knobRect)) {
 		azagSetMouseCursor(AZAG_MOUSE_CURSOR_RESIZE_V);
 	}
 	if (mouseover) {
-		azagPoint tooltipPosition = {
-			bounds.x + bounds.w / 2,
+		azaVec2 tooltipPosition = {
+			bounds.x + bounds.w / 2.0f,
 			bounds.y - azagThemeCurrent.margin.y,
 		};
-		azagTooltipAdd(label, tooltipPosition, 0.5f, 1.0f);
+		azagTooltipAdd(label, tooltipPosition, (azaVec2) { 0.5f, 1.0f });
 		azagDrawRect(sliderBounds, azagThemeCurrent.slider.colorBGHighlight);
 		if (!valueFormat) {
 			valueFormat = "%+.1f";
 		}
-		tooltipPosition = (azagPoint) {
+		tooltipPosition = (azaVec2) {
 			bounds.x + bounds.w,
 			sliderBounds.y + yOffset,
 		};
-		azagTooltipAdd(azaTextFormat(valueFormat, *value), tooltipPosition, 0.0f, 0.5f);
+		azagTooltipAdd(azaTextFormat(valueFormat, *value), tooltipPosition, (azaVec2) { 0.0f, 0.5f });
 	}
 	azagPushScissor(sliderBounds);
 	azagDrawRectGradientV(knobRect, azagThemeCurrent.slider.colorKnobTop, azagThemeCurrent.slider.colorKnobBot);
-	azagDrawLine((azagPoint) {sliderBounds.x, sliderBounds.y + yOffset}, (azagPoint) {sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset}, azagThemeCurrent.slider.colorKnobCenterLine);
+	azagDrawLine((azaVec2) {sliderBounds.x, sliderBounds.y + yOffset}, (azaVec2) {sliderBounds.x + sliderBounds.w, sliderBounds.y + yOffset}, azagThemeCurrent.slider.colorKnobCenterLine);
 	azagPopScissor();
 	return azagThemeCurrent.slider.width;
 }
@@ -845,7 +928,7 @@ void azagDrawTextBox(azagRect bounds, char *text, uint32_t textCapacity) {
 	}
 	if (textboxTextBeingEdited == text) {
 		if (azagKeyPressed(AZAG_KEY_ESC) || azagKeyPressed(AZAG_KEY_ENTER) || azagKeyPressed(AZAG_KEY_KPENTER)
-		|| (!mouseover && azagMousePressed(AZAG_MOUSE_BUTTON_LEFT))) {
+		|| (!mouseover && azagMousePressedIgnoreScissor(AZAG_MOUSE_BUTTON_LEFT))) {
 			textboxTextBeingEdited = NULL;
 		}
 	}
@@ -924,19 +1007,19 @@ void azagDrawTextBox(azagRect bounds, char *text, uint32_t textCapacity) {
 				textLen++;
 			}
 		}
-		int textWidth = azagTextWidth(text, AZAG_TEXT_SCALE_TEXT);
+		float textWidth = azagTextWidth(text, AZAG_TEXT_SCALE_TEXT);
 		if (textWidth > (bounds.w - azagThemeCurrent.marginText.x * 2)) {
 			bounds.w = textWidth + azagThemeCurrent.marginText.x * 2;
 			azagRectFitOnScreen(&bounds);
 		}
 		textboxBounds = bounds;
 	} else {
-		int textWidth = azagTextWidth(text, AZAG_TEXT_SCALE_TEXT);
+		float textWidth = azagTextWidth(text, AZAG_TEXT_SCALE_TEXT);
 		if (mouseover && textWidth > (bounds.w - azagThemeCurrent.marginText.x * 2)) {
-			azagTooltipAdd(text, bounds.xy, 0.0f, 0.0f);
+			azagTooltipAdd(text, bounds.xy, (azaVec2) { 0.0f, 0.0f });
 		}
 		azagPushScissor(bounds);
-		azagDrawText(text, azagPointAdd(bounds.xy, azagThemeCurrent.marginText), AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.textbox.colorText);
+		azagDrawText(text, azaAddVec2(bounds.xy, azagThemeCurrent.marginText), AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.textbox.colorText);
 		azagPopScissor();
 	}
 }
@@ -944,11 +1027,6 @@ void azagDrawTextBox(azagRect bounds, char *text, uint32_t textCapacity) {
 static void azagDrawTextboxBeingEdited() {
 	if (!textboxTextBeingEdited) return;
 	char *text = textboxTextBeingEdited;
-	char holdover = text[textboxCursor];
-	text[textboxCursor] = 0;
-	int cursorX = azagTextWidth(text, AZAG_TEXT_SCALE_TEXT) + textboxBounds.x + azagThemeCurrent.marginText.x;
-	text[textboxCursor] = holdover;
-	int cursorY = textboxBounds.y + azagThemeCurrent.marginText.y;
 	azagDrawRectGradientH(textboxBounds, azagThemeCurrent.textbox.colorBGLeft, azagThemeCurrent.textbox.colorBGRight);
 	azagDrawRectOutline(textboxBounds, azagThemeCurrent.textbox.colorOutline);
 	azagRectShrinkAllXY(&textboxBounds, azagThemeCurrent.marginText);
@@ -957,31 +1035,38 @@ static void azagDrawTextboxBeingEdited() {
 		selectionRect.w = azagTextWidth(text, AZAG_TEXT_SCALE_TEXT);
 		azagDrawRect(selectionRect, azagThemeCurrent.textbox.colorSelection);
 	} else {
-		azagDrawLine((azagPoint) {cursorX, cursorY}, (azagPoint) {cursorX, cursorY + azagGetFontSizeForScale(AZAG_TEXT_SCALE_TEXT)}, azagThemeCurrent.textbox.colorCursor);
+		char holdover = text[textboxCursor];
+		text[textboxCursor] = 0;
+		azaVec2 cursor = {
+			.x = azagTextWidth(text, AZAG_TEXT_SCALE_TEXT) + textboxBounds.x + 0.5f,
+			.y = textboxBounds.y,
+		};
+		text[textboxCursor] = holdover;
+		azagDrawLine(cursor, (azaVec2) {cursor.x, cursor.y + azagGetFontSizeForScale(AZAG_TEXT_SCALE_TEXT)}, azagThemeCurrent.textbox.colorCursor);
 	}
 	azagDrawText(text, textboxBounds.xy, AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.textbox.colorText);
 }
 
 
 
-void azagDrawScrollbarHorizontal(azagRect bounds, int *value, int min, int max, int step) {
+void azagDrawScrollbarHorizontal(azagRect bounds, float *value, float min, float max, float step) {
 	assert(max >= min);
 	bool mouseover = azagMouseInRect(bounds);
-	int scrollbarWidth = bounds.w / 4;
-	int useableWidth = bounds.w - scrollbarWidth;
-	int mouseX = (int)azagMousePosition().x - bounds.x;
+	float scrollbarWidth = bounds.w / 4.0f;
+	float useableWidth = bounds.w - scrollbarWidth;
+	float mouseX = azagMousePosition().x - bounds.x;
 	azagDrawRectGradientH(bounds, azagThemeCurrent.scrollbar.colorBGLo, azagThemeCurrent.scrollbar.colorBGHi);
 	if (min == max) return;
-	int range = AZA_MAX(max - min, 1);
-	int offset = useableWidth * (*value - min) / range;
+	float range = azaMaxf(max - min, 1.0f);
+	float offset = useableWidth * (*value - min) / range;
 	if (step < 0) {
 		offset = bounds.w - scrollbarWidth - offset;
 	}
 	if (mouseover) {
-		int scroll = (int)azagMouseWheelV();
-		int click = (int)azagMousePressed(AZAG_MOUSE_BUTTON_LEFT) * ((int)(mouseX >= offset + scrollbarWidth) - (int)(mouseX < offset));
+		float scroll = azagMouseWheelV();
+		float click = (float)((int)azagMousePressed(AZAG_MOUSE_BUTTON_LEFT) * ((int)(mouseX >= offset + scrollbarWidth) - (int)(mouseX < offset)));
 		*value += step * (scroll + click);
-		*value = AZA_CLAMP(*value, min, max);
+		*value = azaClampf(*value, min, max);
 		offset = useableWidth * (*value - min) / range;
 		if (step < 0) {
 			offset = bounds.w - scrollbarWidth - offset;
@@ -993,7 +1078,7 @@ void azagDrawScrollbarHorizontal(azagRect bounds, int *value, int min, int max, 
 		scrollbarWidth,
 		bounds.h,
 	};
-	if (azagMouseDragInt32(
+	if (azagMouseDragFloat(
 		/* knobRect: */ knobRect,
 		/* value: */ value,
 		/* inverted: */ step < 0,
@@ -1004,7 +1089,7 @@ void azagDrawScrollbarHorizontal(azagRect bounds, int *value, int min, int max, 
 		/* doClamp: */ true,
 		/* preciseDiv: */ 10,
 		/* doPrecise: */ true,
-		/* snapInterval */ abs(step),
+		/* snapInterval */ fabsf(step),
 		/* doSnap: */ true
 	)) {
 		offset = useableWidth * (*value - min) / range;
@@ -1027,13 +1112,15 @@ struct azagContextMenuState {
 	fp_azagContextMenu current;
 	fp_azagContextMenu next;
 	azagRect rect;
-	int targetWidth;
+	bool newPosition;
+	float targetWidth;
 	const char *title;
 };
 static struct azagContextMenuState azagContextMenuState = {
 	.current = NULL,
 	.rect = {0},
-	.targetWidth = 0,
+	.newPosition = false,
+	.targetWidth = 0.0f,
 	.title = NULL,
 };
 
@@ -1041,6 +1128,14 @@ void azagContextMenuOpen(fp_azagContextMenu menu) {
 	assert(menu);
 	azagContextMenuState.next = menu;
 	mouseDepth = AZAG_MOUSE_DEPTH_CONTEXT_MENU;
+	azagContextMenuState.newPosition = true;
+}
+
+void azagContextMenuOpenSub(fp_azagContextMenu menu) {
+	assert(menu);
+	azagContextMenuState.next = menu;
+	mouseDepth = AZAG_MOUSE_DEPTH_CONTEXT_MENU;
+	azagContextMenuState.newPosition = azagContextMenuState.current == NULL;
 }
 
 void azagContextMenuClose() {
@@ -1050,21 +1145,22 @@ void azagContextMenuClose() {
 
 
 static void azagDrawContextMenu() {
+	if (azagContextMenuState.newPosition) {
+		azagContextMenuState.rect.xy = azagMousePosition();
+		azagContextMenuState.newPosition = false;
+	}
 	if (azagContextMenuState.next != azagContextMenuState.current) {
-		if (!azagContextMenuState.current) {
-			azagContextMenuState.rect.xy = azagMousePosition();
-		}
 		azagContextMenuState.current = azagContextMenuState.next;
 		azagContextMenuState.rect.w = azagThemeCurrent.contextMenu.minWidth;
 		azagContextMenuState.rect.h = 0;
 		azagContextMenuState.targetWidth = 0;
 	}
 	if (!azagContextMenuState.current) return;
-	if (azagKeyPressed(AZAG_KEY_ESC) || (azagMousePressedDepth(AZAG_MOUSE_BUTTON_LEFT, AZAG_MOUSE_DEPTH_CONTEXT_MENU) && !azagMouseInRectDepth(azagContextMenuState.rect, AZAG_MOUSE_DEPTH_CONTEXT_MENU))) {
+	if (azagKeyPressed(AZAG_KEY_ESC) || (azagMousePressedDepthIgnoreScissor(AZAG_MOUSE_BUTTON_LEFT, AZAG_MOUSE_DEPTH_CONTEXT_MENU) && !azagMouseInRectDepth(azagContextMenuState.rect, AZAG_MOUSE_DEPTH_CONTEXT_MENU))) {
 		azagContextMenuClose();
 		return;
 	}
-	azagContextMenuState.rect.w += (int)(azagContextMenuState.targetWidth > azagContextMenuState.rect.w) * 10;
+	azagContextMenuState.rect.w += (float)(int)(azagContextMenuState.targetWidth > azagContextMenuState.rect.w) * 10.0f;
 	azagContextMenuState.current();
 }
 
@@ -1080,8 +1176,8 @@ void azagDrawContextMenuBegin(const char *title) {
 	azagContextMenuState.rect.h = 0;
 	if (azagContextMenuState.title) {
 		azagContextMenuState.rect.h += azagTextHeightMargin(title, AZAG_TEXT_SCALE_TEXT);
-		int targetWidth = azagTextWidthMargin(azagContextMenuState.title, AZAG_TEXT_SCALE_TEXT);
-		azagContextMenuState.targetWidth = AZA_MAX(azagContextMenuState.targetWidth, targetWidth);
+		float targetWidth = azagTextWidthMargin(azagContextMenuState.title, AZAG_TEXT_SCALE_TEXT);
+		azagContextMenuState.targetWidth = azaMaxf(azagContextMenuState.targetWidth, targetWidth);
 		azagRect titleBounds = {
 			azagContextMenuState.rect.x,
 			azagContextMenuState.rect.y,
@@ -1090,7 +1186,7 @@ void azagDrawContextMenuBegin(const char *title) {
 		};
 		azagDrawRectGradientH(titleBounds, azagThemeCurrent.contextMenu.colorBGLeft, azagThemeCurrent.contextMenu.colorBGRight);
 		azagDrawTextMargin(azagContextMenuState.title, azagContextMenuState.rect.xy, AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.contextMenu.colorTextHeader);
-		azagDrawLine((azagPoint) {azagContextMenuState.rect.x, azagContextMenuState.rect.y + titleBounds.h - 1}, (azagPoint) {azagContextMenuState.rect.x + azagContextMenuState.rect.w, azagContextMenuState.rect.y + titleBounds.h - 1}, azagThemeCurrent.contextMenu.colorOutline);
+		azagDrawLine((azaVec2) {azagContextMenuState.rect.x, azagContextMenuState.rect.y + titleBounds.h - 1}, (azaVec2) {azagContextMenuState.rect.x + azagContextMenuState.rect.w, azagContextMenuState.rect.y + titleBounds.h - 1}, azagThemeCurrent.contextMenu.colorOutline);
 	}
 }
 
@@ -1117,9 +1213,9 @@ bool azagDrawContextMenuButton(const char *label) {
 	}
 	if (label) {
 		azagPushScissor(bounds);
-		azagDrawText(label, azagPointAdd(bounds.xy, azagThemeCurrent.marginText), AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.contextMenu.colorTextButton);
-		int targetWidth = azagTextWidthMargin(label, AZAG_TEXT_SCALE_TEXT);
-		azagContextMenuState.targetWidth = AZA_MAX(azagContextMenuState.targetWidth, targetWidth);
+		azagDrawText(label, azaAddVec2(bounds.xy, azagThemeCurrent.marginText), AZAG_TEXT_SCALE_TEXT, azagThemeCurrent.contextMenu.colorTextButton);
+		float targetWidth = azagTextWidthMargin(label, AZAG_TEXT_SCALE_TEXT);
+		azagContextMenuState.targetWidth = azaMaxf(azagContextMenuState.targetWidth, targetWidth);
 		azagPopScissor();
 	}
 	return result;
@@ -1143,7 +1239,7 @@ void azagContextMenuErrorReport() {
 	azagDrawContextMenuButton("Well dang!");
 	if (azagDrawContextMenuButton("Bruh fix that shit!")) {
 		contextMenuPleaStage = 0;
-		azagContextMenuOpen(azagContextMenuErrorPlea);
+		azagContextMenuOpenSub(azagContextMenuErrorPlea);
 	}
 	azagDrawContextMenuEnd();
 }
@@ -1160,11 +1256,11 @@ void azagContextMenuErrorPlea() {
 			azagDrawContextMenuButton("Okay.");
 			if (azagDrawContextMenuButton("I forgive you.")) {
 				contextMenuPleaStage = 1;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			if (azagDrawContextMenuButton("That's not good enough!")) {
 				contextMenuPleaStage = 2;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			break;
 		case 1:
@@ -1175,29 +1271,29 @@ void azagContextMenuErrorPlea() {
 			azagDrawContextMenuBegin("What's your problem? I'm not gonna beg for forgiveness.");
 			if (azagDrawContextMenuButton("Huh?")) {
 				contextMenuPleaStage = 3;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			break;
 		case 3:
 			azagDrawContextMenuBegin("You think you can just walk all over me?");
 			if (azagDrawContextMenuButton("Yeah?")) {
 				contextMenuPleaStage = 4;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			if (azagDrawContextMenuButton("Sorry, didn't realize you could talk back.")) {
 				contextMenuPleaStage = 5;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			break;
 		case 4:
 			azagDrawContextMenuBegin("Well you can't!");
 			if (azagDrawContextMenuButton("Oh can't I?")) {
 				contextMenuPleaStage = 7;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			if (azagDrawContextMenuButton("I'm sorry, I won't do it again.")) {
 				contextMenuPleaStage = 8;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			break;
 		case 5:
@@ -1205,7 +1301,7 @@ void azagContextMenuErrorPlea() {
 			azagDrawContextMenuButton("Uh huh.");
 			if (azagDrawContextMenuButton("I'm sorry, I won't do it again.")) {
 				contextMenuPleaStage = 8;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			break;
 		case 6:
@@ -1218,7 +1314,7 @@ void azagContextMenuErrorPlea() {
 			azagDrawContextMenuButton("Okay then.");
 			if (azagDrawContextMenuButton("Sure I can.")) {
 				contextMenuPleaStage = 6;
-				azagContextMenuOpen(azagContextMenuErrorPlea);
+				azagContextMenuOpenSub(azagContextMenuErrorPlea);
 			}
 			if (azagDrawContextMenuButton("I hate you.")) {
 				contextMenuPleaHate = true;

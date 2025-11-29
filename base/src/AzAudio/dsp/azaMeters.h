@@ -42,14 +42,14 @@ void azaMetersUpdate(azaMeters *data, azaBuffer *buffer, float inputAmp);
 	- Actual range goes from dbHeadroom-dbRange to dbHeadroom
 	returns used width
 */
-int azagDrawMeters(azaMeters *meters, azagRect bounds, int dbRange, int dbHeadroom);
+float azagDrawMeters(azaMeters *meters, azagRect bounds, float dbRange, float dbHeadroom);
 /*
 	Just draws the background with the given dbRange and dbHeadroom, still themed after normal meters.
 	You can use this as an easy way to make the background of custom meters.
 	NOTE: The db ticks are spread across the bounds, shrunk vertically by the theme's margin on both ends.
 	- This pairs nicely with `azagRectShrinkAllXY(&bounds, azagThemeCurrent.margin)` to get the proper bounds of the indicators.
 */
-void azagDrawMeterBackground(azagRect bounds, int dbRange, int dbHeadroom);
+void azagDrawMeterBackground(azagRect bounds, float dbRange, float dbHeadroom);
 
 
 

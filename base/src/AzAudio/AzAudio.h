@@ -58,6 +58,7 @@ void azaSetLogCallback(fp_azaLogCallback newLogFunc);
 void azaLog(AzaLogLevel level, const char *format, ...);
 
 #define AZA_LOG_ERR(...) azaLog(AZA_LOG_LEVEL_ERROR, __VA_ARGS__)
+#define AZA_LOG_ERR_ONCE(...) { static bool aza__once = true; if (aza__once) { azaLog(AZA_LOG_LEVEL_ERROR, __VA_ARGS__); aza__once = false; } }
 #define AZA_LOG_INFO(...) azaLog(AZA_LOG_LEVEL_INFO, __VA_ARGS__)
 #define AZA_LOG_TRACE(...) azaLog(AZA_LOG_LEVEL_TRACE, __VA_ARGS__)
 

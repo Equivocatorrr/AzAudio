@@ -234,6 +234,99 @@ azaOscSaw(float t) {
 
 
 
+// 2D Vector math
+
+
+
+typedef union azaVec2 {
+	struct {
+		float x, y;
+	};
+	float data[2];
+} azaVec2;
+
+static inline azaVec2 azaAddVec2(azaVec2 lhs, azaVec2 rhs) {
+	return AZA_CLITERAL(azaVec2) {
+		lhs.x + rhs.x,
+		lhs.y + rhs.y,
+	};
+}
+
+static inline azaVec2 azaSubVec2(azaVec2 lhs, azaVec2 rhs) {
+	return AZA_CLITERAL(azaVec2) {
+		lhs.x - rhs.x,
+		lhs.y - rhs.y,
+	};
+}
+
+static inline azaVec2 azaMulVec2(azaVec2 lhs, azaVec2 rhs) {
+	return AZA_CLITERAL(azaVec2) {
+		lhs.x * rhs.x,
+		lhs.y * rhs.y,
+	};
+}
+
+static inline azaVec2 azaDivVec2(azaVec2 lhs, azaVec2 rhs) {
+	return AZA_CLITERAL(azaVec2) {
+		lhs.x / rhs.x,
+		lhs.y / rhs.y,
+	};
+}
+
+static inline azaVec2 azaMulVec2Scalar(azaVec2 lhs, float rhs) {
+	return AZA_CLITERAL(azaVec2) {
+		lhs.x * rhs,
+		lhs.y * rhs,
+	};
+}
+
+static inline azaVec2 azaDivVec2Scalar(azaVec2 lhs, float rhs) {
+	return AZA_CLITERAL(azaVec2) {
+		lhs.x / rhs,
+		lhs.y / rhs,
+	};
+}
+
+static inline azaVec2 azaLerpVec2(azaVec2 a, azaVec2 b, float t) {
+	return AZA_CLITERAL(azaVec2) {
+		azaLerpf(a.x, b.x, t),
+		azaLerpf(a.y, b.y, t),
+	};
+}
+
+static inline float azaVec2Dot(azaVec2 lhs, azaVec2 rhs) {
+	return lhs.x * rhs.x + lhs.y * rhs.y;
+}
+
+// Euclidian norm
+static inline float azaVec2Norm(azaVec2 a) {
+	return sqrtf(a.x * a.x + a.y * a.y);
+}
+
+// Euclidian norm squared
+static inline float azaVec2NormSqr(azaVec2 a) {
+	return a.x * a.x + a.y * a.y;
+}
+
+// Use this if the norm of a could be very small
+static inline azaVec2 azaVec2NormalizedDef(azaVec2 a, float epsilon, azaVec2 def) {
+	float norm = azaVec2Norm(a);
+	if (norm < epsilon) {
+		return def;
+	}
+	return azaDivVec2Scalar(a, norm);
+}
+
+static inline azaVec2 azaVec2Normalized(azaVec2 a) {
+	return azaDivVec2Scalar(a, azaVec2Norm(a));
+}
+
+static inline bool azaVec2Equal(azaVec2 a, azaVec2 b) {
+	return a.x == b.x && a.y == b.y;
+}
+
+
+
 // 3D Vector math
 
 
@@ -241,6 +334,13 @@ azaOscSaw(float t) {
 typedef union azaVec3 {
 	struct {
 		float x, y, z;
+	};
+	struct {
+		azaVec2 xy;
+	};
+	struct {
+		float _x;
+		azaVec2 yz;
 	};
 	float data[3];
 } azaVec3;
