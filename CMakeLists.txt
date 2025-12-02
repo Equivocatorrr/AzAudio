@@ -33,21 +33,35 @@ set(AZAUDIO_STATELESS_PARSER_EXECUTABLE_NAME
 	$<IF:$<BOOL:$<CONFIG:Debug>>,statelessParser${CMAKE_DEBUG_POSTFIX}${CMAKE_EXECUTABLE_SUFFIX},statelessParser${CMAKE_EXECUTABLE_SUFFIX}>
 )
 
-file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tools/${AZAUDIO_STATELESS_PARSER_EXECUTABLE_NAME}" PREFIX_PARSER_EXE)
+file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/tools/${AZAUDIO_STATELESS_PARSER_EXECUTABLE_NAME}" PARSER_GENERATOR_EXE)
+
 file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/prefixes.txt" PREFIX_PARSER_PREFIXES)
 file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/azaHasPrefix.gen.c" PREFIX_PARSER_OUTPUT)
 
+file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/suffixes.txt" SUFFIX_PARSER_SUFFIXES)
+file(TO_NATIVE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/azaHasSuffix.gen.c" SUFFIX_PARSER_OUTPUT)
+
 add_custom_command(
 	OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/azaHasPrefix.gen.c
-	COMMAND ${PREFIX_PARSER_EXE} --reverse ${PREFIX_PARSER_PREFIXES} -o ${PREFIX_PARSER_OUTPUT} azaHasPrefix
+	COMMAND ${PARSER_GENERATOR_EXE} --reverse ${PREFIX_PARSER_PREFIXES} -o ${PREFIX_PARSER_OUTPUT} azaHasPrefix
 	MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/prefixes.txt
 	DEPENDS statelessParser
 	COMMENT "Generating prefix parser..."
-#	COMMENT "Generating prefix parser... \"${PREFIX_PARSER_EXE} --reverse ${PREFIX_PARSER_PREFIXES} -o ${PREFIX_PARSER_OUTPUT} azaHasPrefix\""
+#	COMMENT "Generating prefix parser... \"${PARSER_GENERATOR_EXE} --reverse ${PREFIX_PARSER_PREFIXES} -o ${PREFIX_PARSER_OUTPUT} azaHasPrefix\""
 )
 # In order to get it to remake azaHasPrefix.gen.c only when necessary, the only way to do that is to use both add_custom_command and add_custom_target together, because it just doesn't work otherwise... Getting CMake to behave is like pulling teeth sometimes
 add_custom_target(AzAudio_prefix_parser
 	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/azaHasPrefix.gen.c
+)
+add_custom_command(
+	OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/azaHasSuffix.gen.c
+	COMMAND ${PARSER_GENERATOR_EXE} --forward ${SUFFIX_PARSER_SUFFIXES} -o ${SUFFIX_PARSER_OUTPUT} azaHasSuffix
+	MAIN_DEPENDENCY ${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/suffixes.txt
+	DEPENDS statelessParser
+	COMMENT "Generating suffix parser..."
+)
+add_custom_target(AzAudio_suffix_parser
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/base/src/AzAudio/gui/azaHasSuffix.gen.c
 )
 
 add_subdirectory(base)

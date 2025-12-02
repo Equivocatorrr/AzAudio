@@ -562,9 +562,16 @@ static bool azagCharPairCantBeSplit(char c1, char c2) {
 }
 
 #include "azaHasPrefix.gen.c"
+#include "azaHasSuffix.gen.c"
 
 // Checks for patterns around text, bounded by minRange(inclusive) and maxRange(exclusive), and returns true if a hyphen can be placed at the beginning of text
-static bool azagTextCanBeHyphenated(const char *text, int minRange, int maxRange) {
+static bool azagTextCanBeHyphenated(const char *text, int minRange, int maxRange, bool *out_was_suffix) {
+	*out_was_suffix = false;
+	// Check suffix first, as it has special behavior that can block other matches
+	if (minRange <= -2 && charIsAlpha(text[-1]) && charIsAlpha(text[-2]) && azaHasSuffix(text, minRange, maxRange)) {
+		*out_was_suffix = true;
+		return true;
+	}
 	{ // Check for lowercase into an uppercase (camelCaseWordBoundary)
 		if (minRange <= -1 && maxRange >= 1) {
 			if (azagCharIsLowercase(text[-1]) && azagCharIsUppercase(text[0])) {
@@ -603,7 +610,8 @@ static bool azagTextCanBeHyphenated(const char *text, int minRange, int maxRange
 			}
 		}
 	}
-	if (azaHasPrefix(text, minRange, maxRange)) {
+	// Make sure we don't hyphenate just 1 letter or break up certain pairs
+	if (maxRange > 2 && charIsAlpha(text[0]) && charIsAlpha(text[1]) && azaHasPrefix(text, minRange, maxRange)) {
 		return true;
 	}
 	return false;
@@ -617,6 +625,7 @@ size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTe
 	size_t lastSpaceDst = 0;
 	size_t lastHyphenSrc = 0;
 	size_t lastHyphenDst = 0;
+	bool lastWasSuffix = false;
 	size_t lastHyphenatedSrc = 0;
 	size_t dstSizeRemaining = dstSize-1; // Leave space for the null terminator
 	float cursor = 0.0f;
@@ -635,6 +644,7 @@ size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTe
 			if (src[srcCur] == ' ' || src[srcCur] == '\t') {
 				lastSpaceSrc = srcCur;
 				lastSpaceDst = dstCur;
+				lastWasSuffix = false;
 			} else {
 				width = cursor + advanceX.width;
 				if (width > availableWidth) {
@@ -646,6 +656,7 @@ size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTe
 						dstCur = lastSpaceDst+1;
 						dstSizeRemaining = dstSize-1 - dstCur;
 						lastSpaceDst = 0; // Don't use this space again, it's not a space any more
+						lastWasSuffix = false;
 						cursor = 0.0f;
 						width = 0.0f;
 						continue;
@@ -658,6 +669,7 @@ size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTe
 						dstCur = lastHyphenDst+2;
 						dstSizeRemaining = dstSize-1 - dstCur;
 						lastHyphenDst = 0;
+						lastWasSuffix = false;
 						cursor = 0.0f;
 						width = 0.0f;
 						continue;
@@ -669,13 +681,16 @@ size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTe
 					width = 0.0f;
 					continue;
 				}
+				bool wasSuffix = false;
 				if (
 					(dstSizeRemaining > 1 && src[srcCur] == '-') ||
-					(dstSizeRemaining > 2 && azagTextCanBeHyphenated(src + srcCur, -(int)srcCur, (int)(srcLen - srcCur)))
+					(dstSizeRemaining > 2 && azagTextCanBeHyphenated(src + srcCur, -(int)srcCur, (int)(srcLen - srcCur), &wasSuffix))
 				) {
-					if (lastHyphenatedSrc != srcCur) {
+					if (lastHyphenatedSrc != srcCur && !lastWasSuffix) {
+						// Don't allow a suffix to replace a suffix, as we want the longest version of similar suffixes.
 						lastHyphenSrc = srcCur;
 						lastHyphenDst = dstCur;
+						lastWasSuffix = lastWasSuffix || wasSuffix;
 					}
 				}
 			}
