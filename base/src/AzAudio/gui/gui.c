@@ -5,6 +5,8 @@
 
 #include "gui.h"
 
+#include <ctype.h>
+
 #include "platform.h"
 
 #include "../math.h"
@@ -425,11 +427,197 @@ bool azagMouseCaptureJustStarted() {
 
 
 
+static bool azagCharIsConsonant(char c) {
+	switch (c) {
+		case 'b': case 'B':
+		case 'c': case 'C':
+		case 'd': case 'D':
+		case 'f': case 'F':
+		case 'g': case 'G':
+		case 'h': case 'H':
+		case 'j': case 'J':
+		case 'k': case 'K':
+		case 'l': case 'L':
+		case 'm': case 'M':
+		case 'n': case 'N':
+		case 'p': case 'P':
+		case 'q': case 'Q':
+		case 'r': case 'R':
+		case 's': case 'S':
+		case 't': case 'T':
+		case 'v': case 'V':
+		case 'w': case 'W':
+		case 'x': case 'X':
+		case 'y': case 'Y':
+		case 'z': case 'Z':
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool azagCharIsVowel(char c) {
+	switch (c) {
+		case 'a': case 'A':
+		case 'e': case 'E':
+		case 'i': case 'I':
+		case 'o': case 'O':
+		case 'u': case 'U':
+		case 'y': case 'Y':
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool azagCharIsLowercase(char c) {
+	if (c >= 'a' && c <= 'z') {
+		return true;
+	}
+	return false;
+}
+
+static bool azagCharIsUppercase(char c) {
+	if (c >= 'A' && c <= 'Z') {
+		return true;
+	}
+	return false;
+}
+
+static bool azagCharPairIsOneSound(char c1, char c2) {
+	if (azagCharIsVowel(c1) && azagCharIsVowel(c2)) {
+		// Might be overzealous, better safe than sorry I guess.
+		return true;
+	}
+	c1 = tolower(c1);
+	c2 = tolower(c2);
+	switch (c1) {
+		case 'b': return c2 == 'b' || c2 == 'r' || c2 == 'l' || c2 == 'y';
+		case 'c': return c2 == 'c' || c2 == 'k' || c2 == 'h' || c2 == 'r' || c2 == 'l' || c2 == 'y';
+		case 'd': return c2 == 'd' || c2 == 'r' || c2 == 'j' || c2 == 'g' || c2 == 'y';
+		case 'f': return c2 == 'f' || c2 == 'r' || c2 == 'l' || c2 == 'y';
+		case 'g': return c2 == 'g' || c2 == 'h' || c2 == 'r' || c2 == 'l' || c2 == 'y';
+		case 'l': return c2 == 'l' || c2 == 'f' || c2 == 'y';
+		case 'm': return c2 == 'm' || c2 == 'y' || c2 == 'p' || c2 == 'n';
+		case 'n': return c2 == 'n' || c2 == 'x' || c2 == 'y' || c2 == 'c' || c2 == 'd' || c2 == 't' || c2 == 'k';
+		case 'p': return c2 == 'p' || c2 == 'h' || c2 == 'l' || c2 == 'r' || c2 == 'y';
+		case 'r': return c2 == 'r' || c2 == 'y';
+		case 's': return c2 == 's' || c2 == 't' || c2 == 'l' || c2 == 'p' || c2 == 'c' || c2 == 'k' || c2 == 'y';
+		case 't': return c2 == 't' || c2 == 'h' || c2 == 'r' || c2 == 'y' || c2 == 'z';
+		case 'v': return c2 == 'v' || c2 == 'r' || c2 == 'y';
+		case 'w': return c2 == 'w' || c2 == 'h' || c2 == 'n' || c2 == 'r' || c2 == 'y';
+		case 'x': return c2 == 'x' || c2 == 'p' || c2 == 'y';
+		case 'z': return c2 == 'z' || c2 == 'l';
+		default: return false;
+	}
+}
+
+// May have exceptions to azagCharPairIsOneSound for the purposes of allowing certain splits
+static bool azagCharPairCantBeSplit(char c1, char c2) {
+	if (azagCharIsUppercase(c1) && azagCharIsLowercase(c2)) {
+		return true;
+	}
+	c1 = tolower(c1);
+	c2 = tolower(c2);
+	switch (c1) {
+		case 'b':
+			if (c2 == 'b') return false;
+			break;
+		case 'c':
+			if (c2 == 'c') return false;
+			break;
+		case 'd':
+		 	if (c2 == 'd') return false;
+		 	break;
+		case 'f':
+			if (c2 == 'f') return false;
+			// Include FX because it's a common acronym
+			if (c2 == 'x') return true;
+			break;
+		case 'g':
+		 	if (c2 == 'g') return false;
+		 	break;
+		case 'l':
+		 	if (c2 == 'l') return false;
+		 	break;
+		case 'm':
+		 	if (c2 == 'm') return false;
+		 	break;
+		case 'n':
+		 	if (c2 == 'n') return false;
+		 	break;
+		case 'p':
+		 	if (c2 == 'p') return false;
+		 	break;
+		case 'r':
+		 	if (c2 == 'r') return false;
+		 	break;
+		case 't':
+		 	if (c2 == 't') return false;
+		 	break;
+		default: break;
+	}
+	// No exceptions, just do the normal thing
+	return azagCharPairIsOneSound(c1, c2);
+}
+
+#include "azaHasPrefix.gen.c"
+
+// Checks for patterns around text, bounded by minRange(inclusive) and maxRange(exclusive), and returns true if a hyphen can be placed at the beginning of text
+static bool azagTextCanBeHyphenated(const char *text, int minRange, int maxRange) {
+	{ // Check for lowercase into an uppercase (camelCaseWordBoundary)
+		if (minRange <= -1 && maxRange >= 1) {
+			if (azagCharIsLowercase(text[-1]) && azagCharIsUppercase(text[0])) {
+				return true;
+			}
+		}
+	}
+	{ // Check for vowel-consonant-consonant-vowel
+		bool leftVowelConsonant = false;
+		if (minRange <= -3) {
+			if (azagCharIsVowel(text[-3]) && azagCharIsConsonant(text[-2]) && azagCharIsConsonant(text[-1]) && azagCharPairIsOneSound(text[-2], text[-1])) {
+				leftVowelConsonant = true;
+			}
+		}
+		if (minRange <= -2) {
+			if (azagCharIsVowel(text[-2]) && azagCharIsConsonant(text[-1])) {
+				leftVowelConsonant = true;
+			}
+		}
+		if (leftVowelConsonant) {
+			bool rightConsonantVowel = false;
+			if (maxRange >= 3) {
+				if (azagCharIsConsonant(text[0]) && azagCharIsConsonant(text[1]) && azagCharIsVowel(text[2]) && azagCharPairIsOneSound(text[0], text[1])) {
+					rightConsonantVowel = true;
+				}
+			}
+			if (maxRange >= 2) {
+				if (azagCharIsConsonant(text[0]) && azagCharIsVowel(text[1])) {
+					rightConsonantVowel = true;
+				}
+			}
+			if (rightConsonantVowel) {
+				if (!azagCharPairCantBeSplit(text[-1], text[0])) {
+					return true;
+				}
+			}
+		}
+	}
+	if (azaHasPrefix(text, minRange, maxRange)) {
+		return true;
+	}
+	return false;
+}
+
 size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTextScale scale, float availableWidth, bool hyphenate) {
+	size_t srcLen = strlen(src);
 	size_t srcCur = 0;
 	size_t dstCur = 0;
 	size_t lastSpaceSrc = 0;
 	size_t lastSpaceDst = 0;
+	size_t lastHyphenSrc = 0;
+	size_t lastHyphenDst = 0;
+	size_t lastHyphenatedSrc = 0;
 	size_t dstSizeRemaining = dstSize-1; // Leave space for the null terminator
 	float cursor = 0.0f;
 	float width = 0.0f; // Because of kerning, actual text width may at times be wider than the cursor's position plus the last character's advance. This is the actual width of the text.
@@ -451,7 +639,7 @@ size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTe
 				width = cursor + advanceX.width;
 				if (width > availableWidth) {
 					// Time to break up the line
-					if (lastSpaceDst) {
+					if (lastSpaceDst > lastHyphenDst) {
 						dst[lastSpaceDst] = '\n';
 						// Now go back and redo the line from the start
 						srcCur = lastSpaceSrc+1;
@@ -462,7 +650,18 @@ size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTe
 						width = 0.0f;
 						continue;
 					}
-					// TODO: Hyphenation, as we won't always have spaces to fall back to.
+					if (lastHyphenDst > lastSpaceDst) {
+						dst[lastHyphenDst] = '-';
+						dst[lastHyphenDst+1] = '\n';
+						srcCur = lastHyphenSrc + (src[lastHyphenSrc] == '-' ? 1 : 0);
+						lastHyphenatedSrc = srcCur;
+						dstCur = lastHyphenDst+2;
+						dstSizeRemaining = dstSize-1 - dstCur;
+						lastHyphenDst = 0;
+						cursor = 0.0f;
+						width = 0.0f;
+						continue;
+					}
 					// Last-ditch fallback that just breaks the word in-place (probably ugly)
 					dst[dstCur++] = '\n';
 					dstSizeRemaining--;
@@ -470,10 +669,20 @@ size_t azagTextInsertNewlines(char *dst, size_t dstSize, const char *src, azagTe
 					width = 0.0f;
 					continue;
 				}
+				if (
+					(dstSizeRemaining > 1 && src[srcCur] == '-') ||
+					(dstSizeRemaining > 2 && azagTextCanBeHyphenated(src + srcCur, -(int)srcCur, (int)(srcLen - srcCur)))
+				) {
+					if (lastHyphenatedSrc != srcCur) {
+						lastHyphenSrc = srcCur;
+						lastHyphenDst = dstCur;
+					}
+				}
 			}
 			memcpy(dst + dstCur, src + srcCur, advanceX.characterBytes);
 			srcCur += advanceX.characterBytes;
 			dstCur += advanceX.characterBytes;
+			dstSizeRemaining = dstSize-1 - dstCur;
 			cursor += advanceX.advance;
 		}
 	}
@@ -938,6 +1147,7 @@ void azagDrawTextBox(azagRect bounds, char *text, uint32_t textCapacity) {
 				textboxCursor = 0;
 				textboxSelected = false;
 			} else if (textboxCursor > 0) {
+				// TODO: Handle wide UTF-8 codepoints
 				textboxCursor--;
 				if (azagIsControlDown()) {
 					while (textboxCursor > 0) {
@@ -952,6 +1162,7 @@ void azagDrawTextBox(azagRect bounds, char *text, uint32_t textCapacity) {
 				textboxCursor = textLen;
 				textboxSelected = false;
 			} else if (textboxCursor < textLen) {
+				// TODO: Handle wide UTF-8 codepoints
 				textboxCursor++;
 				if (azagIsControlDown()) {
 					while (textboxCursor < textLen) {
@@ -976,6 +1187,7 @@ void azagDrawTextBox(azagRect bounds, char *text, uint32_t textCapacity) {
 				textboxSelected = false;
 				text[0] = 0;
 			} else if (textboxCursor > 0) {
+				// TODO: Handle wide UTF-8 codepoints
 				azagTextCharErase(textboxCursor-1, text, textLen);
 				textboxCursor--;
 				textLen--;
@@ -988,12 +1200,14 @@ void azagDrawTextBox(azagRect bounds, char *text, uint32_t textCapacity) {
 				textboxSelected = false;
 				text[0] = 0;
 			} else if (textboxCursor < textLen) {
+				// TODO: Handle wide UTF-8 codepoints
 				azagTextCharErase(textboxCursor, text, textLen);
 				textLen--;
 			}
 		}
 		uint32_t c;
 		while ((c = azagGetNextChar()) && (textLen < textCapacity-1 || textboxSelected)) {
+			// TODO: Handle wide UTF-8 codepoints
 			if (c < 128) {
 				if (textboxSelected) {
 					textLen = 0;

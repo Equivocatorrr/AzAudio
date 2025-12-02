@@ -4,6 +4,8 @@ build*/
 .idea
 .clang-tidy
 *.log
+# Source files generated at build time
+*.gen.c
 *compile_commands.json*
 switchto*
 
