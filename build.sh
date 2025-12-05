@@ -112,7 +112,7 @@ abort_if_failed()
 
 if [ $clean -ne 0 ]; then
 	echo "Cleaning..."
-	( set -x; rm -rf tests/*/bin tests/*/*.log build buildDebugL buildReleaseL buildDebugW buildReleaseW )
+	( set -x; rm -rf tests/*/bin tests/*/*.log tools/bin build buildDebugL buildReleaseL buildDebugW buildReleaseW )
 fi
 
 if [ $BuildDebugL -eq 1 ]

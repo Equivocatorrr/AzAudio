@@ -15,5 +15,5 @@ reaper/
 # don't include generated binaries
 bin/
 obj/
-tools/
+tools/bin/
 misc/

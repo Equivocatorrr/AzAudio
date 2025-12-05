@@ -93,6 +93,7 @@ if %argIndex% neq %argCount% goto loopStart
 
 if %clean% == 1 (
 	for /f %%i in ('dir /a:d /b "tests\*"') do rd /s /q tests\%%i\bin
+	rd /s /q tools\bin
 	rd /s /q build
 )
 
