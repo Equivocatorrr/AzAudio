@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 typedef struct Trie {
 	struct Trie *pNext[256]; // pNext[0] being non-null means this node is the last node in a valid word
