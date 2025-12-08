@@ -100,6 +100,8 @@ add_library(AzAudio STATIC
 	# plugins
 	src/AzAudio/dsp/plugins/azaDSPDebugger.h
 	src/AzAudio/dsp/plugins/azaDSPDebugger.c
+	src/AzAudio/dsp/plugins/azaDSPMultiplexer.h
+	src/AzAudio/dsp/plugins/azaDSPMultiplexer.c
 	src/AzAudio/dsp/plugins/azaRMS.h
 	src/AzAudio/dsp/plugins/azaRMS.c
 	src/AzAudio/dsp/plugins/azaCubicLimiter.h

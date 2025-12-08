@@ -113,19 +113,37 @@ typedef struct azaADSRInstance {
 	float releaseStartAmp;
 } azaADSRInstance;
 
-static inline void azaADSRStart(azaADSRInstance *instance) {
+typedef struct azaADSR {
+	azaADSRConfig config;
+	azaADSRInstance instance;
+} azaADSR;
+
+static inline void azaADSRInstanceStart(azaADSRInstance *instance) {
 	instance->stage = AZA_ADSR_STAGE_ATTACK;
 	instance->progress = 0.0f;
 	instance->releaseStartAmp = 0.0f;
 }
 
-static inline void azaADSRStop(azaADSRInstance *instance) {
+static inline void azaADSRInstanceStop(azaADSRInstance *instance) {
 	instance->stage = AZA_ADSR_STAGE_RELEASE;
 }
 
-float azaADSRGetValue(azaADSRConfig *config, azaADSRInstance *instance);
+float azaADSRSplitGetValue(azaADSRConfig *config, azaADSRInstance *instance);
 
-float azaADSRUpdate(azaADSRConfig *config, azaADSRInstance *instance, float deltaMs);
+float azaADSRSplitUpdate(azaADSRConfig *config, azaADSRInstance *instance, float deltaMs);
+
+static inline void azaADSRStart(azaADSR *envelope) {
+	azaADSRInstanceStart(&envelope->instance);
+}
+static inline void azaADSRStop(azaADSR *envelope) {
+	azaADSRInstanceStop(&envelope->instance);
+}
+static inline float azaADSRGetValue(azaADSR *envelope) {
+	return azaADSRSplitGetValue(&envelope->config, &envelope->instance);
+}
+static inline float azaADSRUpdate(azaADSR *envelope, float deltaMs) {
+	return azaADSRSplitUpdate(&envelope->config, &envelope->instance, deltaMs);
+}
 
 
 

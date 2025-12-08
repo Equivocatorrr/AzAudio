@@ -182,22 +182,20 @@ int main(int argumentCount, char** argumentValues) {
 
 
 
-	sampler = azaMakeSampler((azaSamplerConfig) {
-		.buffer = &bufferCat,
+	sampler = azaSamplerMake((azaSamplerConfig) {
 		.speedTransitionTimeMs = 50.0f,
 		.volumeTransitionTimeMs = 50.0f,
-		.loop = true,
 	});
-	azaSamplerPlay(sampler, 1.0f, 0.0f);
+	azaSamplerLoop(sampler, &bufferCat, 1.0f, 0.0f, (azaADSRConfig) { .attack = 5.0f, .decay = 0.0f, .sustain = 0.0f, .release = 500.0f });
 
 	objects = calloc(bufferCat.channelLayout.count, sizeof(Object));
 	updateObjects(bufferCat.channelLayout.count, 0.0f);
 	for (uint8_t c = 0; c < bufferCat.channelLayout.count; c++) {
 		objects[c].pos = objects[c].target;
 	}
-	spatialize = (azaSpatialize*)azaMakeDefaultSpatialize();
+	spatialize = (azaSpatialize*)azaSpatializeMakeDefault();
 
-	reverb = azaMakeReverb((azaReverbConfig) {
+	reverb = azaReverbMake((azaReverbConfig) {
 		.gainWet = -6.0f,
 		.gainDry = 0.0f,
 		.roomsize = 40.0f,
@@ -205,14 +203,14 @@ int main(int argumentCount, char** argumentValues) {
 		.delay_ms = 23.0f,
 	});
 
-	reverbFilter = azaMakeFilter((azaFilterConfig) {
+	reverbFilter = azaFilterMake((azaFilterConfig) {
 		.kind = AZA_FILTER_HIGH_PASS,
 		.poles = AZA_FILTER_6_DB,
 		.frequency = 200.0f,
 	});
 	azaDSPChainAppend(&reverb->inputDelay.inputEffects, (azaDSP*)reverbFilter);
 
-	limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
+	limiter = azaLookaheadLimiterMake((azaLookaheadLimiterConfig) {
 		.gainInput  =  3.0f,
 		.gainOutput = -0.1f,
 	});
@@ -223,9 +221,9 @@ int main(int argumentCount, char** argumentValues) {
 	azaStreamDeinit(&streamOutput);
 
 	free(objects);
-	azaFreeSampler(sampler);
-	azaFreeSpatialize(spatialize);
-	azaFreeLookaheadLimiter(limiter);
+	azaSamplerFree((azaDSP*)sampler);
+	azaSpatializeFree((azaDSP*)spatialize);
+	azaLookaheadLimiterFree((azaDSP*)limiter);
 	azaBufferDeinit(&bufferCat, true);
 
 	azaDeinit();

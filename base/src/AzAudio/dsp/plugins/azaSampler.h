@@ -18,40 +18,40 @@ extern "C" {
 
 
 extern const azaDSP azaSamplerHeader;
-
-#define AZAUDIO_SAMPLER_MAX_INSTANCES 128
+// TODO: Probably make this dynamic
+#define AZAUDIO_SAMPLER_MAX_INSTANCES 16
 
 typedef struct azaSamplerInstance {
+	azaBuffer *buffer;
 	uint32_t id;
 	int32_t frame;
 	float fraction;
 	bool reverse;
-	aza_byte _reserved[3]; // Explicit padding reserved for later.
-	azaADSRInstance envelope;
-	azaFollowerLinear speed;
-	azaFollowerLinear volume;
-} azaSamplerInstance;
-
-typedef struct azaSamplerConfig {
-	// buffer containing the sound we're sampling
-	azaBuffer *buffer;
-	// If speed changes this is how long it takes to lerp to the new value in ms
-	float speedTransitionTimeMs;
-	// If gain changes this is how long it takes to lerp to the new value in ms (lerp happens in amp space)
-	float volumeTransitionTimeMs;
 	// Whether instances loop around (must be true for pingpong to be respected)
 	bool loop;
 	// When we hit a loop point, this will make us reverse instead of wrapping around.
 	bool pingpong;
-	aza_byte _reserved[6]; // Explicit padding reserved for later.
+	aza_byte _reserved[9]; // Explicit padding reserved for later.
 	// Start of the looping region in frames
 	// If this value is >= buffer->frames, we treat this value as 0
 	int32_t loopStart;
 	// End of the looping region in frames
 	// If this value is <= loopStart, we treat this value as buffer->frames
 	int32_t loopEnd;
-	azaADSRConfig envelope;
+	azaADSR envelope;
+	azaFollowerLinear speed;
+	azaFollowerLinear volume;
+} azaSamplerInstance;
+static_assert(sizeof(azaSamplerInstance) == (sizeof(azaBuffer*) + 88), "Please update the expected size of azaSamplerInstance and remember to reserve padding explicitly.");
+
+typedef struct azaSamplerConfig {
+	// If speed changes this is how long it takes to lerp to the new value in ms
+	float speedTransitionTimeMs;
+	// If gain changes this is how long it takes to lerp to the new value in ms (lerp happens in amp space)
+	float volumeTransitionTimeMs;
+	aza_byte _reserved[8]; // Explicit padding reserved for later.
 } azaSamplerConfig;
+static_assert(sizeof(azaSamplerConfig) == (16), "Please update the expected size of azaSamplerConfig and remember to reserve padding explicitly.");
 
 typedef struct azaSampler {
 	azaDSP dsp;
@@ -62,7 +62,9 @@ typedef struct azaSampler {
 
 	azaSamplerInstance instances[AZAUDIO_SAMPLER_MAX_INSTANCES];
 	uint32_t numInstances;
+	aza_byte _reserved[4]; // Explicit padding reserved for later.
 } azaSampler;
+static_assert(sizeof(azaSampler) == (sizeof(azaDSP) + sizeof(azaSamplerConfig) + sizeof(azaMutex) + sizeof(azaMeters) + sizeof(azaSamplerInstance) * AZAUDIO_SAMPLER_MAX_INSTANCES + 8), "Please update the expected size of azaSampler and remember to reserve padding explicitly.");
 
 // initializes azaSampler in existing memory
 void azaSamplerInit(azaSampler *data, azaSamplerConfig config);
@@ -75,23 +77,38 @@ void azaSamplerResetChannels(azaSampler *data, uint32_t firstChannel, uint32_t c
 
 // Convenience function that allocates and inits an azaSampler for you
 // May return NULL indicating an out-of-memory error
-azaSampler* azaMakeSampler(azaSamplerConfig config);
-// Frees an azaSampler that was created with azaMakeSampler
-void azaFreeSampler(void *dsp);
+azaSampler* azaSamplerMake(azaSamplerConfig config);
+// Frees an azaSampler that was created with azaSamplerMake
+void azaSamplerFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultSampler();
+azaDSP* azaSamplerMakeDefault();
+azaDSP* azaSamplerMakeDuplicate(azaDSP *src);
+int azaSamplerCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 
 
-// Adds an instance of the sound
+// Adds an instance of the sound in buffer
 // speed affects the rate of playback for this instance (pitch control where 1.0f is base speed)
 // negative speed values will play the sound in reverse
 // gainDB affects the volume for this instance
+// envelope determines how the volume will change over time
+// if loop is true, then the sound will loop using the given loop range
+// if pingpong is true, then instead of a loop wrapping around to the opposite end of the loop range, it will reverse the sound at a loop range boundary.
+// loopStart is the start of the looping region in frames
+// If this value is >= buffer->frames, we treat this value as 0
 // returns the sound id, used for interacting with this instance later
-uint32_t azaSamplerPlay(azaSampler *data, float speed, float gainDB);
+uint32_t azaSamplerPlayFull(azaSampler *data, azaBuffer *buffer, float speed, float gainDB, azaADSRConfig envelope, bool loop, bool pingpong, int32_t loopStart, int32_t loopEnd);
+
+static inline uint32_t azaSamplerPlay(azaSampler *data, azaBuffer *buffer, float speed, float gainDB, azaADSRConfig envelope) {
+	return azaSamplerPlayFull(data, buffer, speed, gainDB, envelope, false, false, 0, 0);
+}
+// Simplest kind of loop, just wraps around the entirety of buffer
+static inline uint32_t azaSamplerLoop(azaSampler *data, azaBuffer *buffer, float speed, float gainDB, azaADSRConfig envelope) {
+	return azaSamplerPlayFull(data, buffer, speed, gainDB, envelope, true, false, 0, 0);
+}
 
 // may return NULL, indicating the id wasn't found
 azaSamplerInstance* azaSamplerGetInstance(azaSampler *data, uint32_t id);

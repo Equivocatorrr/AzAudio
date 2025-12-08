@@ -37,19 +37,21 @@ void azaDSPDebuggerResetChannels(azaDSPDebugger *data, uint32_t firstChannel, ui
 
 // Convenience function that allocates and inits an azaDSPDebugger for you
 // May return NULL indicating an out-of-memory error
-azaDSPDebugger* azaMakeDSPDebugger(azaDSPDebuggerConfig config);
-// Frees an azaDSPDebugger that was created with azaMakeDSPDebugger
-void azaFreeDSPDebugger(void *dsp);
+azaDSPDebugger* azaDSPDebuggerMake(azaDSPDebuggerConfig config);
+// Frees an azaDSPDebugger that was created with azaDSPDebuggerMake
+void azaDSPDebuggerFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultDSPDebugger();
+azaDSP* azaDSPDebuggerMakeDefault();
+azaDSP* azaDSPDebuggerMakeDuplicate(azaDSP *src);
+int azaDSPDebuggerCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaDSPDebuggerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
-azaDSPSpecs azaDSPDebuggerGetSpecs(void *dsp, uint32_t samplerate);
+azaDSPSpecs azaDSPDebuggerGetSpecs(azaDSP *dsp, uint32_t samplerate);
 
 
 
-void azagDrawDSPDebugger(void *dsp, azagRect bounds);
+void azaDSPDebuggerDraw(azaDSP *dsp, azagRect bounds);
 
 
 

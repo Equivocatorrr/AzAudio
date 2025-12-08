@@ -14,6 +14,16 @@
 
 
 
+static const azaDSPFuncs azaGateFuncs = {
+	.fp_makeDefault = azaGateMakeDefault,
+	.fp_makeDuplicate = azaGateMakeDuplicate,
+	.fp_copyConfig = azaGateCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaGateProcess,
+	.fp_free = azaGateFree,
+	.fp_draw = azaGateDraw,
+};
+
 const azaDSP azaGateHeader = {
 	.header =  {
 		.size    = sizeof(azaGate),
@@ -28,12 +38,7 @@ const azaDSP azaGateHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = azaGateProcess,
-		.fp_free     = azaFreeGate,
-		.fp_draw     = azagDrawGate,
-	},
+	.pFuncs = &azaGateFuncs,
 };
 
 void azaGateInit(azaGate *data, azaGateConfig config) {
@@ -63,7 +68,7 @@ void azaGateResetChannels(azaGate *data, uint32_t firstChannel, uint32_t channel
 	azaRMSResetChannels(&data->rms, firstChannel, channelCount);
 }
 
-azaGate* azaMakeGate(azaGateConfig config) {
+azaGate* azaGateMake(azaGateConfig config) {
 	azaGate *result = aza_calloc(1, sizeof(azaGate));
 	if (result) {
 		azaGateInit(result, config);
@@ -71,13 +76,13 @@ azaGate* azaMakeGate(azaGateConfig config) {
 	return result;
 }
 
-void azaFreeGate(void *data) {
-	azaGateDeinit(data);
-	aza_free(data);
+void azaGateFree(azaDSP *dsp) {
+	azaGateDeinit((azaGate*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultGate() {
-	return (azaDSP*)azaMakeGate((azaGateConfig) {
+azaDSP* azaGateMakeDefault() {
+	return (azaDSP*)azaGateMake((azaGateConfig) {
 		.threshold = -18.0f,
 		.ratio = 10.0f,
 		.attack_ms = 5.0f,
@@ -85,6 +90,18 @@ azaDSP* azaMakeDefaultGate() {
 		.gainInput = 0.0f,
 		.gainOutput = 0.0f,
 	});
+}
+
+azaDSP* azaGateMakeDuplicate(azaDSP *src) {
+	azaGate *data = (azaGate*)src;
+	return (azaDSP*)azaGateMake(data->config);
+}
+
+int azaGateCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaGate *dataDst = (azaGate*)dst;
+	azaGate *dataSrc = (azaGate*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
@@ -174,8 +191,8 @@ static const float thresholdDBRange = 48.0f;
 static const float thresholdDBHeadroom = 12.0f;
 static const float attenuationMeterDBRange = 48.0f;
 
-void azagDrawGate(void *dsp, azagRect bounds) {
-	azaGate *data = dsp;
+void azaGateDraw(azaDSP *dsp, azagRect bounds) {
+	azaGate *data = (azaGate*)dsp;
 	float boundsStartX = bounds.x;
 	float usedWidth;
 	usedWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);

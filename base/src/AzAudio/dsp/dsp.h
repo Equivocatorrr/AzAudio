@@ -25,6 +25,7 @@
 #include "plugins/azaGate.h"
 #include "plugins/azaDelay.h"
 #include "plugins/azaDelayDynamic.h"
+#include "plugins/azaDSPMultiplexer.h"
 #include "plugins/azaReverb.h"
 #include "plugins/azaSampler.h"
 #include "plugins/azaSpatialize.h"

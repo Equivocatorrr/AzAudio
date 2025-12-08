@@ -11,6 +11,16 @@
 
 
 
+static const azaDSPFuncs azaSpatializeFuncs = {
+	.fp_makeDefault = azaSpatializeMakeDefault,
+	.fp_makeDuplicate = azaSpatializeMakeDuplicate,
+	.fp_copyConfig = azaSpatializeCopyConfig,
+	.fp_getSpecs = azaSpatializeGetSpecs,
+	.fp_process = azaSpatializeProcess,
+	.fp_free = azaSpatializeFree,
+	.fp_draw = NULL,
+};
+
 const azaDSP azaSpatializeHeader = {
 	.header =  {
 		.size    = sizeof(azaSpatialize),
@@ -25,12 +35,7 @@ const azaDSP azaSpatializeHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = azaSpatializeGetSpecs,
-		.fp_process  = azaSpatializeProcess,
-		.fp_free     = azaFreeSpatialize,
-		.fp_draw     = NULL,
-	},
+	.pFuncs = &azaSpatializeFuncs,
 };
 
 #define PRINT_CHANNEL_AMPS 0
@@ -105,6 +110,7 @@ static void azaGatherChannelPresenseMetadata(azaChannelLayout channelLayout, uin
 				*hasBack = 1;
 				*hasAerials = 1;
 				break;
+			default: break;
 		}
 	}
 }
@@ -274,7 +280,7 @@ void azaSpatializeResetChannels(azaSpatialize *data, uint32_t firstChannel, uint
 #endif
 }
 
-azaSpatialize* azaMakeSpatialize(azaSpatializeConfig config) {
+azaSpatialize* azaSpatializeMake(azaSpatializeConfig config) {
 	azaSpatialize *result = aza_calloc(1, sizeof(azaSpatialize));
 	if (result) {
 		azaSpatializeInit(result, config);
@@ -282,13 +288,13 @@ azaSpatialize* azaMakeSpatialize(azaSpatializeConfig config) {
 	return result;
 }
 
-void azaFreeSpatialize(void *data) {
-	azaSpatializeDeinit(data);
-	aza_free(data);
+void azaSpatializeFree(azaDSP *dsp) {
+	azaSpatializeDeinit((azaSpatialize*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultSpatialize() {
-	return (azaDSP*)azaMakeSpatialize((azaSpatializeConfig) {
+azaDSP* azaSpatializeMakeDefault() {
+	return (azaDSP*)azaSpatializeMake((azaSpatializeConfig) {
 		.world = NULL,
 		.doDoppler = true,
 		.doFilter = true,
@@ -300,6 +306,18 @@ azaDSP* azaMakeDefaultSpatialize() {
 		.earDistance = 0.085f,
 		.channels = {0},
 	});
+}
+
+azaDSP* azaSpatializeMakeDuplicate(azaDSP *src) {
+	azaSpatialize *data = (azaSpatialize*)src;
+	return (azaDSP*)azaSpatializeMake(data->config);
+}
+
+int azaSpatializeCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaSpatialize *dataDst = (azaSpatialize*)dst;
+	azaSpatialize *dataSrc = (azaSpatialize*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 static float azaSpatializeGetFilterCutoff(float delay, float dot) {
@@ -553,8 +571,8 @@ error:
 	return err;
 }
 
-azaDSPSpecs azaSpatializeGetSpecs(void *dsp, uint32_t samplerate) {
-	azaSpatialize *data = dsp;
+azaDSPSpecs azaSpatializeGetSpecs(azaDSP *dsp, uint32_t samplerate) {
+	azaSpatialize *data = (azaSpatialize*)dsp;
 	azaDSPSpecs specs = {0};
 	if (data->config.doDoppler || data->config.usePerChannelDelay) {
 		specs = azaDSPGetSpecs(&data->channelData[0].delay.dsp, samplerate);

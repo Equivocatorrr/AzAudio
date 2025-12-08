@@ -92,7 +92,7 @@ void azaQueueSort(azaQueue *data) {
 
 
 
-float azaADSRGetValue(azaADSRConfig *config, azaADSRInstance *instance) {
+float azaADSRSplitGetValue(azaADSRConfig *config, azaADSRInstance *instance) {
 	switch (instance->stage) {
 		case AZA_ADSR_STAGE_ATTACK:
 			return instance->progress;
@@ -108,7 +108,7 @@ float azaADSRGetValue(azaADSRConfig *config, azaADSRInstance *instance) {
 	return 0.0f;
 }
 
-float azaADSRUpdate(azaADSRConfig *config, azaADSRInstance *instance, float deltaMs) {
+float azaADSRSplitUpdate(azaADSRConfig *config, azaADSRInstance *instance, float deltaMs) {
 	if (instance->stage == AZA_ADSR_STAGE_ATTACK) {
 		if (config->attack > 0.0f) {
 			float deltaT = deltaMs / config->attack;
@@ -145,7 +145,7 @@ float azaADSRUpdate(azaADSRConfig *config, azaADSRInstance *instance, float delt
 			instance->stage = AZA_ADSR_STAGE_STOP;
 		}
 	}
-	float result = azaADSRGetValue(config, instance);
+	float result = azaADSRSplitGetValue(config, instance);
 	if (instance->stage != AZA_ADSR_STAGE_RELEASE) {
 		instance->releaseStartAmp = result;
 	}

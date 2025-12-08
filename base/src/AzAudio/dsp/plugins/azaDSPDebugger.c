@@ -13,6 +13,16 @@
 
 
 
+static const azaDSPFuncs azaDSPDebuggerFuncs = {
+	.fp_makeDefault = azaDSPDebuggerMakeDefault,
+	.fp_makeDuplicate = azaDSPDebuggerMakeDuplicate,
+	.fp_copyConfig = azaDSPDebuggerCopyConfig,
+	.fp_getSpecs = azaDSPDebuggerGetSpecs,
+	.fp_process = azaDSPDebuggerProcess,
+	.fp_free = azaDSPDebuggerFree,
+	.fp_draw = azaDSPDebuggerDraw,
+};
+
 const azaDSP azaDSPDebuggerHeader = {
 	.header =  {
 		.size    = sizeof(azaDSPDebugger),
@@ -27,12 +37,7 @@ const azaDSP azaDSPDebuggerHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = azaDSPDebuggerGetSpecs,
-		.fp_process  = azaDSPDebuggerProcess,
-		.fp_free     = azaFreeDSPDebugger,
-		.fp_draw     = azagDrawDSPDebugger,
-	},
+	.pFuncs = &azaDSPDebuggerFuncs,
 };
 
 void azaDSPDebuggerInit(azaDSPDebugger *data, azaDSPDebuggerConfig config) {
@@ -50,7 +55,7 @@ void azaDSPDebuggerReset(azaDSPDebugger *data) {
 void azaDSPDebuggerResetChannels(azaDSPDebugger *data, uint32_t firstChannel, uint32_t channelCount) {
 }
 
-azaDSPDebugger* azaMakeDSPDebugger(azaDSPDebuggerConfig config) {
+azaDSPDebugger* azaDSPDebuggerMake(azaDSPDebuggerConfig config) {
 	azaDSPDebugger *result = aza_calloc(1, sizeof(azaDSPDebugger));
 	if (result) {
 		 azaDSPDebuggerInit(result, config);
@@ -58,19 +63,31 @@ azaDSPDebugger* azaMakeDSPDebugger(azaDSPDebuggerConfig config) {
 	return result;
 }
 
-void azaFreeDSPDebugger(void *dsp) {
-	azaDSPDebuggerDeinit(dsp);
+void azaDSPDebuggerFree(azaDSP *dsp) {
+	azaDSPDebuggerDeinit((azaDSPDebugger*)dsp);
 	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultDSPDebugger() {
-	return (azaDSP*)azaMakeDSPDebugger((azaDSPDebuggerConfig) {
+azaDSP* azaDSPDebuggerMakeDefault() {
+	return (azaDSP*)azaDSPDebuggerMake((azaDSPDebuggerConfig) {
 		.specsToReport = (azaDSPSpecs) {
 			.latencyFrames = 0,
 			.leadingFrames = 0,
 			.trailingFrames = 0,
 		}
 	});
+}
+
+azaDSP* azaDSPDebuggerMakeDuplicate(azaDSP *src) {
+	azaDSPDebugger *data = (azaDSPDebugger*)src;
+	return (azaDSP*)azaDSPDebuggerMake(data->config);
+}
+
+int azaDSPDebuggerCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaDSPDebugger *dataDst = (azaDSPDebugger*)dst;
+	azaDSPDebugger *dataSrc = (azaDSPDebugger*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaDSPDebuggerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
@@ -91,7 +108,7 @@ int azaDSPDebuggerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fl
 	return err;
 }
 
-azaDSPSpecs azaDSPDebuggerGetSpecs(void *dsp, uint32_t samplerate) {
+azaDSPSpecs azaDSPDebuggerGetSpecs(azaDSP *dsp, uint32_t samplerate) {
 	azaDSPDebugger *data = (azaDSPDebugger*)dsp;
 	return data->config.specsToReport;
 }
@@ -102,8 +119,8 @@ azaDSPSpecs azaDSPDebuggerGetSpecs(void *dsp, uint32_t samplerate) {
 
 
 
-void azagDrawDSPDebugger(void *dsp, azagRect bounds) {
-	azaDSPDebugger *data = dsp;
+void azaDSPDebuggerDraw(azaDSP *dsp, azagRect bounds) {
+	azaDSPDebugger *data = (azaDSPDebugger*)dsp;
 	float boundsStartX = bounds.x;
 	float usedWidth;
 	float latencyFrames = (float)data->config.specsToReport.latencyFrames;

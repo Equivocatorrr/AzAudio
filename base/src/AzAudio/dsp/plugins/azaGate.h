@@ -64,15 +64,17 @@ void azaGateResetChannels(azaGate *data, uint32_t firstChannel, uint32_t channel
 
 // Convenience function that allocates and inits an azaGate for you
 // May return NULL indicating an out-of-memory error
-azaGate* azaMakeGate(azaGateConfig config);
-// Frees an azaGate that was created with azaMakeGate
-void azaFreeGate(void *dsp);
+azaGate* azaGateMake(azaGateConfig config);
+// Frees an azaGate that was created with azaGateMake
+void azaGateFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultGate();
+azaDSP* azaGateMakeDefault();
+azaDSP* azaGateMakeDuplicate(azaDSP *src);
+int azaGateCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaGateProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
-void azagDrawGate(void *dsp, azagRect bounds);
+void azaGateDraw(azaDSP *dsp, azagRect bounds);
 
 
 

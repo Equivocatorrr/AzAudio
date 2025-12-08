@@ -265,14 +265,14 @@ int main(int argumentCount, char** argumentValues) {
 
 
 		// gate runs on the single-channel mic buffer
-		gateBandPass = azaMakeFilter(azaFilterConfig{
+		gateBandPass = azaFilterMake(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_BAND_PASS,
 			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 300.0f,
 			/* .dryMix    = */ 0.0f,
 		});
 
-		gate = azaMakeGate(azaGateConfig{
+		gate = azaGateMake(azaGateConfig{
 			/* .threshold         = */-42.0f,
 			/* .ratio             = */ 5.0f,
 			/* .attack_ms         = */ 10.0f,
@@ -282,7 +282,7 @@ int main(int argumentCount, char** argumentValues) {
 		});
 		azaDSPChainAppend(&gate->activationEffects, (azaDSP*)gateBandPass);
 
-		delay = azaMakeDelay(azaDelayConfig{
+		delay = azaDelayMake(azaDelayConfig{
 			/* .gainWet      = */-15.0f,
 			/* .gainDry      = */ 0.0f,
 			/* .muteWet      = */ false,
@@ -293,7 +293,7 @@ int main(int argumentCount, char** argumentValues) {
 			/* .pingpong     = */ 0.9f,
 		});
 
-		delay2 = azaMakeDelay(azaDelayConfig{
+		delay2 = azaDelayMake(azaDelayConfig{
 			/* .gainWet      = */-15.0f,
 			/* .gainDry      = */ 0.0f,
 			/* .muteWet      = */ false,
@@ -304,14 +304,14 @@ int main(int argumentCount, char** argumentValues) {
 			/* .pingpong     = */ 0.2f,
 		});
 
-		delayWetFilter = azaMakeFilter(azaFilterConfig{
+		delayWetFilter = azaFilterMake(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_BAND_PASS,
 			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 800.0f,
 			/* .dryMix    = */ 0.8f,
 		});
 
-		delay3 = azaMakeDelay(azaDelayConfig{
+		delay3 = azaDelayMake(azaDelayConfig{
 			/* .gainWet      = */-15.0f,
 			/* .gainDry      = */ 0.0f,
 			/* .muteWet      = */ false,
@@ -323,14 +323,14 @@ int main(int argumentCount, char** argumentValues) {
 		});
 		azaDSPChainAppend(&delay3->inputEffects, (azaDSP*)delayWetFilter);
 
-		highPass = azaMakeFilter(azaFilterConfig{
+		highPass = azaFilterMake(azaFilterConfig{
 			/* .kind      = */ AZA_FILTER_HIGH_PASS,
 			/* .poles     = */ AZA_FILTER_6_DB,
 			/* .frequency = */ 50.0f,
 			/* .dryMix    = */ 0.0f,
 		});
 
-		reverb = azaMakeReverb(azaReverbConfig{
+		reverb = azaReverbMake(azaReverbConfig{
 			/* .gainWet  = */-15.0f,
 			/* .gainDry  = */ 0.0f,
 			/* .muteWet  = */ false,
@@ -341,7 +341,7 @@ int main(int argumentCount, char** argumentValues) {
 		});
 		// TODO: maybe recreate this? reverbData[c].delay = c * 377.0f / 48000.0f;
 
-		compressor = azaMakeCompressor(azaCompressorConfig{
+		compressor = azaCompressorMake(azaCompressorConfig{
 			/* .threshold = */-12.0f,
 			/* .ratio     = */ 10.0f,
 			/* .attack_ms = */ 100.0f,
@@ -349,12 +349,12 @@ int main(int argumentCount, char** argumentValues) {
 			/* .gainInput = */ 24.0f,
 		});
 
-		limiter = azaMakeLookaheadLimiter(azaLookaheadLimiterConfig{
+		limiter = azaLookaheadLimiterMake(azaLookaheadLimiterConfig{
 			/* .gainInput  = */ 6.0f,
 			/* .gainOutput = */-6.0f,
 		});
 
-		delayDynamic = azaMakeDelayDynamic(azaDelayDynamicConfig{
+		delayDynamic = azaDelayDynamicMake(azaDelayDynamicConfig{
 			/* .gainWet            = */-3.0f,
 			/* .gainDry            = */ 0.0f,
 			/* .muteWet            = */ false,
@@ -368,7 +368,7 @@ int main(int argumentCount, char** argumentValues) {
 		});
 		azaDSPChainAppend(&delayDynamic->inputEffects, (azaDSP*)delayWetFilter);
 
-		spatialize = azaMakeSpatialize(azaSpatializeConfig{
+		spatialize = azaSpatializeMake(azaSpatializeConfig{
 			/* .world                 = */ nullptr,
 			/* .doDoppler             = */ true,
 			/* .doFilter              = */ true,
@@ -389,18 +389,18 @@ int main(int argumentCount, char** argumentValues) {
 		azaStreamDeinit(&streamInput);
 		azaStreamDeinit(&streamOutput);
 
-		azaFreeLookaheadLimiter(limiter);
-		azaFreeCompressor(compressor);
-		azaFreeDelay(delay);
-		azaFreeDelay(delay2);
-		azaFreeDelay(delay3);
-		azaFreeReverb(reverb);
-		azaFreeFilter(highPass);
-		azaFreeGate(gate);
-		azaFreeFilter(gateBandPass);
-		azaFreeFilter(delayWetFilter);
-		azaFreeDelayDynamic(delayDynamic);
-		azaFreeSpatialize(spatialize);
+		azaLookaheadLimiterFree((azaDSP*)limiter);
+		azaCompressorFree((azaDSP*)compressor);
+		azaDelayFree((azaDSP*)delay);
+		azaDelayFree((azaDSP*)delay2);
+		azaDelayFree((azaDSP*)delay3);
+		azaReverbFree((azaDSP*)reverb);
+		azaFilterFree((azaDSP*)highPass);
+		azaGateFree((azaDSP*)gate);
+		azaFilterFree((azaDSP*)gateBandPass);
+		azaFilterFree((azaDSP*)delayWetFilter);
+		azaDelayDynamicFree((azaDSP*)delayDynamic);
+		azaSpatializeFree((azaDSP*)spatialize);
 
 		azaDeinit();
 	} catch (std::runtime_error& e) {

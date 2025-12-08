@@ -193,10 +193,10 @@ static void azagContextMenuTrackFXAdd() {
 	azagDrawContextMenuBegin(NULL);
 
 	for (uint32_t i = 0; i < azaDSPRegistry.count; i++) {
-		if (azaDSPRegistry.data[i].fp_makeDSP == NULL) continue;
+		if (azaDSPRegistry.data[i].base.pFuncs->fp_makeDefault == NULL) continue;
 		const char *name = azaDSPRegistry.data[i].base.guiMetadata.name;
 		if (azagDrawContextMenuButton(name)) {
-			azaDSP *newDSP = azaDSPRegistry.data[i].fp_makeDSP();
+			azaDSP *newDSP = azaDSPRegistry.data[i].base.pFuncs->fp_makeDefault();
 			if (newDSP) {
 				newDSP->header.owned = true;
 				azaTrackInsertDSP(track, newDSP, contextMenuTrackFXDSP);
@@ -453,7 +453,7 @@ static void azagDrawSelectedDSP() {
 		bool once = true, again = false;
 		for (uint32_t fxIndex = 0; fxIndex < track->plugins.steps.count; fxIndex++) {
 			azaDSP *dsp = track->plugins.steps.data[fxIndex].dsp;
-			if (dsp->funcs.fp_draw && azaMixerGUIDSPIsSelected(dsp)) {
+			if (dsp->pFuncs->fp_draw && azaMixerGUIDSPIsSelected(dsp)) {
 				float width = dsp->guiMetadata.drawCurrentWidth + azagThemeCurrent.margin.x * 2.0f;
 				{
 					// Check if we need to go to a new line, using a guess as to how big the header will be
@@ -509,7 +509,7 @@ static void azagDrawSelectedDSP() {
 				}
 				azagDrawTextMargin(pluginNameHeader, pluginRect.xy, pluginHeaderTextScale, azagThemeCurrent.plugin.colorPluginName);
 				azagRectShrinkTopMargin(&pluginRect, azagTextHeightMargin(pluginNameHeader, pluginHeaderTextScale));
-				dsp->funcs.fp_draw(dsp, pluginRect);
+				dsp->pFuncs->fp_draw(dsp, pluginRect);
 				azagPopScissor();
 				if (dsp->guiMetadata.drawTargetWidth == 0) {
 					azagRect rightScaleRect = {

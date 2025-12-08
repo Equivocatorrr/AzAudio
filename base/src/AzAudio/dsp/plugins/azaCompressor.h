@@ -61,17 +61,19 @@ void azaCompressorResetChannels(azaCompressor *data, uint32_t firstChannel, uint
 
 // Convenience function that allocates and inits an azaCompressor for you
 // May return NULL indicating an out-of-memory error
-azaCompressor* azaMakeCompressor(azaCompressorConfig config);
-// Frees an azaCompressor that was created with azaMakeCompressor
-void azaFreeCompressor(void *dsp);
+azaCompressor* azaCompressorMake(azaCompressorConfig config);
+// Frees an azaCompressor that was created with azaCompressorMake
+void azaCompressorFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultCompressor();
+azaDSP* azaCompressorMakeDefault();
+azaDSP* azaCompressorMakeDuplicate(azaDSP *src);
+int azaCompressorCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaCompressorProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 
-void azagDrawCompressor(void *dsp, azagRect bounds);
+void azaCompressorDraw(azaDSP *dsp, azagRect bounds);
 
 
 

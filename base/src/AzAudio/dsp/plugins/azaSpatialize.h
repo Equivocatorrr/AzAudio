@@ -116,16 +116,18 @@ void azaSpatializeResetChannels(azaSpatialize *data, uint32_t firstChannel, uint
 
 // Convenience function that allocates and inits an azaSpatialize for you
 // May return NULL indicating an out-of-memory error
-azaSpatialize* azaMakeSpatialize(azaSpatializeConfig config);
-// Frees an azaSpatialize that was created with azaMakeSpatialize
-void azaFreeSpatialize(void *dsp);
+azaSpatialize* azaSpatializeMake(azaSpatializeConfig config);
+// Frees an azaSpatialize that was created with azaSpatializeMake
+void azaSpatializeFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultSpatialize();
+azaDSP* azaSpatializeMakeDefault();
+azaDSP* azaSpatializeMakeDuplicate(azaDSP *dsp);
+int azaSpatializeCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 // azaDelayDynamic's sampling kernel causes there to be a minimum latency requirement, so we'll report that here
-azaDSPSpecs azaSpatializeGetSpecs(void *dsp, uint32_t samplerate);
+azaDSPSpecs azaSpatializeGetSpecs(azaDSP *dsp, uint32_t samplerate);
 
 
 

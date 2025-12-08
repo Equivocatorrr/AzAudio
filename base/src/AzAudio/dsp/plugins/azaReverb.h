@@ -58,20 +58,22 @@ void azaReverbResetChannels(azaReverb *data, uint32_t firstChannel, uint32_t cha
 
 // Convenience function that allocates and inits an azaReverb for you
 // May return NULL indicating an out-of-memory error
-azaReverb* azaMakeReverb(azaReverbConfig config);
-// Frees an azaReverb that was created with azaMakeReverb
-void azaFreeReverb(void *dsp);
+azaReverb* azaReverbMake(azaReverbConfig config);
+// Frees an azaReverb that was created with azaReverbMake
+void azaReverbFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultReverb();
+azaDSP* azaReverbMakeDefault();
+azaDSP* azaReverbMakeDuplicate(azaDSP *src);
+int azaReverbCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaReverbProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 // Reverb was going to report the specs from delay and filters, which may still be desired, but we know they're zeroed, so probably just ignore it for now?
-// azaDSPSpecs azaReverbGetSpecs(void *dsp, uint32_t samplerate);
+// azaDSPSpecs azaReverbGetSpecs(azaDSP *dsp, uint32_t samplerate);
 
 
 
-void azagDrawReverb(void *dsp, azagRect bounds);
+void azaReverbDraw(azaDSP *dsp, azagRect bounds);
 
 
 

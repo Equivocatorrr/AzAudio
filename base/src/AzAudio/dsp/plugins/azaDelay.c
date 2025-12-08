@@ -14,29 +14,31 @@
 
 
 
+static const azaDSPFuncs azaDelayFuncs = {
+	.fp_makeDefault = azaDelayMakeDefault,
+	.fp_makeDuplicate = azaDelayMakeDuplicate,
+	.fp_copyConfig = azaDelayCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaDelayProcess,
+	.fp_free = azaDelayFree,
+	.fp_draw = azaDelayDraw,
+};
+
 const azaDSP azaDelayHeader = {
-	/* .azaDSPHeader = */ {
-		/* .size          = */ sizeof(azaDelay),
-		/* .version       = */ 1,
-		/* .owned, bypass = */ false, false,
+	.header = {
+		.size    = sizeof(azaDelay),
+		.version = 1,
+		.owned   = false,
+		.bypass  = false,
 	},
-	/* .azaDSPProcessMetadata = */ {
-		/* .error               = */ 0,
-		/* .prevChannelCountDst = */ 0,
-		/* .prevChannelCountSrc = */ 0,
+	.processMetadata = { 0 },
+	.guiMetadata = {
+		.name             = "Delay",
+		.selected         = 0,
+		.drawTargetWidth  = 0,
+		.drawCurrentWidth = 0,
 	},
-	/* .azaDSPGUIMetadata = */ {
-		/* .name             = */ "Delay",
-		/* .selected         = */ 0,
-		/* .drawTargetWidth  = */ 0,
-		/* .drawCurrentWidth = */ 0,
-	},
-	/* .azaDSPFuncs = */ {
-		/* fp_getSpecs   = */ NULL,
-		/* fp_process    = */ azaDelayProcess,
-		/* fp_free       = */ azaFreeDelay,
-		/* fp_draw       = */ azagDrawDelay,
-	},
+	.pFuncs = &azaDelayFuncs,
 };
 
 void azaDelayInit(azaDelay *data, azaDelayConfig config) {
@@ -71,7 +73,7 @@ void azaDelayResetChannels(azaDelay *data, uint32_t firstChannel, uint32_t chann
 	}
 }
 
-azaDelay* azaMakeDelay(azaDelayConfig config) {
+azaDelay* azaDelayMake(azaDelayConfig config) {
 	azaDelay *result = aza_calloc(1, sizeof(azaDelay));
 	if (result) {
 		azaDelayInit(result, config);
@@ -79,19 +81,31 @@ azaDelay* azaMakeDelay(azaDelayConfig config) {
 	return result;
 }
 
-void azaFreeDelay(void *data) {
-	azaDelayDeinit(data);
-	aza_free(data);
+void azaDelayFree(azaDSP *dsp) {
+	azaDelayDeinit((azaDelay*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultDelay() {
-	return (azaDSP*)azaMakeDelay((azaDelayConfig) {
+azaDSP* azaDelayMakeDefault() {
+	return (azaDSP*)azaDelayMake((azaDelayConfig) {
 		.gainWet = -6.0f,
 		.gainDry = 0.0f,
 		.delay_ms = 300.0f,
 		.feedback = 0.5f,
 		.pingpong = 0.0f,
 	});
+}
+
+azaDSP* azaDelayMakeDuplicate(azaDSP *src) {
+	azaDelay *data = (azaDelay*)src;
+	return (azaDSP*)azaDelayMake(data->config);
+}
+
+int azaDelayCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaDelay *dataDst = (azaDelay*)dst;
+	azaDelay *dataSrc = (azaDelay*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 static int azaDelayHandleBufferResizes(azaDelay *data, uint32_t samplerate, uint8_t channelCount) {
@@ -207,8 +221,8 @@ error:
 static const float faderDBRange = 48.0f;
 static const float faderDBHeadroom = 12.0f;
 
-void azagDrawDelay(void *dsp, azagRect bounds) {
-	azaDelay *data = dsp;
+void azaDelayDraw(azaDSP *dsp, azagRect bounds) {
+	azaDelay *data = (azaDelay*)dsp;
 	azagRect meterBounds = bounds;
 	azagRectCutOutFaderMuteButton(&meterBounds);
 	float boundsStartX = bounds.x;

@@ -66,19 +66,21 @@ void azaLookaheadLimiterResetChannels(azaLookaheadLimiter *data, uint32_t firstC
 
 // Convenience function that allocates and inits an azaLookaheadLimiter for you
 // May return NULL indicating an out-of-memory error
-azaLookaheadLimiter* azaMakeLookaheadLimiter(azaLookaheadLimiterConfig config);
-// Frees an azaLookaheadLimiter that was created with azaMakeLookaheadLimiter
-void azaFreeLookaheadLimiter(void *dsp);
+azaLookaheadLimiter* azaLookaheadLimiterMake(azaLookaheadLimiterConfig config);
+// Frees an azaLookaheadLimiter that was created with azaLookaheadLimiterMake
+void azaLookaheadLimiterFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultLookaheadLimiter();
+azaDSP* azaLookaheadLimiterMakeDefault();
+azaDSP* azaLookaheadLimiterMakeDuplicate(azaDSP *src);
+int azaLookaheadLimiterCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaLookaheadLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
-azaDSPSpecs azaLookaheadLimiterGetSpecs(void *dsp, uint32_t samplerate);
+azaDSPSpecs azaLookaheadLimiterGetSpecs(azaDSP *dsp, uint32_t samplerate);
 
 
 
-void azagDrawLookaheadLimiter(void *dsp, azagRect bounds);
+void azaLookaheadLimiterDraw(azaDSP *dsp, azagRect bounds);
 
 
 

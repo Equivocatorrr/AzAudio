@@ -73,17 +73,19 @@ void azaDelayResetChannels(azaDelay *data, uint32_t firstChannel, uint32_t chann
 
 // Convenience function that allocates and inits an azaDelay for you
 // May return NULL indicating an out-of-memory error
-azaDelay* azaMakeDelay(azaDelayConfig config);
-// Frees an azaDelay that was created with azaMakeDelay
-void azaFreeDelay(void *dsp);
+azaDelay* azaDelayMake(azaDelayConfig config);
+// Frees an azaDelay that was created with azaDelayMake
+void azaDelayFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultDelay();
+azaDSP* azaDelayMakeDefault();
+azaDSP* azaDelayMakeDuplicate(azaDSP *src);
+int azaDelayCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaDelayProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 
-void azagDrawDelay(void *dsp, azagRect bounds);
+void azaDelayDraw(azaDSP *dsp, azagRect bounds);
 
 
 

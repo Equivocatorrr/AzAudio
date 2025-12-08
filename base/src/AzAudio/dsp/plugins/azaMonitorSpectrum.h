@@ -74,17 +74,19 @@ void azaMonitorSpectrumResetChannels(azaMonitorSpectrum *data, uint32_t firstCha
 
 // Convenience function that allocates and inits an azaMonitorSpectrum for you
 // May return NULL indicating an out-of-memory error
-azaMonitorSpectrum* azaMakeMonitorSpectrum(azaMonitorSpectrumConfig config);
-// Frees an azaMonitorSpectrum that was created with azaMakeMonitorSpectrum
-void azaFreeMonitorSpectrum(void *dsp);
+azaMonitorSpectrum* azaMonitorSpectrumMake(azaMonitorSpectrumConfig config);
+// Frees an azaMonitorSpectrum that was created with azaMonitorSpectrumMake
+void azaMonitorSpectrumFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultMonitorSpectrum();
+azaDSP* azaMonitorSpectrumMakeDefault();
+azaDSP* azaMonitorSpectrumMakeDuplicate(azaDSP *src);
+int azaMonitorSpectrumCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaMonitorSpectrumProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 
-void azagDrawMonitorSpectrum(void *dsp, azagRect bounds);
+void azaMonitorSpectrumDraw(azaDSP *dsp, azagRect bounds);
 
 
 

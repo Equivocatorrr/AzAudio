@@ -14,6 +14,16 @@
 
 
 
+static const azaDSPFuncs azaMonitorSpectrumFuncs = {
+	.fp_makeDefault = azaMonitorSpectrumMakeDefault,
+	.fp_makeDuplicate = azaMonitorSpectrumMakeDuplicate,
+	.fp_copyConfig = azaMonitorSpectrumCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaMonitorSpectrumProcess,
+	.fp_free = azaMonitorSpectrumFree,
+	.fp_draw = azaMonitorSpectrumDraw,
+};
+
 const azaDSP azaMonitorSpectrumHeader = {
 	.header =  {
 		.size    = sizeof(azaMonitorSpectrum),
@@ -28,12 +38,7 @@ const azaDSP azaMonitorSpectrumHeader = {
 		.drawTargetWidth  = 0.0f, // 0 means user-resizeable
 		.drawCurrentWidth = 250.0f, // Default size
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = azaMonitorSpectrumProcess,
-		.fp_free     = azaFreeMonitorSpectrum,
-		.fp_draw     = azagDrawMonitorSpectrum,
-	},
+	.pFuncs = &azaMonitorSpectrumFuncs,
 };
 
 const char *azaMonitorSpectrumModeString[AZA_MONITOR_SPECTRUM_MODE_COUNT] = {
@@ -74,7 +79,7 @@ void azaMonitorSpectrumResetChannels(azaMonitorSpectrum *data, uint32_t firstCha
 	// Nothing to do :)
 }
 
-azaMonitorSpectrum* azaMakeMonitorSpectrum(azaMonitorSpectrumConfig config) {
+azaMonitorSpectrum* azaMonitorSpectrumMake(azaMonitorSpectrumConfig config) {
 	azaMonitorSpectrum *result = aza_calloc(1, sizeof(azaMonitorSpectrum));
 	if (result) {
 		azaMonitorSpectrumInit(result, config);
@@ -82,13 +87,13 @@ azaMonitorSpectrum* azaMakeMonitorSpectrum(azaMonitorSpectrumConfig config) {
 	return result;
 }
 
-void azaFreeMonitorSpectrum(void *data) {
-	azaMonitorSpectrumDeinit(data);
-	aza_free(data);
+void azaMonitorSpectrumFree(azaDSP *dsp) {
+	azaMonitorSpectrumDeinit((azaMonitorSpectrum*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultMonitorSpectrum() {
-	azaMonitorSpectrum *result = azaMakeMonitorSpectrum((azaMonitorSpectrumConfig) {
+azaDSP* azaMonitorSpectrumMakeDefault() {
+	azaMonitorSpectrum *result = azaMonitorSpectrumMake((azaMonitorSpectrumConfig) {
 		.mode = AZA_MONITOR_SPECTRUM_MODE_AVG_CHANNELS,
 		.fullWindowProgression = false,
 		.window = 1024,
@@ -97,6 +102,18 @@ azaDSP* azaMakeDefaultMonitorSpectrum() {
 		.ceiling = 12,
 	});
 	return (azaDSP*)result;
+}
+
+azaDSP* azaMonitorSpectrumMakeDuplicate(azaDSP *src) {
+	azaMonitorSpectrum *data = (azaMonitorSpectrum*)src;
+	return (azaDSP*)azaMonitorSpectrumMake(data->config);
+}
+
+int azaMonitorSpectrumCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaMonitorSpectrum *dataDst = (azaMonitorSpectrum*)dst;
+	azaMonitorSpectrum *dataSrc = (azaMonitorSpectrum*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 static int azaMonitorSpectrumHandleBufferResizes(azaMonitorSpectrum *data, azaBuffer *buffer) {
@@ -356,8 +373,8 @@ static int azagDrawSwitch(azagRect bounds, const char *label, const char *toolti
 	return result;
 }
 
-void azagDrawMonitorSpectrum(void *dsp, azagRect bounds) {
-	azaMonitorSpectrum *data = dsp;
+void azaMonitorSpectrumDraw(azaDSP *dsp, azagRect bounds) {
+	azaMonitorSpectrum *data = (azaMonitorSpectrum*)dsp;
 	azagRect controlRect = bounds;
 	controlRect.x += azagThemeCurrent.margin.x;
 	controlRect.y += azagThemeCurrent.margin.y;

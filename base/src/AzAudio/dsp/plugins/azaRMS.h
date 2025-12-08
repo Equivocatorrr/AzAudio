@@ -47,11 +47,13 @@ void azaRMSResetChannels(azaRMS *data, uint32_t firstChannel, uint32_t channelCo
 
 // Convenience function that allocates and inits an azaRMS for you
 // May return NULL indicating an out-of-memory error
-azaRMS* azaMakeRMS(azaRMSConfig config);
-// Frees an azaRMS that was created with azaMakeRMS
-void azaFreeRMS(void *dsp);
+azaRMS* azaRMSMake(azaRMSConfig config);
+// Frees an azaRMS that was created with azaRMSMake
+void azaRMSFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultRMS();
+azaDSP* azaRMSMakeDefault();
+azaDSP* azaRMSMakeDuplicate(azaDSP *src);
+int azaRMSCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaRMSProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 

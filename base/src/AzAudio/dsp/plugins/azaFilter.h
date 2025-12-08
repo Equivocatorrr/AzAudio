@@ -94,17 +94,19 @@ void azaFilterResetChannels(azaFilter *data, uint32_t firstChannel, uint32_t cha
 
 // Convenience function that allocates and inits an azaFilter for you
 // May return NULL indicating an out-of-memory error
-azaFilter* azaMakeFilter(azaFilterConfig config);
-// Frees an azaFilter that was created with azaMakeFilter
-void azaFreeFilter(void *dsp);
+azaFilter* azaFilterMake(azaFilterConfig config);
+// Frees an azaFilter that was created with azaFilterMake
+void azaFilterFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultFilter();
+azaDSP* azaFilterMakeDefault();
+azaDSP* azaFilterMakeDuplicate(azaDSP *src);
+int azaFilterCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 
 
-void azagDrawFilter(void *dsp, azagRect bounds);
+void azaFilterDraw(azaDSP *dsp, azagRect bounds);
 
 
 

@@ -13,6 +13,16 @@
 
 
 
+static const azaDSPFuncs azaLookaheadLimiterFuncs = {
+	.fp_makeDefault = azaLookaheadLimiterMakeDefault,
+	.fp_makeDuplicate = azaLookaheadLimiterMakeDuplicate,
+	.fp_copyConfig = azaLookaheadLimiterCopyConfig,
+	.fp_getSpecs = azaLookaheadLimiterGetSpecs,
+	.fp_process = azaLookaheadLimiterProcess,
+	.fp_free = azaLookaheadLimiterFree,
+	.fp_draw = azaLookaheadLimiterDraw,
+};
+
 const azaDSP azaLookaheadLimiterHeader = {
 	.header =  {
 		.size    = sizeof(azaLookaheadLimiter),
@@ -27,12 +37,7 @@ const azaDSP azaLookaheadLimiterHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = azaLookaheadLimiterGetSpecs,
-		.fp_process  = azaLookaheadLimiterProcess,
-		.fp_free     = azaFreeLookaheadLimiter,
-		.fp_draw     = azagDrawLookaheadLimiter,
-	},
+	.pFuncs = &azaLookaheadLimiterFuncs,
 };
 
 void azaLookaheadLimiterInit(azaLookaheadLimiter *data, azaLookaheadLimiterConfig config) {
@@ -64,7 +69,7 @@ void azaLookaheadLimiterResetChannels(azaLookaheadLimiter *data, uint32_t firstC
 	memset(data->channelData + firstChannel, 0, sizeof(data->channelData[0]) * channelCount);
 }
 
-azaLookaheadLimiter* azaMakeLookaheadLimiter(azaLookaheadLimiterConfig config) {
+azaLookaheadLimiter* azaLookaheadLimiterMake(azaLookaheadLimiterConfig config) {
 	azaLookaheadLimiter *result = aza_calloc(1, sizeof(azaLookaheadLimiter));
 	if (result) {
 		azaLookaheadLimiterInit(result, config);
@@ -72,16 +77,28 @@ azaLookaheadLimiter* azaMakeLookaheadLimiter(azaLookaheadLimiterConfig config) {
 	return result;
 }
 
-void azaFreeLookaheadLimiter(void *data) {
-	azaLookaheadLimiterDeinit(data);
-	aza_free(data);
+void azaLookaheadLimiterFree(azaDSP *dsp) {
+	azaLookaheadLimiterDeinit((azaLookaheadLimiter*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultLookaheadLimiter() {
-	return (azaDSP*)azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
+azaDSP* azaLookaheadLimiterMakeDefault() {
+	return (azaDSP*)azaLookaheadLimiterMake((azaLookaheadLimiterConfig) {
 		.gainInput = 0.0f,
 		.gainOutput = 0.0f,
 	});
+}
+
+azaDSP* azaLookaheadLimiterMakeDuplicate(azaDSP *src) {
+	azaLookaheadLimiter *data = (azaLookaheadLimiter*)src;
+	return (azaDSP*)azaLookaheadLimiterMake(data->config);
+}
+
+int azaLookaheadLimiterCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaLookaheadLimiter *dataDst = (azaLookaheadLimiter*)dst;
+	azaLookaheadLimiter *dataSrc = (azaLookaheadLimiter*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaLookaheadLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
@@ -167,7 +184,7 @@ int azaLookaheadLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32
 	return AZA_SUCCESS;
 }
 
-azaDSPSpecs azaLookaheadLimiterGetSpecs(void *dsp, uint32_t samplerate) {
+azaDSPSpecs azaLookaheadLimiterGetSpecs(azaDSP *dsp, uint32_t samplerate) {
 	return (azaDSPSpecs) {
 		.latencyFrames = AZAUDIO_LOOKAHEAD_SAMPLES,
 	};
@@ -183,8 +200,8 @@ static const float faderDBRange = 48.0f;
 static const float faderDBHeadroom = 12.0f;
 static const float attenuationMeterDBRange = 12.0f;
 
-void azagDrawLookaheadLimiter(void *dsp, azagRect bounds) {
-	azaLookaheadLimiter *data = dsp;
+void azaLookaheadLimiterDraw(azaDSP *dsp, azagRect bounds) {
+	azaLookaheadLimiter *data = (azaLookaheadLimiter*)dsp;
 	float boundsStartX = bounds.x;
 	float faderWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);
 	azagRectShrinkLeftMargin(&bounds, faderWidth);

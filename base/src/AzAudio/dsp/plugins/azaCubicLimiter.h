@@ -46,11 +46,13 @@ void azaCubicLimiterResetChannels(azaCubicLimiter *data, uint32_t firstChannel, 
 
 // Convenience function that allocates and inits an azaCubicLimiter for you
 // May return NULL indicating an out-of-memory error
-azaCubicLimiter* azaMakeCubicLimiter(azaCubicLimiterConfig config);
-// Frees an azaCubicLimiter that was created with azaMakeCubicLimiter
-void azaFreeCubicLimiter(void *dsp);
+azaCubicLimiter* azaCubicLimiterMake(azaCubicLimiterConfig config);
+// Frees an azaCubicLimiter that was created with azaCubicLimiterMake
+void azaCubicLimiterFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultCubicLimiter();
+azaDSP* azaCubicLimiterMakeDefault();
+azaDSP* azaCubicLimiterMakeDuplicate(azaDSP *src);
+int azaCubicLimiterCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaCubicLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 

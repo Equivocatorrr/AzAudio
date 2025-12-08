@@ -71,6 +71,14 @@ static inline float azaBufferGetLen_ms(azaBuffer *buffer) {
 	return 1000.0f * (float)buffer->frames / (float)buffer->samplerate;
 }
 
+static inline bool azaBuffersOverlap(azaBuffer *buffer1, azaBuffer *buffer2) {
+	uintptr_t buffer1Start = (uintptr_t)buffer1->pSamples;
+	uintptr_t buffer1End = (uintptr_t)(buffer1->pSamples + buffer1->frames);
+	uintptr_t buffer2Start = (uintptr_t)buffer2->pSamples;
+	uintptr_t buffer2End = (uintptr_t)(buffer2->pSamples + buffer2->frames);
+	return (buffer1Start <= buffer2End && buffer1End >= buffer2Start) || (buffer2Start <= buffer1End && buffer2End >= buffer1Start);
+}
+
 // If samples are externally-managed, you don't have to call azaBufferInit or azaBufferDeinit
 // NOTE: asserts frames > 0 and channelLayout.count > 0
 // May return AZA_ERROR_OUT_OF_MEMORY

@@ -18,7 +18,7 @@ As a bonus, we may try to document porting steps for users of this library that 
 ### Complete Rework of azaDSP Plugin Interface
 - azaDSP header is very different
 	- much simplified as the dynamic allocation size was totally removed in favor of fixed struct sizes
-	- fat struct with function pointers instead of a type enum (taking the azaDSPUser interface concept and using it for everything)
+	- fat struct with a vtable of function pointers instead of a type enum (taking the azaDSPUser interface concept and using it for everything)
 	- Now owns its mixer GUI selection state, allowing multiple plugins to be selected at once.
 	- Removed pointless bit packing of metadata
 	- Explicitly-specified struct size for backwards and forwards compatibility
@@ -77,6 +77,9 @@ typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
 ```C
 const char *azaErrorString(int error);
 ```
+- For all plugins, change all function names to consistently be noun first, verb second
+	- `azaMake___` renamed to `aza___Make`
+	- `azaFree___` renamed to `aza___Free`
 
 ## [v0.3.0](https://github.com/Equivocatorrr/AzAudio/releases/tag/v0.3.0)
 

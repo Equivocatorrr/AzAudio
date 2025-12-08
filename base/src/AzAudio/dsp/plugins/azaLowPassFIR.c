@@ -14,6 +14,16 @@
 
 
 
+static const azaDSPFuncs azaLowPassFIRFuncs = {
+	.fp_makeDefault = azaLowPassFIRMakeDefault,
+	.fp_makeDuplicate = azaLowPassFIRMakeDuplicate,
+	.fp_copyConfig = azaLowPassFIRCopyConfig,
+	.fp_getSpecs = azaLowPassFIRGetSpecs,
+	.fp_process = azaLowPassFIRProcess,
+	.fp_free = azaLowPassFIRFree,
+	.fp_draw = azaLowPassFIRDraw,
+};
+
 const azaDSP azaLowPassFIRHeader = {
 	.header =  {
 		.size    = sizeof(azaLowPassFIR),
@@ -28,12 +38,7 @@ const azaDSP azaLowPassFIRHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = azaLowPassFIRGetSpecs,
-		.fp_process  = azaLowPassFIRProcess,
-		.fp_free     = azaFreeLowPassFIR,
-		.fp_draw     = azagDrawLowPassFIR,
-	},
+	.pFuncs = &azaLowPassFIRFuncs,
 };
 
 void azaLowPassFIRInit(azaLowPassFIR *data, azaLowPassFIRConfig config) {
@@ -58,7 +63,7 @@ void azaLowPassFIRResetChannels(azaLowPassFIR *data, uint32_t firstChannel, uint
 	azaMetersResetChannels(&data->metersOutput, firstChannel, channelCount);
 }
 
-azaLowPassFIR* azaMakeLowPassFIR(azaLowPassFIRConfig config) {
+azaLowPassFIR* azaLowPassFIRMake(azaLowPassFIRConfig config) {
 	azaLowPassFIR *result = aza_calloc(1, sizeof(azaLowPassFIR));
 	if (result) {
 		 azaLowPassFIRInit(result, config);
@@ -66,17 +71,29 @@ azaLowPassFIR* azaMakeLowPassFIR(azaLowPassFIRConfig config) {
 	return result;
 }
 
-void azaFreeLowPassFIR(void *dsp) {
-	azaLowPassFIRDeinit(dsp);
+void azaLowPassFIRFree(azaDSP *dsp) {
+	azaLowPassFIRDeinit((azaLowPassFIR*)dsp);
 	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultLowPassFIR() {
-	return (azaDSP*)azaMakeLowPassFIR((azaLowPassFIRConfig) {
+azaDSP* azaLowPassFIRMakeDefault() {
+	return (azaDSP*)azaLowPassFIRMake((azaLowPassFIRConfig) {
 		.frequency = 4000.0f,
 		.frequencyFollowTime_ms = 50.0f,
 		.maxKernelSamples = 13*16+1,
 	});
+}
+
+azaDSP* azaLowPassFIRMakeDuplicate(azaDSP *src) {
+	azaLowPassFIR *data = (azaLowPassFIR*)src;
+	return (azaDSP*)azaLowPassFIRMake(data->config);
+}
+
+int azaLowPassFIRCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaLowPassFIR *dataDst = (azaLowPassFIR*)dst;
+	azaLowPassFIR *dataSrc = (azaLowPassFIR*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 // BIG TODO: Use half-pass filters for very low frequencies to reduce the total workload.
@@ -164,7 +181,7 @@ int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 	return err;
 }
 
-azaDSPSpecs azaLowPassFIRGetSpecs(void *dsp, uint32_t samplerate) {
+azaDSPSpecs azaLowPassFIRGetSpecs(azaDSP *dsp, uint32_t samplerate) {
 	azaLowPassFIR *data = (azaLowPassFIR*)dsp;
 	uint32_t maxKernelRadius = (uint32_t)ceilf((float)data->config.maxKernelSamples / 2.0f);
 	// maxKernelRadius = AZA_CLAMP(maxKernelRadius, 1, AZA_KERNEL_DEFAULT_LANCZOS_COUNT);
@@ -191,8 +208,8 @@ azaDSPSpecs azaLowPassFIRGetSpecs(void *dsp, uint32_t samplerate) {
 static const float meterDBRange = 48.0f;
 static const float meterDBHeadroom = 12.0f;
 
-void azagDrawLowPassFIR(void *dsp, azagRect bounds) {
-	azaLowPassFIR *data = dsp;
+void azaLowPassFIRDraw(azaDSP *dsp, azagRect bounds) {
+	azaLowPassFIR *data = (azaLowPassFIR*)dsp;
 	float boundsStartX = bounds.x;
 	float usedWidth;
 	usedWidth = azagDrawMeters(&data->metersInput, bounds, meterDBRange, meterDBHeadroom);

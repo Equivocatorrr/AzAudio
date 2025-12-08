@@ -12,6 +12,16 @@
 
 
 
+static const azaDSPFuncs azaCubicLimiterFuncs = {
+	.fp_makeDefault = azaCubicLimiterMakeDefault,
+	.fp_makeDuplicate = azaCubicLimiterMakeDuplicate,
+	.fp_copyConfig = azaCubicLimiterCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaCubicLimiterProcess,
+	.fp_free = azaCubicLimiterFree,
+	.fp_draw = NULL,
+};
+
 const azaDSP azaCubicLimiterHeader = {
 	.header =  {
 		.size    = sizeof(azaCubicLimiter),
@@ -26,12 +36,7 @@ const azaDSP azaCubicLimiterHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = azaCubicLimiterProcess,
-		.fp_free     = azaFreeCubicLimiter,
-		.fp_draw     = NULL,
-	},
+	.pFuncs = &azaCubicLimiterFuncs,
 };
 
 static float azaCubicLimiterSample(float sample) {
@@ -60,7 +65,7 @@ void azaCubicLimiterResetChannels(azaCubicLimiter *data, uint32_t firstChannel, 
 	azaMetersResetChannels(&data->metersOutput, firstChannel, channelCount);
 }
 
-azaCubicLimiter* azaMakeCubicLimiter(azaCubicLimiterConfig config) {
+azaCubicLimiter* azaCubicLimiterMake(azaCubicLimiterConfig config) {
 	azaCubicLimiter *result = aza_calloc(1, sizeof(azaCubicLimiter));
 	if (result) {
 		azaCubicLimiterInit(result, config);
@@ -68,16 +73,28 @@ azaCubicLimiter* azaMakeCubicLimiter(azaCubicLimiterConfig config) {
 	return result;
 }
 
-void azaFreeCubicLimiter(void *dsp) {
+void azaCubicLimiterFree(azaDSP *dsp) {
 	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultCubicLimiter() {
-	return (azaDSP*)azaMakeCubicLimiter((azaCubicLimiterConfig) {
+azaDSP* azaCubicLimiterMakeDefault() {
+	return (azaDSP*)azaCubicLimiterMake((azaCubicLimiterConfig) {
 		.gainInput = 0.0f,
 		.gainOutput = 0.0f,
 		.linkGain = false,
 	});
+}
+
+azaDSP* azaCubicLimiterMakeDuplicate(azaDSP *src) {
+	azaCubicLimiter *data = (azaCubicLimiter*)src;
+	return (azaDSP*)azaCubicLimiterMake(data->config);
+}
+
+int azaCubicLimiterCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaCubicLimiter *dataDst = (azaCubicLimiter*)dst;
+	azaCubicLimiter *dataSrc = (azaCubicLimiter*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaCubicLimiterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {

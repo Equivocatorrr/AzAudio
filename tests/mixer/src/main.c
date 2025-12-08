@@ -33,7 +33,7 @@ typedef struct Synth {
 	int32_t impulseFrame;
 } Synth;
 
-int synthProcess(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
+int SynthProcess(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	Synth *synth = userdata;
 	float timestep = 1.0f / (float)dst->samplerate;
 	for (uint32_t i = 0; i < dst->frames; i++) {
@@ -67,12 +67,32 @@ int synthProcess(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 	return AZA_SUCCESS;
 }
 
-void FreeSynth(void *dsp) {
+void SynthFree(void *dsp) {
 	Synth *data = dsp;
-	azaFreeFilter(data->filter);
+	azaFilterFree((azaDSP*)data->filter);
 	azaDSPChainDeinit(&data->outputEffects);
 	aza_free(data);
 }
+
+azaDSP* SynthMakeDefault();
+azaDSP* SynthMakeDuplicate(azaDSP *src) {
+	(void)src;
+	return SynthMakeDefault();
+}
+int SynthCopyConfig(azaDSP *dst, azaDSP *src) {
+	(void)dst; (void)src;
+	return AZA_SUCCESS;
+}
+
+static const azaDSPFuncs SynthFuncs = {
+	.fp_makeDefault = SynthMakeDefault,
+	.fp_makeDuplicate = SynthMakeDuplicate,
+	.fp_copyConfig = SynthCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = SynthProcess,
+	.fp_free = SynthFree,
+	.fp_draw = NULL,
+};
 
 static const azaDSP SynthHeader = {
 	.header =  {
@@ -88,22 +108,17 @@ static const azaDSP SynthHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = synthProcess,
-		.fp_free     = FreeSynth,
-		.fp_draw     = NULL,
-	},
+	.pFuncs = &SynthFuncs,
 };
 
-azaDSP* MakeDefaultSynth() {
+azaDSP* SynthMakeDefault() {
 	Synth *result = aza_calloc(1, sizeof(Synth));
 	if (!result) return NULL;
 	result->dsp = SynthHeader;
 	if (azaDSPChainInit(&result->outputEffects, 1)) {
 		goto fail;
 	}
-	result->filter = azaMakeFilter((azaFilterConfig) {
+	result->filter = azaFilterMake((azaFilterConfig) {
 		.kind = AZA_FILTER_LOW_PASS,
 		.frequency = 500.0f,
 	});
@@ -279,7 +294,7 @@ AZA_THREAD_PROC_DEF(inputThreadProc, userdata) {
 		if (c == 'M' || c == 'm') {
 			azaMixerGUIOpen(&mixer, /* onTop */ true);
 		} else if (c == 'P' || c == 'p') {
-			lastId = azaSamplerPlay(samplerCat, 1.0f, 0.0f);
+			lastId = azaSamplerLoop(samplerCat, &bufferCat, 1.0f, 0.0f, (azaADSRConfig) { .attack = 5.0f, .decay = 0.0f, .sustain = 0.0f, .release = 500.0f});
 		} else if (c == 'S' || c == 's') {
 			azaSamplerStopAll(samplerCat);
 		} else if (c == '+') {
@@ -369,7 +384,7 @@ int main(int argumentCount, char** argumentValues) {
 
 
 
-	azaDSPAddRegEntry(SynthHeader, MakeDefaultSynth);
+	azaDSPAddRegEntry(SynthHeader);
 
 	// Track 0
 
@@ -381,7 +396,7 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	azaTrackSetName(track0, "Synth");
 
-	azaDSP *dspSynth = MakeDefaultSynth();
+	azaDSP *dspSynth = SynthMakeDefault();
 	azaTrackAppendDSP(track0, dspSynth);
 
 	// We can use this to change the gain on an existing connection
@@ -401,21 +416,15 @@ int main(int argumentCount, char** argumentValues) {
 	}
 	azaTrackSetName(track1, "Spatialized");
 
-	samplerCat = azaMakeSampler((azaSamplerConfig) {
-		.buffer = &bufferCat,
+	samplerCat = azaSamplerMake((azaSamplerConfig) {
 		.speedTransitionTimeMs = 250.0f,
 		.volumeTransitionTimeMs = 250.0f,
-		.loop = true,
-		.envelope = (azaADSRConfig) {
-			.attack = 5.0f,
-			.release = 500.0f,
-		}
 	});
 	azaTrackAppendDSP(track1, (azaDSP*)samplerCat);
 
 	objects = calloc(bufferCat.channelLayout.count, sizeof(Object));
 	srand(123456); // We need repeatability for nullability-tests
-	spatializeCat = (azaSpatialize*)azaMakeDefaultSpatialize();
+	spatializeCat = (azaSpatialize*)azaSpatializeMakeDefault();
 
 	// spatializeCat->config.doDoppler = false;
 	// spatializeCat->config.usePerChannelDelay = false;
@@ -450,14 +459,14 @@ int main(int argumentCount, char** argumentValues) {
 	azaTrackConnect(track0, track2, -6.0f, NULL, 0);
 	azaTrackConnect(track1, track2, -6.0f, NULL, 0);
 
-	azaFilter *reverbHighpass = azaMakeFilter((azaFilterConfig) {
+	azaFilter *reverbHighpass = azaFilterMake((azaFilterConfig) {
 		.kind = AZA_FILTER_HIGH_PASS,
 		.frequency = 50.0f,
 		.dryMix = 0.0f,
 	});
 	azaTrackAppendDSP(track2, (azaDSP*)reverbHighpass);
 
-	azaReverb *reverb = azaMakeReverb((azaReverbConfig) {
+	azaReverb *reverb = azaReverbMake((azaReverbConfig) {
 		.gainWet = 0.0f,
 		.muteDry = true,
 		.roomsize = 5.0f,
@@ -470,7 +479,7 @@ int main(int argumentCount, char** argumentValues) {
 
 	// Master
 
-	azaCompressor *compressor = azaMakeCompressor((azaCompressorConfig) {
+	azaCompressor *compressor = azaCompressorMake((azaCompressorConfig) {
 		.threshold = -24.0f,
 		.ratio = 4.0f,
 		.attack_ms = 10.0f,
@@ -480,12 +489,12 @@ int main(int argumentCount, char** argumentValues) {
 	compressor->dsp.header.bypass = true;
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)compressor);
 
-	azaMonitorSpectrum *monitorSpectrum = (azaMonitorSpectrum*)azaMakeDefaultMonitorSpectrum();
+	azaMonitorSpectrum *monitorSpectrum = (azaMonitorSpectrum*)azaMonitorSpectrumMakeDefault();
 	monitorSpectrum->config.ceiling = 0;
 	// monitorSpectrum->header.bypass = true;
 	azaTrackAppendDSP(&mixer.master, (azaDSP*)monitorSpectrum);
 
-	azaLookaheadLimiter *limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
+	azaLookaheadLimiter *limiter = azaLookaheadLimiterMake((azaLookaheadLimiterConfig) {
 		.gainInput  =  0.0f,
 		.gainOutput = -0.1f,
 	});
@@ -534,19 +543,19 @@ int main(int argumentCount, char** argumentValues) {
 	azaMixerGUIClose();
 	azaMixerStreamClose(&mixer, false);
 
-	FreeSynth((Synth*)dspSynth);
+	SynthFree((Synth*)dspSynth);
 
 	free(objects);
-	azaFreeSampler(samplerCat);
-	azaFreeSpatialize(spatializeCat);
+	azaSamplerFree((azaDSP*)samplerCat);
+	azaSpatializeFree((azaDSP*)spatializeCat);
 	azaBufferDeinit(&bufferCat, true);
 
-	azaFreeFilter(reverbHighpass);
-	azaFreeReverb(reverb);
+	azaFilterFree((azaDSP*)reverbHighpass);
+	azaReverbFree((azaDSP*)reverb);
 
-	azaFreeCompressor(compressor);
-	azaFreeMonitorSpectrum(monitorSpectrum);
-	azaFreeLookaheadLimiter(limiter);
+	azaCompressorFree((azaDSP*)compressor);
+	azaMonitorSpectrumFree((azaDSP*)monitorSpectrum);
+	azaLookaheadLimiterFree((azaDSP*)limiter);
 
 	azaDeinit();
 	return 0;

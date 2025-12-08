@@ -55,20 +55,22 @@ void azaLowPassFIRResetChannels(azaLowPassFIR *data, uint32_t firstChannel, uint
 
 // Convenience function that allocates and inits an azaLowPassFIR for you
 // May return NULL indicating an out-of-memory error
-azaLowPassFIR* azaMakeLowPassFIR(azaLowPassFIRConfig config);
-// Frees an azaLowPassFIR that was created with azaMakeLowPassFIR
-void azaFreeLowPassFIR(void *dsp);
+azaLowPassFIR* azaLowPassFIRMake(azaLowPassFIRConfig config);
+// Frees an azaLowPassFIR that was created with azaLowPassFIRMake
+void azaLowPassFIRFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultLowPassFIR();
+azaDSP* azaLowPassFIRMakeDefault();
+azaDSP* azaLowPassFIRMakeDuplicate(azaDSP *src);
+int azaLowPassFIRCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaLowPassFIRProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 // LowPassFIR's sampling kernel causes there to be a minimum latency requirement, so we'll report that here
-azaDSPSpecs azaLowPassFIRGetSpecs(void *dsp, uint32_t samplerate);
+azaDSPSpecs azaLowPassFIRGetSpecs(azaDSP *dsp, uint32_t samplerate);
 
 
 
-void azagDrawLowPassFIR(void *dsp, azagRect bounds);
+void azaLowPassFIRDraw(azaDSP *dsp, azagRect bounds);
 
 
 

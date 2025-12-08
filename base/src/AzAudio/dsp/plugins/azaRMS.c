@@ -11,6 +11,16 @@
 
 
 
+static const azaDSPFuncs azaRMSFuncs = {
+	.fp_makeDefault = azaRMSMakeDefault,
+	.fp_makeDuplicate = azaRMSMakeDuplicate,
+	.fp_copyConfig = azaRMSCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaRMSProcess,
+	.fp_free = azaRMSFree,
+	.fp_draw = NULL,
+};
+
 const azaDSP azaRMSHeader = {
 	.header =  {
 		.size    = sizeof(azaRMS),
@@ -25,12 +35,7 @@ const azaDSP azaRMSHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = azaRMSProcess,
-		.fp_free     = azaFreeRMS,
-		.fp_draw     = NULL,
-	},
+	.pFuncs = &azaRMSFuncs,
 };
 
 void azaRMSInit(azaRMS *data, azaRMSConfig config) {
@@ -65,7 +70,7 @@ void azaRMSResetChannels(azaRMS *data, uint32_t firstChannel, uint32_t channelCo
 	}
 }
 
-azaRMS* azaMakeRMS(azaRMSConfig config) {
+azaRMS* azaRMSMake(azaRMSConfig config) {
 	// return NULL; // Fake error to test Mixer GUI error reporting
 	azaRMS *result = aza_calloc(1, sizeof(azaRMS));
 	if (result) {
@@ -74,16 +79,28 @@ azaRMS* azaMakeRMS(azaRMSConfig config) {
 	return result;
 }
 
-void azaFreeRMS(void *data) {
-	azaRMSDeinit(data);
-	aza_free(data);
+void azaRMSFree(azaDSP *dsp) {
+	azaRMSDeinit((azaRMS*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultRMS() {
-	return (azaDSP*)azaMakeRMS((azaRMSConfig) {
+azaDSP* azaRMSMakeDefault() {
+	return (azaDSP*)azaRMSMake((azaRMSConfig) {
 		.windowSamples = 512,
 		.combineOp = NULL,
 	});
+}
+
+azaDSP* azaRMSMakeDuplicate(azaDSP *src) {
+	azaRMS *data = (azaRMS*)src;
+	return (azaDSP*)azaRMSMake(data->config);
+}
+
+int azaRMSCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaRMS *dataDst = (azaRMS*)dst;
+	azaRMS *dataSrc = (azaRMS*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 static int azaHandleRMSBuffer(azaRMS *data, uint8_t channels) {

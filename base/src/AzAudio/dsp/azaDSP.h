@@ -17,6 +17,12 @@ extern "C" {
 
 
 
+// Pointer to a function that makes a new azaDSP with a default configuration
+typedef struct azaDSP* (*fp_azaDSPMakeDefault_t)();
+typedef void (*fp_azaDSPDeinit_t)(struct azaDSP *dsp);
+typedef struct azaDSP* (*fp_azaDSPMakeDuplicate_t)(struct azaDSP *src);
+typedef int (*fp_azaDSPCopyConfig_t)(struct azaDSP *dst, struct azaDSP *src);
+
 // Some specs used to help manage buffers, especially in the mixer.
 // Relies heavily on ZII for correctness
 typedef struct azaDSPSpecs {
@@ -33,8 +39,7 @@ void azaDSPSpecsCombineSerial(azaDSPSpecs *dst, azaDSPSpecs *src);
 // Combines specs for plugins that run in parallel (multiple independent plugins that input and output in the same places)
 void azaDSPSpecsCombineParallel(azaDSPSpecs *dst, azaDSPSpecs *src);
 
-// dsp is a pointer to the azaDSP derivative.
-typedef azaDSPSpecs (*fp_azaDSPGetSpecs)(void *dsp, uint32_t samplerate);
+typedef azaDSPSpecs (*fp_azaDSPGetSpecs)(struct azaDSP *dsp, uint32_t samplerate);
 
 // Flags passed into azaDSP.fp_process
 enum {
@@ -46,12 +51,12 @@ enum {
 // The data in dst and src are allowed to overlap (they may even be the exact same buffer), so reading from src must happen before writing to dst (may want to copy src to a sideBuffer).
 // flags enable the ability for process to handle a handful of events relevant to config and plugin chain changes
 // may return error codes depending on the kind of plugin
-typedef int (*fp_azaDSPProcess_t)(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
+typedef int (*fp_azaDSPProcess_t)(void *data, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 // dsp is a pointer to the azaDSP derivative. This function must free all additional memory that was allocated by the plugin, and then the struct itself.
-typedef void (*fp_azaFreeDSP_t)(void *dsp);
+typedef void (*fp_azaDSPFree_t)(struct azaDSP *dsp);
 
 // Draws all plugin controls and visualizers within the given bounds.
-typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
+typedef void (*fp_azagDSPDraw)(struct azaDSP *dsp, azagRect bounds);
 
 typedef struct azaDSPHeader {
 	uint32_t size; // Total size of the azaDSP derivative struct (including all config and channeldata).
@@ -80,22 +85,25 @@ typedef struct azaDSPGUIMetadata {
 static_assert(sizeof(azaDSPGUIMetadata) == 48, "Please update the expected size of azaDSPGUIMetadata and remember to reserve padding explicitly.");
 
 typedef struct azaDSPFuncs {
+	fp_azaDSPMakeDefault_t fp_makeDefault; // Required
+	fp_azaDSPMakeDuplicate_t fp_makeDuplicate; // Required
+	fp_azaDSPCopyConfig_t fp_copyConfig; // Required
 	fp_azaDSPGetSpecs fp_getSpecs; // Nullable, meaning a zeroed-out struct azaDSPSpecs.
 	fp_azaDSPProcess_t fp_process; // Nullable, meaning no processing is required.
-	fp_azaFreeDSP_t fp_free; // Nullable, meaning removal from a plugin chain requires no action (mostly for un-owned user plugins).
-	fp_azagDrawDSP fp_draw; // Nullable, meaning we don't draw anything.
-	aza_byte _reserved[16];
+	fp_azaDSPFree_t fp_free; // Nullable, meaning removal from a plugin chain requires no action (mostly for un-owned user plugins).
+	fp_azagDSPDraw fp_draw; // Nullable, meaning we don't draw anything.
+	void *_reserved[9];
 } azaDSPFuncs;
-static_assert(sizeof(azaDSPFuncs) == (16 + sizeof(void*)*4), "Please update the expected size of azaDSPFuncs and remember to reserve padding explicitly.");
+static_assert(sizeof(azaDSPFuncs) == (sizeof(void*)*16), "Please update the expected size of azaDSPFuncs and remember to reserve padding explicitly.");
 
 // Must be at the start of actual plugins
 typedef struct azaDSP {
 	azaDSPHeader header;
 	azaDSPProcessMetadata processMetadata;
 	azaDSPGUIMetadata guiMetadata;
-	azaDSPFuncs funcs;
+	const azaDSPFuncs *pFuncs;
 } azaDSP;
-static_assert(sizeof(azaDSP) == (sizeof(azaDSPHeader) + sizeof(azaDSPProcessMetadata) + sizeof(azaDSPGUIMetadata) + sizeof(azaDSPFuncs)), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
+static_assert(sizeof(azaDSP) == (sizeof(azaDSPHeader) + sizeof(azaDSPProcessMetadata) + sizeof(azaDSPGUIMetadata) + sizeof(void*)), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
 
 // Handles bypass and calls dsp->fp_getSpecs if applicable.
 azaDSPSpecs azaDSPGetSpecs(azaDSP *dsp, uint32_t samplerate);
@@ -141,6 +149,11 @@ typedef struct azaDSPChain {
 int azaDSPChainInit(azaDSPChain *data, uint32_t stepsToReserve);
 // Frees all additional memory allocated
 void azaDSPChainDeinit(azaDSPChain *data);
+
+// Will init a dsp chain in place, duplicating the entirety of another
+int azaDSPChainInitDuplicate(azaDSPChain *data, azaDSPChain *src);
+// If both chains don't match, this will get them back to matching
+int azaDSPChainEnsureParity(azaDSPChain *data, azaDSPChain *src);
 
 // Adds a plugin onto the end of the chain.
 // May return AZA_ERROR_OUT_OF_MEMORY
@@ -191,8 +204,6 @@ static inline int azaDSPChainProcess(azaDSPChain *data, azaBuffer *dst, azaBuffe
 typedef struct azaDSPRegEntry {
 	// All the basic information about this kind of plugin lives in azaDSP, so just use that here.
 	azaDSP base;
-	// Pointer to a function that makes a new azaDSP with a default configuration
-	azaDSP* (*fp_makeDSP)();
 } azaDSPRegEntry;
 
 typedef struct azaDSPRegEntries {
@@ -207,7 +218,7 @@ extern azaDSPRegEntries azaDSPRegistry;
 int azaDSPRegistryInit();
 void azaDSPRegistryDeinit();
 // May return AZA_ERROR_OUT_OF_MEMORY
-int azaDSPAddRegEntry(azaDSP base, azaDSP* (*fp_makeDSP)());
+int azaDSPAddRegEntry(azaDSP base);
 
 
 

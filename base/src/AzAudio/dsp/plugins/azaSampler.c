@@ -13,6 +13,16 @@
 
 
 
+static const azaDSPFuncs azaSamplerFuncs = {
+	.fp_makeDefault = azaSamplerMakeDefault,
+	.fp_makeDuplicate = azaSamplerMakeDuplicate,
+	.fp_copyConfig = azaSamplerCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaSamplerProcess,
+	.fp_free = azaSamplerFree,
+	.fp_draw = NULL,
+};
+
 const azaDSP azaSamplerHeader = {
 	.header =  {
 		.size    = sizeof(azaSampler),
@@ -27,12 +37,7 @@ const azaDSP azaSamplerHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = azaSamplerProcess,
-		.fp_free     = azaFreeSampler,
-		.fp_draw     = NULL,
-	},
+	.pFuncs = &azaSamplerFuncs,
 };
 
 // 13 plays nice with 8-wide SIMD
@@ -58,7 +63,7 @@ void azaSamplerResetChannels(azaSampler *data, uint32_t firstChannel, uint32_t c
 	azaMetersResetChannels(&data->metersOutput, firstChannel, channelCount);
 }
 
-azaSampler* azaMakeSampler(azaSamplerConfig config) {
+azaSampler* azaSamplerMake(azaSamplerConfig config) {
 	azaSampler *result = aza_calloc(1, sizeof(azaSampler));
 	if (result) {
 		azaSamplerInit(result, config);
@@ -66,17 +71,28 @@ azaSampler* azaMakeSampler(azaSamplerConfig config) {
 	return result;
 }
 
-void azaFreeSampler(void *data) {
-	azaSamplerDeinit(data);
-	aza_free(data);
+void azaSamplerFree(azaDSP *dsp) {
+	azaSamplerDeinit((azaSampler*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultSampler() {
-	return (azaDSP*)azaMakeSampler((azaSamplerConfig) {
-		.buffer = NULL,
+azaDSP* azaSamplerMakeDefault() {
+	return (azaDSP*)azaSamplerMake((azaSamplerConfig) {
 		.speedTransitionTimeMs = 50.0f,
 		.volumeTransitionTimeMs = 50.0f,
 	});
+}
+
+azaDSP* azaSamplerMakeDuplicate(azaDSP *src) {
+	azaSampler *data = (azaSampler*)src;
+	return (azaDSP*)azaSamplerMake(data->config);
+}
+
+int azaSamplerCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaSampler *dataDst = (azaSampler*)dst;
+	azaSampler *dataSrc = (azaSampler*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
@@ -94,33 +110,22 @@ int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 
 	(void)src; // We don't care about src here
 
-	if AZA_UNLIKELY(!data->config.buffer) {
-		// Without a buffer we are nothing
-		return AZA_SUCCESS;
-	}
-	/*
-	if AZA_UNLIKELY(dst->channelLayout.count != data->config.buffer->channelLayout.count) {
-		AZA_LOG_ERR("Error(%s): dst and config.buffer channel counts do not match! dst has %u channels and config.buffer has %u channels.\n", AZA_FUNCTION_NAME, (uint32_t)dst->channelLayout.count, (uint32_t)data->config.buffer->channelLayout.count);
-		return AZA_ERROR_MISMATCHED_CHANNEL_COUNT;
-	}
-	*/
-
-	// Instead of requiring the correct number of channels we'll just put in as many as we have for now. It's hacky, but we'll deal with that later.
-	uint8_t channels = AZA_MIN(dst->channelLayout.count, data->config.buffer->channelLayout.count);
-
 	azaMutexLock(&data->mutex);
-	float samplerateFactor = (float)data->config.buffer->samplerate / (float)dst->samplerate;
-	float deltaMs = 1000.0f / (float)data->config.buffer->samplerate;
-	int32_t loopStart = data->config.loopStart >= (int32_t)data->config.buffer->frames ? 0 : data->config.loopStart;
-	int32_t loopEnd = data->config.loopEnd <= loopStart ? data->config.buffer->frames : data->config.loopEnd;
-	int32_t loopRegionLength = loopEnd - loopStart;
+
 	// Keep our lowpass below the minimum nyquist frequency (leaving some extra space for the transition band to alias onto itself outside the range of human hearing)
 	float stopBandFactor = azaClampf(2.0f * azaSamplerStopBand / (float)dst->samplerate, 0.25f, 1.0f);
 	for (uint32_t inst = 0; inst < data->numInstances; inst++) {
 		azaSamplerInstance *instance = &data->instances[inst];
+		// Instead of requiring the correct number of channels we'll just put in as many as we have for now. It's hacky, but we'll deal with that later.
+		uint8_t channels = AZA_MIN(dst->channelLayout.count, instance->buffer->channelLayout.count);
+		float samplerateFactor = (float)instance->buffer->samplerate / (float)dst->samplerate;
+		float deltaMs = 1000.0f / (float)instance->buffer->samplerate;
+		int32_t loopStart = instance->loopStart >= (int32_t)instance->buffer->frames ? 0 : instance->loopStart;
+		int32_t loopEnd = instance->loopEnd <= loopStart ? instance->buffer->frames : instance->loopEnd;
+		int32_t loopRegionLength = loopEnd - loopStart;
 		for (uint32_t i = 0; i < dst->frames; i++) {
-			float volumeEnvelope = azaADSRUpdate(&data->config.envelope, &instance->envelope, deltaMs);
-			if (instance->envelope.stage == AZA_ADSR_STAGE_STOP) {
+			float volumeEnvelope = azaADSRUpdate(&instance->envelope, deltaMs);
+			if (instance->envelope.instance.stage == AZA_ADSR_STAGE_STOP) {
 				data->numInstances--;
 				if ((int)inst < (int)data->numInstances) {
 					memmove(data->instances+inst, data->instances+inst+1, (data->numInstances-inst) * sizeof(*data->instances));
@@ -136,7 +141,7 @@ int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 			if (speed == 1.0f && instance->fraction == 0.0f) {
 				// No resampling necessary
 				for (uint8_t c = 0; c < channels; c++) {
-					float sample = data->config.buffer->pSamples[instance->frame * data->config.buffer->stride + c];
+					float sample = instance->buffer->pSamples[instance->frame * instance->buffer->stride + c];
 					dst->pSamples[i * dst->stride + c] += sample * volume;
 				}
 			} else {
@@ -162,9 +167,9 @@ int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 				for (uint8_t c = 0; c < dst->channelLayout.count; c++) {
 					float sample = 0.0f;
 					for (int i = 0; i < SAMPLER_KERNEL_SAMPLE_COUNT; i++) {
-						int frame = azaWrapi(i + (int)instance->frame - SAMPLER_KERNEL_RADIUS, data->config.buffer->frames);
+						int frame = azaWrapi(i + (int)instance->frame - SAMPLER_KERNEL_RADIUS, instance->buffer->frames);
 						float amount = kernelSamples[i];
-						sample += data->config.buffer->pSamples[frame * data->config.buffer->stride + c] * amount;
+						sample += instance->buffer->pSamples[frame * instance->buffer->stride + c] * amount;
 					}
 					sample /= kernelIntegral;
 
@@ -176,7 +181,7 @@ int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 				azaKernel *kernel = azaKernelGetDefaultLanczos(azaKernelGetRadiusForRate(rate, AZA_SAMPLER_DESIRED_KERNEL_RADIUS));
 				// TODO: Find some way to deal with the quiet pops you get from swapping out kernels
 				float frame[AZA_MAX_CHANNEL_POSITIONS];
-				azaSampleWithKernel(frame, channels, kernel, data->config.buffer->pSamples, data->config.buffer->stride, 0, data->config.buffer->frames, data->config.loop, instance->frame, instance->fraction, rate);
+				azaSampleWithKernel(frame, channels, kernel, instance->buffer->pSamples, instance->buffer->stride, 0, instance->buffer->frames, instance->loop, instance->frame, instance->fraction, rate);
 				for (uint8_t c = 0; c < channels; c++) {
 					float sample = frame[c];
 					dst->pSamples[i * dst->stride + c] += sample * volume;
@@ -194,8 +199,8 @@ int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 			int32_t framesToAdd = (int32_t)truncf(instance->fraction);
 			instance->frame += framesToAdd;
 			instance->fraction -= framesToAdd;
-			if (data->config.loop) {
-				if (data->config.pingpong) {
+			if (instance->loop) {
+				if (instance->pingpong) {
 					if (!instance->reverse && startedBeforeLoopEnd && instance->frame >= loopEnd) {
 						// AZA_LOG_INFO("We're forwards going backwards (frame = %i, fraction= %f)!\n", instance->frame, instance->fraction);
 						// - 1 because loopEnd is not considered a part of the range, and we definitely
@@ -217,8 +222,8 @@ int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 					}
 				}
 			}
-			if ((!instance->reverse && instance->frame >= (int32_t)data->config.buffer->frames) || (instance->reverse && instance->frame < 0)) {
-				instance->envelope.stage = AZA_ADSR_STAGE_STOP;
+			if ((!instance->reverse && instance->frame >= (int32_t)instance->buffer->frames) || (instance->reverse && instance->frame < 0)) {
+				instance->envelope.instance.stage = AZA_ADSR_STAGE_STOP;
 			}
 		}
 	}
@@ -231,7 +236,7 @@ int azaSamplerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 	return AZA_SUCCESS;
 }
 
-uint32_t azaSamplerPlay(azaSampler *data, float speed, float gainDB) {
+uint32_t azaSamplerPlayFull(azaSampler *data, azaBuffer *buffer, float speed, float gainDB, azaADSRConfig envelope, bool loop, bool pingpong, int32_t loopStart, int32_t loopEnd) {
 	static uint32_t nextId = 1;
 	azaMutexLock(&data->mutex);
 	if (data->numInstances >= AZAUDIO_SAMPLER_MAX_INSTANCES) {
@@ -242,14 +247,21 @@ uint32_t azaSamplerPlay(azaSampler *data, float speed, float gainDB) {
 	// TODO: Do we have to care about id looparound? Maybe just use 64-bit ints to guarantee no matter what that we don't or handle overlap.
 	uint32_t index = data->numInstances++;
 	azaSamplerInstance *instance = &data->instances[index];
+	instance->buffer = buffer;
 	instance->id = id;
 	instance->frame = 0;
 	instance->fraction = 0.0f;
 	if (speed < 0.0f) {
-		instance->frame = data->config.buffer->frames-1;
+		instance->frame = buffer->frames-1;
 		instance->reverse = true;
 		speed = -speed;
 	}
+	instance->loop = loop;
+	instance->pingpong = pingpong;
+	instance->loopStart = loopStart;
+	instance->loopEnd = loopEnd;
+	instance->envelope.config = envelope;
+	instance->envelope.instance = (azaADSRInstance) {0};
 	azaADSRStart(&instance->envelope);
 	azaFollowerLinearJump(&instance->speed, speed);
 	azaFollowerLinearJump(&instance->volume, aza_db_to_ampf(gainDB));

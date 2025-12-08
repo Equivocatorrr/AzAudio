@@ -82,16 +82,18 @@ void azaDelayDynamicResetChannels(azaDelayDynamic *data, uint32_t firstChannel, 
 
 // Convenience function that allocates and inits an azaDelayDynamic for you
 // May return NULL indicating an out-of-memory error
-azaDelayDynamic* azaMakeDelayDynamic(azaDelayDynamicConfig config);
-// Frees an azaDelayDynamic that was created with azaMakeDelayDynamic
-void azaFreeDelayDynamic(void *dsp);
+azaDelayDynamic* azaDelayDynamicMake(azaDelayDynamicConfig config);
+// Frees an azaDelayDynamic that was created with azaDelayDynamicMake
+void azaDelayDynamicFree(azaDSP *dsp);
 
-azaDSP* azaMakeDefaultDelayDynamic();
+azaDSP* azaDelayDynamicMakeDefault();
+azaDSP* azaDelayDynamicMakeDuplicate(azaDSP *src);
+int azaDelayDynamicCopyConfig(azaDSP *dst, azaDSP *src);
 
 int azaDelayDynamicProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 // DelayDynamic's sampling kernel causes there to be a minimum latency requirement, so we'll report that here
-azaDSPSpecs azaDelayDynamicGetSpecs(void *dsp, uint32_t samplerate);
+azaDSPSpecs azaDelayDynamicGetSpecs(azaDSP *dsp, uint32_t samplerate);
 
 
 

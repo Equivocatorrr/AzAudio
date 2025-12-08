@@ -56,7 +56,7 @@ int main(int argumentCount, char** argumentValues) {
 		return 1;
 	}
 
-	limiter = azaMakeLookaheadLimiter((azaLookaheadLimiterConfig) {
+	limiter = azaLookaheadLimiterMake((azaLookaheadLimiterConfig) {
 		.gainInput  =  10.0f,
 		.gainOutput = -10.0f,
 	});
@@ -66,7 +66,7 @@ int main(int argumentCount, char** argumentValues) {
 	getc(stdin);
 	azaStreamDeinit(&streamOutput);
 
-	azaFreeLookaheadLimiter(limiter);
+	azaLookaheadLimiterFree((azaDSP*)limiter);
 
 	azaDeinit();
 	return 0;

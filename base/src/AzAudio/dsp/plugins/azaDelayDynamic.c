@@ -12,6 +12,16 @@
 
 
 
+static const azaDSPFuncs azaDelayDynamicFuncs = {
+	.fp_makeDefault = azaDelayDynamicMakeDefault,
+	.fp_makeDuplicate = azaDelayDynamicMakeDuplicate,
+	.fp_copyConfig = azaDelayDynamicCopyConfig,
+	.fp_getSpecs = azaDelayDynamicGetSpecs,
+	.fp_process = azaDelayDynamicProcess,
+	.fp_free = azaDelayDynamicFree,
+	.fp_draw = NULL,
+};
+
 const azaDSP azaDelayDynamicHeader = {
 	.header =  {
 		.size    = sizeof(azaDelayDynamic),
@@ -26,12 +36,7 @@ const azaDSP azaDelayDynamicHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = azaDelayDynamicGetSpecs,
-		.fp_process  = azaDelayDynamicProcess,
-		.fp_free     = azaFreeDelayDynamic,
-		.fp_draw     = NULL,
-	},
+	.pFuncs = &azaDelayDynamicFuncs,
 };
 
 enum { AZA_DELAY_DYNAMIC_DESIRED_KERNEL_RADIUS = 13 };
@@ -144,7 +149,7 @@ void azaDelayDynamicResetChannels(azaDelayDynamic *data, uint32_t firstChannel, 
 	}
 }
 
-azaDelayDynamic* azaMakeDelayDynamic(azaDelayDynamicConfig config) {
+azaDelayDynamic* azaDelayDynamicMake(azaDelayDynamicConfig config) {
 	azaDelayDynamic *result = aza_calloc(1, sizeof(azaDelayDynamic));
 	if (result) {
 		 azaDelayDynamicInit(result, config);
@@ -152,13 +157,13 @@ azaDelayDynamic* azaMakeDelayDynamic(azaDelayDynamicConfig config) {
 	return result;
 }
 
-void azaFreeDelayDynamic(void *data) {
-	azaDelayDynamicDeinit(data);
-	aza_free(data);
+void azaDelayDynamicFree(azaDSP *dsp) {
+	azaDelayDynamicDeinit((azaDelayDynamic*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultDelayDynamic() {
-	return (azaDSP*)azaMakeDelayDynamic((azaDelayDynamicConfig) {
+azaDSP* azaDelayDynamicMakeDefault() {
+	return (azaDSP*)azaDelayDynamicMake((azaDelayDynamicConfig) {
 		.gainWet = -6.0f,
 		.gainDry = 0.0f,
 		.delayMax_ms = 500.0f,
@@ -167,6 +172,18 @@ azaDSP* azaMakeDefaultDelayDynamic() {
 		.pingpong = 0.0f,
 		.kernel = NULL,
 	});
+}
+
+azaDSP* azaDelayDynamicMakeDuplicate(azaDSP *src) {
+	azaDelayDynamic *data = (azaDelayDynamic*)src;
+	return (azaDSP*)azaDelayDynamicMake(data->config);
+}
+
+int azaDelayDynamicCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaDelayDynamic *dataDst = (azaDelayDynamic*)dst;
+	azaDelayDynamic *dataSrc = (azaDelayDynamic*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaDelayDynamicProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
@@ -290,8 +307,8 @@ error:
 	return err;
 }
 
-azaDSPSpecs azaDelayDynamicGetSpecs(void *dsp, uint32_t samplerate) {
-	azaDelayDynamic *data = dsp;
+azaDSPSpecs azaDelayDynamicGetSpecs(azaDSP *dsp, uint32_t samplerate) {
+	azaDelayDynamic *data = (azaDelayDynamic*)dsp;
 	azaDSPSpecs specs = {0};
 	azaKernel *kernel = azaDelayDynamicGetKernel(data, 1.0f);
 	specs.latencyFrames = 0;

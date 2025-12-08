@@ -14,6 +14,16 @@
 
 
 
+static const azaDSPFuncs azaFilterFuncs = {
+	.fp_makeDefault = azaFilterMakeDefault,
+	.fp_makeDuplicate = azaFilterMakeDuplicate,
+	.fp_copyConfig = azaFilterCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaFilterProcess,
+	.fp_free = azaFilterFree,
+	.fp_draw = azaFilterDraw,
+};
+
 const azaDSP azaFilterHeader = {
 	.header =  {
 		.size    = sizeof(azaFilter),
@@ -28,12 +38,7 @@ const azaDSP azaFilterHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = azaFilterProcess,
-		.fp_free     = azaFreeFilter,
-		.fp_draw     = azagDrawFilter,
-	},
+	.pFuncs = &azaFilterFuncs,
 };
 
 const char *azaFilterKindString[] = {
@@ -67,7 +72,7 @@ void azaFilterResetChannels(azaFilter *data, uint32_t firstChannel, uint32_t cha
 	memset(data->channelData + firstChannel, 0, sizeof(data->channelData[0]) * channelCount);
 }
 
-azaFilter* azaMakeFilter(azaFilterConfig config) {
+azaFilter* azaFilterMake(azaFilterConfig config) {
 	azaFilter *result = aza_calloc(1, sizeof(azaFilter));
 	if (result) {
 		azaFilterInit(result, config);
@@ -75,19 +80,31 @@ azaFilter* azaMakeFilter(azaFilterConfig config) {
 	return result;
 }
 
-void azaFreeFilter(void *data) {
-	azaFilterDeinit(data);
-	aza_free(data);
+void azaFilterFree(azaDSP *dsp) {
+	azaFilterDeinit((azaFilter*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultFilter() {
-	return (azaDSP*)azaMakeFilter((azaFilterConfig) {
+azaDSP* azaFilterMakeDefault() {
+	return (azaDSP*)azaFilterMake((azaFilterConfig) {
 		.kind = AZA_FILTER_LOW_PASS,
 		.poles = AZA_FILTER_12_DB,
 		.frequency = 500.0f,
 		.dryMix = 0.0f,
 		.gainWet = 0.0f,
 	});
+}
+
+azaDSP* azaFilterMakeDuplicate(azaDSP *src) {
+	azaFilter *data = (azaFilter*)src;
+	return (azaDSP*)azaFilterMake(data->config);
+}
+
+int azaFilterCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaFilter *dataDst = (azaFilter*)dst;
+	azaFilter *dataSrc = (azaFilter*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
@@ -181,8 +198,8 @@ int azaFilterProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 
 static const float filterKindRectWidth = 80.0f;
 
-void azagDrawFilter(void *dsp, azagRect bounds) {
-	azaFilter *data = dsp;
+void azaFilterDraw(azaDSP *dsp, azagRect bounds) {
+	azaFilter *data = (azaFilter*)dsp;
 	float boundsStartX = bounds.x;
 	azagRect kindRect = bounds;
 	kindRect.w = filterKindRectWidth;

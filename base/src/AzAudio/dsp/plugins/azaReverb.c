@@ -13,6 +13,16 @@
 
 
 
+static const azaDSPFuncs azaReverbFuncs = {
+	.fp_makeDefault = azaReverbMakeDefault,
+	.fp_makeDuplicate = azaReverbMakeDuplicate,
+	.fp_copyConfig = azaReverbCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaReverbProcess,
+	.fp_free = azaReverbFree,
+	.fp_draw = azaReverbDraw,
+};
+
 const azaDSP azaReverbHeader = {
 	.header =  {
 		.size    = sizeof(azaReverb),
@@ -27,12 +37,7 @@ const azaDSP azaReverbHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = azaReverbProcess,
-		.fp_free     = azaFreeReverb,
-		.fp_draw     = azagDrawReverb,
-	},
+	.pFuncs = &azaReverbFuncs,
 };
 
 void azaReverbInit(azaReverb *data, azaReverbConfig config) {
@@ -127,7 +132,7 @@ void azaReverbResetChannels(azaReverb *data, uint32_t firstChannel, uint32_t cha
 	}
 }
 
-azaReverb* azaMakeReverb(azaReverbConfig config) {
+azaReverb* azaReverbMake(azaReverbConfig config) {
 	azaReverb *result = aza_calloc(1, sizeof(azaReverb));
 	if (result) {
 		azaReverbInit(result, config);
@@ -135,13 +140,13 @@ azaReverb* azaMakeReverb(azaReverbConfig config) {
 	return result;
 }
 
-void azaFreeReverb(void *data) {
-	azaReverbDeinit(data);
-	aza_free(data);
+void azaReverbFree(azaDSP *dsp) {
+	azaReverbDeinit((azaReverb*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultReverb() {
-	return (azaDSP*)azaMakeReverb((azaReverbConfig) {
+azaDSP* azaReverbMakeDefault() {
+	return (azaDSP*)azaReverbMake((azaReverbConfig) {
 		.gainWet = -9.0f,
 		.gainDry = 0.0f,
 		.muteWet = false,
@@ -150,6 +155,18 @@ azaDSP* azaMakeDefaultReverb() {
 		.color = 1.0f,
 		.delay_ms = 50.0f,
 	});
+}
+
+azaDSP* azaReverbMakeDuplicate(azaDSP *src) {
+	azaReverb *data = (azaReverb*)src;
+	return (azaDSP*)azaReverbMake(data->config);
+}
+
+int azaReverbCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaReverb *dataDst = (azaReverb*)dst;
+	azaReverb *dataSrc = (azaReverb*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaReverbProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
@@ -224,7 +241,7 @@ int azaReverbProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) 
 	return AZA_SUCCESS;
 }
 
-azaDSPSpecs azaReverbGetSpecs(void *dsp, uint32_t samplerate) {
+azaDSPSpecs azaReverbGetSpecs(azaDSP *dsp, uint32_t samplerate) {
 	azaReverb *data = (azaReverb*)dsp;
 	azaDSPSpecs specs = {0};
 	azaDSPSpecs specsIndividualDelays = {0};
@@ -244,8 +261,8 @@ azaDSPSpecs azaReverbGetSpecs(void *dsp, uint32_t samplerate) {
 
 
 
-void azagDrawReverb(void *dsp, azagRect bounds) {
-	azaReverb *data = dsp;
+void azaReverbDraw(azaDSP *dsp, azagRect bounds) {
+	azaReverb *data = (azaReverb*)dsp;
 	float boundsStartX = bounds.x;
 	float usedWidth = azagDrawFader(bounds, &data->config.gainWet, &data->config.muteWet, true, "Wet Gain", 36, 6);
 	azagRectShrinkLeftMargin(&bounds, usedWidth);

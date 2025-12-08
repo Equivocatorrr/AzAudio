@@ -14,6 +14,16 @@
 
 
 
+static const azaDSPFuncs azaCompressorFuncs = {
+	.fp_makeDefault = azaCompressorMakeDefault,
+	.fp_makeDuplicate = azaCompressorMakeDuplicate,
+	.fp_copyConfig = azaCompressorCopyConfig,
+	.fp_getSpecs = NULL,
+	.fp_process = azaCompressorProcess,
+	.fp_free = azaCompressorFree,
+	.fp_draw = azaCompressorDraw,
+};
+
 const azaDSP azaCompressorHeader = {
 	.header =  {
 		.size    = sizeof(azaCompressor),
@@ -28,12 +38,7 @@ const azaDSP azaCompressorHeader = {
 		.drawTargetWidth  = 0.0f,
 		.drawCurrentWidth = 0.0f,
 	},
-	.funcs = {
-		.fp_getSpecs = NULL,
-		.fp_process  = azaCompressorProcess,
-		.fp_free     = azaFreeCompressor,
-		.fp_draw     = azagDrawCompressor,
-	},
+	.pFuncs = &azaCompressorFuncs,
 };
 
 void azaCompressorInit(azaCompressor *data, azaCompressorConfig config) {
@@ -67,7 +72,7 @@ void azaCompressorResetChannels(azaCompressor *data, uint32_t firstChannel, uint
 	azaRMSResetChannels(&data->rms, firstChannel, channelCount);
 }
 
-azaCompressor* azaMakeCompressor(azaCompressorConfig config) {
+azaCompressor* azaCompressorMake(azaCompressorConfig config) {
 	azaCompressor *result = aza_calloc(1, sizeof(azaCompressor));
 	if (result) {
 		azaCompressorInit(result, config);
@@ -75,18 +80,30 @@ azaCompressor* azaMakeCompressor(azaCompressorConfig config) {
 	return result;
 }
 
-void azaFreeCompressor(void *data) {
-	azaCompressorDeinit(data);
-	aza_free(data);
+void azaCompressorFree(azaDSP *dsp) {
+	azaCompressorDeinit((azaCompressor*)dsp);
+	aza_free(dsp);
 }
 
-azaDSP* azaMakeDefaultCompressor() {
-	return (azaDSP*)azaMakeCompressor((azaCompressorConfig) {
+azaDSP* azaCompressorMakeDefault() {
+	return (azaDSP*)azaCompressorMake((azaCompressorConfig) {
 		.threshold = -12.0f,
 		.ratio = 10.0f,
 		.attack_ms = 50.0f,
 		.decay_ms = 200.0f,
 	});
+}
+
+azaDSP* azaCompressorMakeDuplicate(azaDSP *src) {
+	azaCompressor *data = (azaCompressor*)src;
+	return (azaDSP*)azaCompressorMake(data->config);
+}
+
+int azaCompressorCopyConfig(azaDSP *dst, azaDSP *src) {
+	azaCompressor *dataDst = (azaCompressor*)dst;
+	azaCompressor *dataSrc = (azaCompressor*)src;
+	dataDst->config = dataSrc->config;
+	return AZA_SUCCESS;
 }
 
 int azaCompressorProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
@@ -172,8 +189,8 @@ static const float thresholdDBRange = 48.0f;
 static const float thresholdDBHeadroom = 12.0f;
 static const float attenuationMeterDBRange = 24.0f;
 
-void azagDrawCompressor(void *dsp, azagRect bounds) {
-	azaCompressor *data = dsp;
+void azaCompressorDraw(azaDSP *dsp, azagRect bounds) {
+	azaCompressor *data = (azaCompressor*)dsp;
 	float boundsStartX = bounds.x;
 	float usedWidth;
 	usedWidth = azagDrawFader(bounds, &data->config.gainInput, NULL, false, "Input Gain", faderDBRange, faderDBHeadroom);

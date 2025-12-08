@@ -21,6 +21,7 @@
 #include "plugins/azaSpatialize.h"
 #include "plugins/azaMonitorSpectrum.h"
 #include "plugins/azaDSPDebugger.h"
+#include "plugins/azaDSPMultiplexer.h"
 
 void azaDSPSpecsCombineSerial(azaDSPSpecs *dst, azaDSPSpecs *src) {
 	dst->latencyFrames += src->latencyFrames + src->trailingFrames;
@@ -35,15 +36,15 @@ void azaDSPSpecsCombineParallel(azaDSPSpecs *dst, azaDSPSpecs *src) {
 }
 
 azaDSPSpecs azaDSPGetSpecs(azaDSP *dsp, uint32_t samplerate) {
-	if (!dsp->header.bypass && dsp->funcs.fp_getSpecs) {
-		return dsp->funcs.fp_getSpecs(dsp, samplerate);
+	if (!dsp->header.bypass && dsp->pFuncs->fp_getSpecs) {
+		return dsp->pFuncs->fp_getSpecs(dsp, samplerate);
 	}
 	return (azaDSPSpecs) {0};
 }
 
 int azaDSPProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
-	if (!dsp->header.bypass && dsp->funcs.fp_process && dsp->processMetadata.error == AZA_SUCCESS) {
-		int result = dsp->funcs.fp_process(dsp, dst, src, flags);
+	if (!dsp->header.bypass && dsp->pFuncs->fp_process && dsp->processMetadata.error == AZA_SUCCESS) {
+		int result = dsp->pFuncs->fp_process(dsp, dst, src, flags);
 		if (result != AZA_SUCCESS) {
 			return result;
 		}
@@ -54,8 +55,8 @@ int azaDSPProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 }
 
 bool azaFreeDSP(azaDSP *dsp) {
-	if (dsp->header.owned && dsp->funcs.fp_free) {
-		dsp->funcs.fp_free(dsp);
+	if (dsp->header.owned && dsp->pFuncs->fp_free) {
+		dsp->pFuncs->fp_free(dsp);
 		return true;
 	}
 	return false;
@@ -73,8 +74,121 @@ int azaDSPChainInit(azaDSPChain *data, uint32_t stepsToReserve) {
 }
 
 void azaDSPChainDeinit(azaDSPChain *data) {
+	for (uint32_t i = 0; i < data->steps.count; i++) {
+		azaDSP *dsp = data->steps.data[i].dsp;
+		if (dsp) {
+			azaFreeDSP(dsp);
+		}
+	}
 	AZA_DA_DEINIT(data->steps);
 	AZA_DA_DEINIT(data->buffer);
+}
+
+int azaDSPChainInitDuplicate(azaDSPChain *data, azaDSPChain *src) {
+	int result = azaDSPChainInit(data, src->steps.count);
+	if (result) {
+		return result;
+	}
+	for (uint32_t i = 0; i < data->steps.count; i++) {
+		azaDSP *dsp = src->steps.data[i].dsp;
+		azaDSP *newDSP = dsp->pFuncs->fp_makeDuplicate(dsp);
+		if (newDSP == NULL) {
+			result = AZA_ERROR_OUT_OF_MEMORY;
+			goto error;
+		}
+		data->steps.data[i].dsp = newDSP;
+	}
+	return result;
+error:
+	azaDSPChainDeinit(data);
+	return result;
+}
+
+int azaDSPChainEnsureParity(azaDSPChain *data, azaDSPChain *src) {
+	if (data->steps.count+1 == src->steps.count) {
+		// Detect single plugin insertion
+		int index = -1;
+		for (int i = 0; i < (int)data->steps.count; i++) {
+			if (data->steps.data[i].dsp->pFuncs != src->steps.data[i + (index >= 0 ? 1 : 0)].dsp->pFuncs) {
+				if (index != -1) {
+					// More than one mismatch, give up
+					index = -2;
+					break;
+				}
+				index = i;
+			}
+		}
+		if (index == -1) {
+			// It can only be at the end
+			index = data->steps.count;
+		}
+		if (index >= 0) {
+			// Detected one spot, insert it
+			azaDSP *dsp = src->steps.data[index+1].dsp;
+			azaDSP *newDSP = dsp->pFuncs->fp_makeDuplicate(dsp);
+			if (newDSP == NULL) {
+				return AZA_ERROR_OUT_OF_MEMORY;
+			}
+			int result = azaDSPChainInsertIndex(data, newDSP, index);
+			if (result) {
+				newDSP->pFuncs->fp_free(newDSP);
+				return result;
+			}
+		}
+	}
+	if (data->steps.count == src->steps.count+1) {
+		// Detect single plugin removal
+		int index = -1;
+		for (int i = 0; i < (int)data->steps.count; i++) {
+			if (index < 0 && i >= (int)src->steps.count) {
+				// Nothing found so we'd go out of bounds in the next check. Stop here.
+				break;
+			}
+			if (data->steps.data[i].dsp->pFuncs != src->steps.data[i - (index >= 0 ? 1 : 0)].dsp->pFuncs) {
+				if (index != -1) {
+					// More than one mismatch, give up
+					index = -2;
+					break;
+				}
+				index = i;
+			}
+		}
+		if (index == -1) {
+			// It can only be the last one
+			index = data->steps.count-1;
+		}
+		if (index >= 0) {
+			// Detected one spot, remove it
+			azaDSPChainRemoveIndex(data, index);
+		}
+	}
+	bool hardReset = false;
+	if (data->steps.count == src->steps.count) {
+		// Check that all plugins are the same
+		for (uint32_t i = 0; i < data->steps.count; i++) {
+			if (data->steps.data[i].dsp->pFuncs != src->steps.data[i].dsp->pFuncs) {
+				hardReset = true;
+				break;
+			}
+		}
+	} else {
+		// Not even the same plugin count, and a simple pattern wasn't detected.
+		hardReset = true;
+	}
+	if (hardReset) {
+		azaDSPChainDeinit(data);
+		return azaDSPChainInitDuplicate(data, src);
+	}
+	// Past this point all plugins are the same kinds, so just copy the configs over
+	for (uint32_t i = 0; i < data->steps.count; i++) {
+		azaDSP *dspDst = data->steps.data[i].dsp;
+		azaDSP *dspSrc = src->steps.data[i].dsp;
+		int result = dspSrc->pFuncs->fp_copyConfig(dspDst, dspSrc);
+		if (result) {
+			return result;
+		}
+	}
+	return AZA_SUCCESS;
 }
 
 int azaDSPChainAppend(azaDSPChain *data, azaDSP *dsp) {
@@ -249,21 +363,22 @@ int azaDSPChainProcessWithHandler(azaDSPChain *data, azaBuffer *dst, azaBuffer *
 azaDSPRegEntries azaDSPRegistry = {0};
 
 int azaDSPRegistryInit() {
-	AZA_DA_RESERVE_COUNT(azaDSPRegistry, 11, return AZA_ERROR_OUT_OF_MEMORY);
-	azaDSPAddRegEntry(azaCubicLimiterHeader, azaMakeDefaultCubicLimiter);
-	azaDSPAddRegEntry(azaLookaheadLimiterHeader, azaMakeDefaultLookaheadLimiter);
-	azaDSPAddRegEntry(azaFilterHeader, azaMakeDefaultFilter);
-	azaDSPAddRegEntry(azaLowPassFIRHeader, azaMakeDefaultLowPassFIR);
-	azaDSPAddRegEntry(azaCompressorHeader, azaMakeDefaultCompressor);
-	azaDSPAddRegEntry(azaGateHeader, azaMakeDefaultGate);
-	azaDSPAddRegEntry(azaDelayHeader, azaMakeDefaultDelay);
-	azaDSPAddRegEntry(azaDelayDynamicHeader, azaMakeDefaultDelayDynamic);
-	azaDSPAddRegEntry(azaReverbHeader, azaMakeDefaultReverb);
-	azaDSPAddRegEntry(azaSamplerHeader, azaMakeDefaultSampler);
-	azaDSPAddRegEntry(azaRMSHeader, azaMakeDefaultRMS);
-	azaDSPAddRegEntry(azaSpatializeHeader, azaMakeDefaultSpatialize);
-	azaDSPAddRegEntry(azaMonitorSpectrumHeader, azaMakeDefaultMonitorSpectrum);
-	azaDSPAddRegEntry(azaDSPDebuggerHeader, azaMakeDefaultDSPDebugger);
+	AZA_DA_RESERVE_COUNT(azaDSPRegistry, 12, return AZA_ERROR_OUT_OF_MEMORY);
+	azaDSPAddRegEntry(azaCubicLimiterHeader);
+	azaDSPAddRegEntry(azaLookaheadLimiterHeader);
+	azaDSPAddRegEntry(azaFilterHeader);
+	azaDSPAddRegEntry(azaLowPassFIRHeader);
+	azaDSPAddRegEntry(azaCompressorHeader);
+	azaDSPAddRegEntry(azaGateHeader);
+	azaDSPAddRegEntry(azaDelayHeader);
+	azaDSPAddRegEntry(azaDelayDynamicHeader);
+	azaDSPAddRegEntry(azaReverbHeader);
+	azaDSPAddRegEntry(azaSamplerHeader);
+	azaDSPAddRegEntry(azaRMSHeader);
+	azaDSPAddRegEntry(azaSpatializeHeader);
+	azaDSPAddRegEntry(azaMonitorSpectrumHeader);
+	azaDSPAddRegEntry(azaDSPDebuggerHeader);
+	azaDSPAddRegEntry(azaDSPMultiplexerHeader);
 	return AZA_SUCCESS;
 }
 
@@ -271,11 +386,10 @@ void azaDSPRegistryDeinit() {
 	AZA_DA_DEINIT(azaDSPRegistry);
 }
 
-int azaDSPAddRegEntry(azaDSP base, azaDSP* (*fp_makeDSP)()) {
+int azaDSPAddRegEntry(azaDSP base) {
 	AZA_DA_RESERVE_ONE_AT_END(azaDSPRegistry, return AZA_ERROR_OUT_OF_MEMORY);
 	azaDSPRegEntry *dst = &azaDSPRegistry.data[azaDSPRegistry.count++];
 	dst->base = base;
-	dst->fp_makeDSP = fp_makeDSP;
 	return AZA_SUCCESS;
 }
 
