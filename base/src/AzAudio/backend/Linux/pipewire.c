@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <ctype.h> // isspace
 
 #include <spa/param/audio/format-utils.h>
 #include <pipewire/pipewire.h>
@@ -475,10 +476,11 @@ static azaChannelLayout azaGetChannelLayoutFromNodeInfo(struct azaNodeInfo *node
 	layout.count = nodeInfo->audio_channels;
 	const char *str = nodeInfo->audio_position;
 	int posIndex = 0;
-	while (*str != 0) {
+	while (posIndex < layout.count && *str != 0 && *str != ']') {
 		char pos[16];
 		int size = 0;
-		while (*str != ',' && *str != 0) {
+		while (*str != 0 && (*str == '[' || isspace(*str))) str++;
+		while (size+1 < sizeof(pos) && *str != ',' && *str != 0 && *str != ']' && !isspace(*str)) {
 			pos[size++] = *str++;
 		}
 		pos[size] = 0;
@@ -555,6 +557,7 @@ static azaChannelLayout azaGetChannelLayoutFromNodeInfo(struct azaNodeInfo *node
 		} else if (strcmp(pos, "BRC") == 0) {
 			layout.positions[posIndex] = AZA_POS_RIGHT_CENTER_FRONT;
 		} else {
+			AZA_LOG_ERR("When reading channel layout for \"%s\", didn't find a match for position \"%s\"\n", nodeInfo->node_description, pos);
 			layout.positions[posIndex] = AZA_POS_SUBWOOFER; // idk man we don't have a position for "invalid" because that shouldn't be a thing?
 		}
 		posIndex++;
