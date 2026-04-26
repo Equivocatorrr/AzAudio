@@ -3,6 +3,7 @@ build*/
 .vscode
 .idea
 .clang-tidy
+*.swp
 *.log
 # Source files generated at build time
 *.gen.c
