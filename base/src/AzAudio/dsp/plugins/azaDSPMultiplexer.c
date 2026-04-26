@@ -86,7 +86,7 @@ int azaDSPMultiplexerCopyConfig(azaDSP *dst, azaDSP *src) {
 	return azaDSPChainEnsureParity(&dataDst->origin, &dataSrc->origin);
 }
 
-int azaDSPMultiplexerProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
+int azaDSPMultiplexerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	azaDSPMultiplexer *data = (azaDSPMultiplexer*)dsp;
 	if (data->instances.count == 0) {
 		azaBufferZero(dst);

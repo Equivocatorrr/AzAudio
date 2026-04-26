@@ -53,7 +53,7 @@ azaDSP* azaDSPMultiplexerMakeDefault();
 azaDSP* azaDSPMultiplexerMakeDuplicate(azaDSP *src);
 int azaDSPMultiplexerCopyConfig(azaDSP *dst, azaDSP *src);
 
-int azaDSPMultiplexerProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
+int azaDSPMultiplexerProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags);
 
 azaDSPSpecs azaDSPMultiplexerGetSpecs(azaDSP *dsp, uint32_t samplerate);
 

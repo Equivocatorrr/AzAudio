@@ -67,8 +67,8 @@ int SynthProcess(void *userdata, azaBuffer *dst, azaBuffer *src, uint32_t flags)
 	return AZA_SUCCESS;
 }
 
-void SynthFree(void *dsp) {
-	Synth *data = dsp;
+void SynthFree(azaDSP *dsp) {
+	Synth *data = (Synth*)dsp;
 	azaFilterFree((azaDSP*)data->filter);
 	azaDSPChainDeinit(&data->outputEffects);
 	aza_free(data);
@@ -543,7 +543,7 @@ int main(int argumentCount, char** argumentValues) {
 	azaMixerGUIClose();
 	azaMixerStreamClose(&mixer, false);
 
-	SynthFree((Synth*)dspSynth);
+	SynthFree(dspSynth);
 
 	free(objects);
 	azaSamplerFree((azaDSP*)samplerCat);
