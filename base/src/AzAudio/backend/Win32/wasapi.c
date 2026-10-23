@@ -160,8 +160,8 @@ static void azaStreamDataFree(azaStreamData *data) {
 	if (data->isInUse) {
 		data->isInUse = 0;
 		streamCount--;
-		azaBufferDeinit(&data->nativeBuffer, true);
-		azaBufferDeinit(&data->processingBuffer, true);
+		azaBufferDeinit(&data->nativeBuffer, false);
+		azaBufferDeinit(&data->processingBuffer, false);
 	}
 }
 
@@ -877,7 +877,7 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 	if (stream->config.channelLayout.count != 0) {
 		desiredFormat.dwChannelMask = azaGetChannelMaskFromChannelLayout(stream->config.channelLayout);
 	} else {
-		desiredFormat.dwChannelMask = SPEAKER_ALL;
+		desiredFormat.dwChannelMask = defaultFormat->dwChannelMask;
 	}
 	desiredFormat.SubFormat = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
 	hResult = data->pAudioClient->lpVtbl->IsFormatSupported(data->pAudioClient, AUDCLNT_SHAREMODE_SHARED, (WAVEFORMATEX*)&desiredFormat, (WAVEFORMATEX**)&pClosestFormat);
@@ -967,6 +967,7 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 	} else {
 		data->processingBuffer.pSamples = NULL;
 		data->processingBuffer.channelLayout = azaGetChannelLayoutFromMask(data->processingBuffer.channelLayout.count, data->waveFormatExtensible.dwChannelMask);
+		data->processingBuffer.frames = data->deviceBufferFrames;
 	}
 	data->processingBuffer.channelLayout.formFactor = deviceInfo->formFactor;
 	data->stream = stream;
