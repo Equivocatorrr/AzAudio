@@ -155,7 +155,7 @@ static int azaMonitorSpectrumHandleBufferResizes(azaMonitorSpectrum *data, azaBu
 // returns how many frames were used from buffer
 static uint32_t azaMonitorSpectrumPrimeBuffer(azaMonitorSpectrum *data, azaBuffer *buffer, uint32_t offset) {
 	assert(offset <= buffer->frames);
-	uint32_t used = AZA_MIN(data->config.window - data->inputBufferUsed, buffer->frames-offset);
+	uint32_t used = AZA_MIN((uint32_t)AZA_MAX(0,(int64_t)data->config.window - (int64_t)data->inputBufferUsed), buffer->frames-offset);
 	if (used) {
 		azaBuffer dst = (azaBuffer) {
 			.pSamples = data->inputBuffer + data->inputBufferChannelCount * data->inputBufferUsed,
