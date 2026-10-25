@@ -86,6 +86,8 @@ typedef struct azaDeviceInfo {
 	// Contains the mask of where the channels are physically positioned, such as SPEAKER_FRONT_LEFT etc.
 	UINT speakerConfig;
 	enum azaFormFactor formFactor;
+	// available may become false if a device is unplugged, and later true again if it's plugged back in. We don't delete them.
+	bool available, input, output;
 	const char *name;
 	unsigned channels;
 	unsigned sampleBitDepth;
@@ -100,13 +102,13 @@ static int shouldQuit = 0;
 static azaDeviceInfo device[AZA_MAX_DEVICES];
 static size_t deviceCount = 0;
 
-static azaDeviceInfo deviceOutput[AZA_MAX_DEVICES];
+static azaDeviceInfo *deviceOutput[AZA_MAX_DEVICES];
 static size_t deviceOutputCount = 0;
-static azaDeviceInfo deviceInput[AZA_MAX_DEVICES];
+static azaDeviceInfo *deviceInput[AZA_MAX_DEVICES];
 static size_t deviceInputCount = 0;
 
-static size_t defaultOutputDevice = AZA_MAX_DEVICES;
-static size_t defaultInputDevice = AZA_MAX_DEVICES;
+static azaDeviceInfo *defaultOutputDevice = NULL;
+static azaDeviceInfo *defaultInputDevice = NULL;
 
 // TODO: Implement IMMNotificationClient to handle changes to audio devices
 
@@ -140,8 +142,8 @@ typedef struct azaStreamData {
 // TODO: Verify the above claim.
 #define AZA_MAX_STREAMS 64
 
-static azaStreamData streams[AZA_MAX_STREAMS];
-static size_t streamCount;
+static azaStreamData streams[AZA_MAX_STREAMS] = {0};
+static size_t streamCount = 0;
 
 static azaStreamData* azaStreamDataGet() {
 	azaStreamData *data = NULL;
@@ -150,19 +152,32 @@ static azaStreamData* azaStreamDataGet() {
 			data = &streams[i];
 		}
 	}
+	assert(data);
 	streamCount++;
 	memset(data, 0, sizeof(*data));
 	data->isInUse = 1;
 	return data;
 }
 
-static void azaStreamDataFree(azaStreamData *data) {
+static void azaStreamDataDeinit(azaStreamData *data) {
 	if (data->isInUse) {
 		data->isInUse = 0;
 		streamCount--;
 		azaBufferDeinit(&data->nativeBuffer, false);
 		azaBufferDeinit(&data->processingBuffer, false);
 	}
+}
+
+static void azaStreamDeinitWASAPI(azaStream *stream);
+static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDeviceInterface deviceInterface, uint32_t flags, bool activate);
+
+// Reinits a stream in-place. Will invalidate the stream->data pointer.
+// TODO: This is kind of hacky, but the alternative is a refactor. Maybe we will do that someday.
+static void azaStreamReinitWASAPI(azaStream *stream) {
+	azaStreamData *streamData = stream->data;
+	bool isActive = streamData->isActive;
+	azaStreamDeinitWASAPI(stream);
+	azaStreamInitWASAPI(stream, stream->config, stream->deviceInterface, 0, isActive);
 }
 
 static const char* azaStreamGetDeviceNameWASAPI(azaStream *stream) {
@@ -247,35 +262,182 @@ static uint32_t azaStreamGetBufferFrameCountWASAPI(azaStream *stream) {
 	return data->processingBuffer.frames;
 }
 
-static size_t azaFindDefaultDevice(azaDeviceInfo devicePool[], size_t deviceCount, EDataFlow dataFlow, const char *poolTag) {
-#define FAIL_ACTION result = AZA_MAX_DEVICES; goto error
-	size_t result = AZA_MAX_DEVICES;
+static bool azaDeviceUpdateName(azaDeviceInfo *dstDevice) {
+	HRESULT hResult;
+	char *name;
+	PROPERTY_STORE_GET(dstDevice->pPropertyStore, PKEY_Device_FriendlyName, VT_LPWSTR,
+		// onSuccess:
+		name = wstrToCstr(propVariant.pwszVal),
+		// onFail:
+		return false
+	);
+	aza_str_strip(name, name, strlen(name)+1);
+	SAFE_FREE(dstDevice->name);
+	dstDevice->name = name;
+	return true;
+}
+
+static bool azaDeviceUpdateDeviceFormat(azaDeviceInfo *dstDevice) {
+	HRESULT hResult;
+	WAVEFORMATEXTENSIBLE waveFormatEx;
+	PROPERTY_STORE_GET(dstDevice->pPropertyStore, PKEY_AudioEngine_DeviceFormat, VT_BLOB,
+		// onSuccess:
+		memcpy(&waveFormatEx, propVariant.blob.pBlobData, AZA_MIN(sizeof(waveFormatEx), propVariant.blob.cbSize)),
+		// onFail:
+		return false;
+	);
+	dstDevice->channels = (unsigned)waveFormatEx.Format.nChannels;
+	dstDevice->sampleBitDepth = (unsigned)waveFormatEx.Format.wBitsPerSample;
+	dstDevice->samplerate = (size_t)waveFormatEx.Format.nSamplesPerSec;
+	switch (waveFormatEx.Format.wFormatTag) {
+		case WAVE_FORMAT_EXTENSIBLE:
+			dstDevice->speakerConfig = waveFormatEx.dwChannelMask;
+			if (IsEqualGUID(&waveFormatEx.SubFormat, &KSDATAFORMAT_SUBTYPE_PCM)) {
+				dstDevice->sampleFormat = AZA_SAMPLE_PCM;
+			} else if (IsEqualGUID(&waveFormatEx.SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {
+				dstDevice->sampleFormat = AZA_SAMPLE_FLOAT;
+			} else {
+				AZA_LOG_ERR("Unhandled WAVEFORMATEXTENSIBLE::SubFormat " GUID_FORMAT_STR "\n", GUID_ARGS(waveFormatEx.SubFormat));
+				return false;;
+			}
+			break;
+		case WAVE_FORMAT_PCM:
+			dstDevice->speakerConfig = 0;
+			dstDevice->sampleFormat = AZA_SAMPLE_PCM;
+			break;
+		case WAVE_FORMAT_IEEE_FLOAT:
+			dstDevice->speakerConfig = 0;
+			dstDevice->sampleFormat = AZA_SAMPLE_FLOAT;
+			break;
+		default:
+			AZA_LOG_ERR("Unhandled WAVEFORMATEX::wFormatTag %hu\n", waveFormatEx.Format.wFormatTag);
+			return false;;
+	}
+	return true;
+}
+
+// Expects dstDevice to be fully initted with an open pPropertyStore
+static void azaDeviceUpdateFormFactor(azaDeviceInfo *dstDevice) {
+	HRESULT hResult = S_OK;
+	if (dstDevice->output) {
+		// This is apparently not necessarily accurate, so we'll see if we can match the name for headphones right below
+		PROPERTY_STORE_GET(dstDevice->pPropertyStore, PKEY_AudioEndpoint_FormFactor, VT_UI4,
+			// onSuccess:
+			switch (propVariant.uintVal) {
+				case RemoteNetworkDevice:
+				case Speakers:
+				case LineLevel:
+				case Microphone:
+				case Handset:
+				case UnknownDigitalPassthrough:
+				case SPDIF:
+				case DigitalAudioDisplayDevice:
+				case UnknownFormFactor:
+					dstDevice->formFactor = AZA_FORM_FACTOR_SPEAKERS;
+					AZA_LOG_TRACE("%s is Speakers\n", dstDevice->name);
+					break;
+				case Headphones:
+				case Headset:
+					dstDevice->formFactor = AZA_FORM_FACTOR_HEADPHONES;
+					AZA_LOG_TRACE("%s is Headphones\n", dstDevice->name);
+					break;
+			},
+			// onFail:
+			dstDevice->formFactor = AZA_FORM_FACTOR_SPEAKERS
+		);
+		// TODO: This is super fragile... probably get some other way to get the form factor (or give up and let the user configure it).
+		if (aza_str_begins_with(dstDevice->name, "Headphones")) {
+			dstDevice->formFactor = AZA_FORM_FACTOR_HEADPHONES;
+			AZA_LOG_TRACE("%s is Headphones (matched name string)\n", dstDevice->name);
+		}
+	}
+}
+
+// Returns true on success, false if there was an error
+static bool azaDeviceInitWASAPI(azaDeviceInfo *dstDevice, IMMDevice *pDevice) {
+	HRESULT hResult;
+	IMMEndpoint *pEndpoint = NULL;
+	IPropertyStore *pPropertyStore = NULL;
+	WCHAR *idWStr;
+	hResult = pDevice->lpVtbl->QueryInterface(pDevice, &IID_IMMEndpoint, (void**)&pEndpoint);
+	CHECK_RESULT("IMMDevice::QueryInterface(IID_IMMEndpoint)", goto err);
+	dstDevice->pDevice = pDevice;
+	pDevice->lpVtbl->GetId(pDevice, &idWStr);
+	dstDevice->idWStr = idWStr;
+
+	hResult = pDevice->lpVtbl->OpenPropertyStore(pDevice, STGM_READ, &pPropertyStore);
+	CHECK_RESULT("OpenPropertyStore", goto err);
+	dstDevice->pPropertyStore = pPropertyStore;
+	if (!azaDeviceUpdateName(dstDevice)) {
+		goto err;
+	}
+	if (!azaDeviceUpdateDeviceFormat(dstDevice)) {
+		goto err;
+	}
+	EDataFlow dataFlow;
+	hResult = pEndpoint->lpVtbl->GetDataFlow(pEndpoint, &dataFlow);
+	CHECK_RESULT("IMMEndpoint::GetDataFlow", goto err);
+	dstDevice->input = false;
+	dstDevice->output = false;
+	switch (dataFlow) {
+		case eRender:
+			dstDevice->output = true;
+			break;
+		case eCapture:
+			dstDevice->input = true;
+			break;
+		case eAll:
+			AZA_LOG_INFO("Warning: Device data flow is both capture AND render, which is supposedly impossible.\n");
+			dstDevice->output = true;
+			dstDevice->input = true;
+			break;
+		default: break;
+	}
+	azaDeviceUpdateFormFactor(dstDevice);
+	if (azaLogLevel >= AZA_LOG_LEVEL_TRACE) {
+		char *idCStr = wstrToCstr(idWStr);
+		AZA_LOG_TRACE("Device idStr: \"%s\"\n\tname: \"%s\"\n\tchannels: %u\n\tbitDepth: %u\n\tsamplerate: %zu\n\tspeakerConfig: 0x%x\n", idCStr, dstDevice->name, dstDevice->channels, dstDevice->sampleBitDepth, dstDevice->samplerate, dstDevice->speakerConfig);
+		aza_free(idCStr);
+	}
+	dstDevice->available = true;
+	return true;
+err:
+	SAFE_RELEASE(pPropertyStore);
+	SAFE_RELEASE(pEndpoint);
+	dstDevice->available = false;
+	return false;
+}
+
+static azaDeviceInfo* azaFindDefaultDevice(azaDeviceInfo *devicePool[], size_t deviceCount, EDataFlow dataFlow, const char *poolTag) {
+	azaDeviceInfo *result = NULL;
 	HRESULT hResult;
 	IMMDevice *pDevice = NULL;
 	IPropertyStore *pPropertyStore = NULL;
 	char *name = NULL;
 	hResult = pEnumerator->lpVtbl->GetDefaultAudioEndpoint(pEnumerator, dataFlow, eConsole, &pDevice);
-	CHECK_RESULT("GetDefaultAudioEndpoint", FAIL_ACTION);
+	CHECK_RESULT("GetDefaultAudioEndpoint", goto error);
 	hResult = pDevice->lpVtbl->OpenPropertyStore(pDevice, STGM_READ, &pPropertyStore);
-	CHECK_RESULT("OpenPropertyStore", FAIL_ACTION);
+	CHECK_RESULT("OpenPropertyStore", goto error);
 	PROPERTY_STORE_GET(pPropertyStore, PKEY_Device_FriendlyName, VT_LPWSTR,
 		// onSuccess:
 		name = wstrToCstr(propVariant.pwszVal),
 		// onFail:
-		FAIL_ACTION
+		goto error
 	);
+	aza_str_strip(name, name, strlen(name)+1);
 	// Check by name
 	for (size_t i = 0; i < deviceCount; i++) {
-		if (strcmp(devicePool[i].name, name) == 0) {
-			result = i;
+		if (!devicePool[i]->available) continue;
+		if (strcmp(devicePool[i]->name, name) == 0) {
+			result = devicePool[i];
 			break;
 		}
 	}
-	if (result == AZA_MAX_DEVICES) {
+	if (result == NULL) {
 		AZA_LOG_ERR("Didn't find the default %s device in our list!\n", poolTag);
-		FAIL_ACTION;
+		goto error;
 	} else {
-		AZA_LOG_INFO("Default %s device: \"%s\"\n", poolTag, devicePool[result].name);
+		AZA_LOG_INFO("Default %s device: \"%s\"\n", poolTag, result->name);
 	}
 error:
 	SAFE_FREE(name);
@@ -288,6 +450,211 @@ error:
 static uint32_t GetResampledFramecount(uint32_t dstSamplerate, uint32_t srcSamplerate, uint32_t numSamples) {
 	return (uint32_t)ceilf((float)numSamples * (float)dstSamplerate / (float)srcSamplerate);
 }
+
+
+
+// IMMNotificationClient
+
+// If this reference is temporary, remember to Release it
+static IMMDevice* azaGetIMMDeviceFromDeviceId(LPCWSTR pwstrDeviceId) {
+	IMMDevice *pDevice = NULL;
+	HRESULT hResult = pEnumerator->lpVtbl->GetDevice(pEnumerator, pwstrDeviceId, &pDevice);
+	CHECK_RESULT("GetDevice", return NULL);
+	return pDevice;
+}
+// Can fail and return NULL
+static azaDeviceInfo* azaGetDeviceFromDeviceId(LPCWSTR pwstrDeviceId) {
+	azaDeviceInfo *result = NULL;
+	for (size_t i = 0; i < deviceCount; i++) {
+		if (wcscmp(device[i].idWStr, pwstrDeviceId) == 0) {
+			result = &device[i];
+			break;
+		}
+	}
+	return result;
+}
+
+static void azaHandleStreamsOnDeviceActivated(azaDeviceInfo *device) {
+	for (size_t i = 0; i < AZA_MAX_STREAMS; i++) {
+		azaStreamData *streamData = &streams[i];
+		if (!streamData->isInUse) continue;
+		const char *configName = streamData->stream->config.deviceName;
+		const char *curDevName = streamData->deviceInfo->name;
+		const char *newDevName = device->name;
+		if (configName // We have a device name we want
+			&& strcmp(configName, curDevName) != 0 // The current device name doesn't match it
+			&& strcmp(configName, newDevName) == 0 // The new device name DOES match it
+		) {
+			azaStreamReinitWASAPI(streamData->stream);
+		}
+	}
+}
+
+static void azaHandleStreamsOnDeviceDeactivated(azaDeviceInfo *device) {
+	for (size_t i = 0; i < AZA_MAX_STREAMS; i++) {
+		azaStreamData *streamData = &streams[i];
+		if (!streamData->isInUse) continue;
+		if (streamData->deviceInfo == device) {
+			azaStreamReinitWASAPI(streamData->stream);
+		}
+	}
+}
+
+static HRESULT STDMETHODCALLTYPE immncQueryInterface(IMMNotificationClient *This, REFIID riid, void **ppvObject) {
+	if (IsEqualGUID(&riid, &IID_IUnknown) || IsEqualGUID(&riid, &IID_IMMNotificationClient)) {
+		*ppvObject = This;
+	} else {
+		*ppvObject = NULL;
+		return E_NOINTERFACE;
+	}
+	return S_OK;
+}
+static ULONG STDMETHODCALLTYPE immncAddRef(IMMNotificationClient * This) {
+	return 1; // Leave my singleton alone!
+}
+static ULONG STDMETHODCALLTYPE immncRelease(IMMNotificationClient * This) {
+	return 1; // Leave my singleton alone!
+}
+static HRESULT STDMETHODCALLTYPE immncOnDeviceStateChanged(IMMNotificationClient *This, LPCWSTR pwstrDeviceId, DWORD dwNewState) {
+	azaMutexLock(&mutex);
+	azaDeviceInfo *dstDevice = azaGetDeviceFromDeviceId(pwstrDeviceId);
+	if (!dstDevice) {
+		AZA_LOG_ERR("Received an OnDeviceStateChanged about a device that we don't have enumerated already.");
+		goto done;
+	}
+	switch (dwNewState) {
+		case DEVICE_STATE_ACTIVE:
+			dstDevice->available = true;
+			break;
+		case DEVICE_STATE_DISABLED:
+		case DEVICE_STATE_NOTPRESENT:
+		case DEVICE_STATE_UNPLUGGED:
+			dstDevice->available = false;
+			break;
+	}
+	if (dstDevice->available) {
+		// Check if any streams match the device name exactly and put them on here
+		azaHandleStreamsOnDeviceActivated(dstDevice);
+	} else {
+		// Check if any streams are on this device currently and put them elsewhere
+		azaHandleStreamsOnDeviceDeactivated(dstDevice);
+	}
+done:
+	azaMutexUnlock(&mutex);
+	return S_OK;
+}
+static HRESULT STDMETHODCALLTYPE immncOnDeviceAdded(IMMNotificationClient *This, LPCWSTR pwstrDeviceId) {
+	azaMutexLock(&mutex);
+	azaDeviceInfo *dstDevice = azaGetDeviceFromDeviceId(pwstrDeviceId);
+	if (dstDevice) {
+		dstDevice->available = true;
+	} else {
+		// Actually add the device
+		IMMDevice *pDevice = azaGetIMMDeviceFromDeviceId(pwstrDeviceId);
+		dstDevice = &device[deviceCount];
+		if (azaDeviceInitWASAPI(dstDevice, pDevice)) {
+			deviceCount++;
+			if (dstDevice->input) {
+				deviceInput[deviceInputCount++] = dstDevice;
+			}
+			if (dstDevice->output) {
+				deviceOutput[deviceOutputCount++] = dstDevice;
+			}
+		}
+	}
+	azaHandleStreamsOnDeviceActivated(dstDevice);
+	azaMutexUnlock(&mutex);
+	return S_OK;
+}
+static HRESULT STDMETHODCALLTYPE immncOnDeviceRemoved(IMMNotificationClient *This, LPCWSTR pwstrDeviceId) {
+	azaMutexLock(&mutex);
+	azaDeviceInfo *dstDevice = azaGetDeviceFromDeviceId(pwstrDeviceId);
+	if (!dstDevice) {
+		AZA_LOG_ERR("Received an OnDeviceRemoved about a device that we don't have enumerated yet.");
+		goto done;
+	}
+	dstDevice->available = false;
+	azaHandleStreamsOnDeviceDeactivated(dstDevice);
+done:
+	azaMutexUnlock(&mutex);
+	return S_OK;
+}
+static HRESULT STDMETHODCALLTYPE immncOnDefaultDeviceChanged(IMMNotificationClient * This, EDataFlow flow, ERole role, LPCWSTR pwstrDefaultDeviceId) {
+	azaMutexLock(&mutex);
+	HRESULT hResult;
+	hResult = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+	CHECK_RESULT("CoInitialize", goto done);
+	azaDeviceInfo *dstDevice = azaGetDeviceFromDeviceId(pwstrDefaultDeviceId);
+	if (!dstDevice) {
+		AZA_LOG_ERR("Received an OnDefaultDeviceChanged about a device that we don't have enumerated yet.");
+		goto done;
+	}
+	azaDeviceInfo *oldDefaultDevice = NULL;
+	azaDeviceInfo *newDefaultDevice = NULL;
+	if (dstDevice->input) {
+		oldDefaultDevice = defaultInputDevice;
+		defaultInputDevice = dstDevice;
+		newDefaultDevice = defaultInputDevice;
+	}
+	if (dstDevice->output) {
+		oldDefaultDevice = defaultOutputDevice;
+		defaultOutputDevice = dstDevice;
+		newDefaultDevice = defaultOutputDevice;
+	}
+	// Update any default-device streams
+	for (size_t i = 0; i < AZA_MAX_STREAMS; i++) {
+		azaStreamData *streamData = &streams[i];
+		if (!streamData->isInUse) continue;
+		if (streamData->stream->config.deviceName) continue; // This can't affect devices chosen by name.
+		azaDeviceInfo *di = streamData->deviceInfo;
+		if (di == oldDefaultDevice && di != newDefaultDevice) {
+			azaStreamReinitWASAPI(streamData->stream);
+		}
+	}
+done:
+	azaMutexUnlock(&mutex);
+	return S_OK;
+}
+static HRESULT STDMETHODCALLTYPE immncOnPropertyValueChanged(IMMNotificationClient * This, LPCWSTR pwstrDeviceId, const PROPERTYKEY key) {
+	azaMutexLock(&mutex);
+	azaDeviceInfo *dstDevice = azaGetDeviceFromDeviceId(pwstrDeviceId);
+	if (!dstDevice) {
+		AZA_LOG_ERR("Received an OnPropertyValueChanged about a device that we don't have enumerated yet.");
+		goto done;
+	}
+	if (IsEqualGUID(&key.fmtid, &PKEY_Device_FriendlyName.fmtid)) {
+		AZA_LOG_TRACE("OnPropertyValueChanged FriendlyName(was \"%s\")", dstDevice->name);
+		azaDeviceUpdateName(dstDevice);
+		AZA_LOG_TRACE("New name: \"%s\"", dstDevice->name);
+		// This handles any name matching updates, but only if the new device is matched.
+		// Does nothing if the new device no longer matches name.
+		azaHandleStreamsOnDeviceActivated(dstDevice);
+	} else if (IsEqualGUID(&key.fmtid, &PKEY_AudioEngine_DeviceFormat.fmtid)) {
+		AZA_LOG_TRACE("OnPropertyValueChanged DeviceFormat for Device \"%s\"", dstDevice->name);
+		azaDeviceUpdateDeviceFormat(dstDevice);
+	} else if (IsEqualGUID(&key.fmtid, &PKEY_AudioEndpoint_FormFactor.fmtid)) {
+		AZA_LOG_TRACE("OnPropertyValueChanged FormFactor for Device \"%s\"", dstDevice->name);
+		azaDeviceUpdateFormFactor(dstDevice);
+	} else {
+		AZA_LOG_TRACE("OnPropertyValueChanged for Device \"%s\": Unhandled key", dstDevice->name);
+	}
+done:
+	azaMutexUnlock(&mutex);
+	return S_OK;
+}
+static IMMNotificationClientVtbl immNotificationClientVtbl = {
+	.QueryInterface = immncQueryInterface,
+	.AddRef = immncAddRef,
+	.Release = immncRelease,
+	.OnDeviceStateChanged = immncOnDeviceStateChanged,
+	.OnDeviceAdded = immncOnDeviceAdded,
+	.OnDeviceRemoved = immncOnDeviceRemoved,
+	.OnDefaultDeviceChanged = immncOnDefaultDeviceChanged,
+	.OnPropertyValueChanged = immncOnPropertyValueChanged,
+};
+static IMMNotificationClient immNotificationClient = { .lpVtbl=&immNotificationClientVtbl };
+
+
 
 // TODO: Maybe make this configurable. Real hardcore audio quality requires a much larger window, which comes at a pretty significant cost. Maybe use SIMD instead and just make it bigger (with possibly an option for a low-latency resampling kernel that sacrifices the phase-frequency relationship).
 #define AZA_RESAMPLING_WINDOW 50
@@ -596,7 +963,7 @@ static void azaStreamProcess(azaStreamData *data) {
 
 static AZA_THREAD_PROC_DEF(soundThreadProc, userdata) {
 	HRESULT hResult;
-	hResult = CoInitialize(NULL);
+	hResult = CoInitializeEx(NULL, COINIT_MULTITHREADED);
 	CHECK_RESULT("soundThreadProc CoInitialize", goto error);
 
 	azaMutexLock(&mutex);
@@ -637,7 +1004,7 @@ static void azaWASAPIDeinit() {
 static int azaWASAPIInit() {
 	lanczosTableInit();
 	HRESULT hResult;
-	hResult = CoInitialize(NULL);
+	hResult = CoInitializeEx(NULL, COINIT_MULTITHREADED);
 	CHECK_RESULT("CoInitialize", goto error);
 	hResult = CoCreateInstance(&CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, &IID_IMMDeviceEnumerator, (void**)&pEnumerator);
 	CHECK_RESULT("CoCreateInstance", goto error);
@@ -650,134 +1017,28 @@ static int azaWASAPIInit() {
 		AZA_LOG_INFO("System has too many devices (%u)! Only enumerating the first %u...\n", deviceCountUINT, AZA_MAX_DEVICES);
 		deviceCountUINT = AZA_MAX_DEVICES;
 	}
-	deviceCount = (size_t)deviceCountUINT;
+	deviceCount = 0;
 	for (UINT i = 0; i < deviceCountUINT; i++) {
 		IMMDevice *pDevice = NULL;
-		IMMEndpoint *pEndpoint = NULL;
-		IPropertyStore *pPropertyStore = NULL;
-		WCHAR *idWStr;
-		char *name;
-		// unsigned speakerConfig;
-		WAVEFORMATEXTENSIBLE waveFormatEx;
 		pDeviceCollection->lpVtbl->Item(pDeviceCollection, i, &pDevice);
-		hResult = pDevice->lpVtbl->QueryInterface(pDevice, &IID_IMMEndpoint, (void**)&pEndpoint);
-		CHECK_RESULT("IMMDevice::QueryInterface(IID_IMMEndpoint)", goto goNext);
-		device[i].pDevice = pDevice;
-		pDevice->lpVtbl->GetId(pDevice, &idWStr);
-		device[i].idWStr = idWStr;
-
-		hResult = pDevice->lpVtbl->OpenPropertyStore(pDevice, STGM_READ, &pPropertyStore);
-		CHECK_RESULT("OpenPropertyStore", goto goNext);
-		device[i].pPropertyStore = pPropertyStore;
-		PROPERTY_STORE_GET(pPropertyStore, PKEY_Device_FriendlyName, VT_LPWSTR,
-			// onSuccess:
-			name = wstrToCstr(propVariant.pwszVal),
-			// onFail:
-			goto goNext
-		);
-		device[i].name = name;
-		// PROPERTY_STORE_GET(pPropertyStore, PKEY_AudioEndpoint_PhysicalSpeakers, VT_UI4, speakerConfig = propVariant.uintVal, speakerConfig=0);
-		// device[i].speakerConfig = speakerConfig;
-		PROPERTY_STORE_GET(pPropertyStore, PKEY_AudioEngine_DeviceFormat, VT_BLOB,
-			// onSuccess:
-			memcpy(&waveFormatEx, propVariant.blob.pBlobData, AZA_MIN(sizeof(waveFormatEx), propVariant.blob.cbSize)),
-			// onFail:
-			goto goNext
-		);
-		device[i].channels = (unsigned)waveFormatEx.Format.nChannels;
-		device[i].sampleBitDepth = (unsigned)waveFormatEx.Format.wBitsPerSample;
-		device[i].samplerate = (size_t)waveFormatEx.Format.nSamplesPerSec;
-		switch (waveFormatEx.Format.wFormatTag) {
-			case WAVE_FORMAT_EXTENSIBLE:
-				device[i].speakerConfig = waveFormatEx.dwChannelMask;
-				if (IsEqualGUID(&waveFormatEx.SubFormat, &KSDATAFORMAT_SUBTYPE_PCM)) {
-					device[i].sampleFormat = AZA_SAMPLE_PCM;
-				} else if (IsEqualGUID(&waveFormatEx.SubFormat, &KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) {
-					device[i].sampleFormat = AZA_SAMPLE_FLOAT;
-				} else {
-					AZA_LOG_ERR("Unhandled WAVEFORMATEXTENSIBLE::SubFormat " GUID_FORMAT_STR "\n", GUID_ARGS(waveFormatEx.SubFormat));
-					continue;
-				}
-				break;
-			case WAVE_FORMAT_PCM:
-				device[i].speakerConfig = 0;
-				device[i].sampleFormat = AZA_SAMPLE_PCM;
-				break;
-			case WAVE_FORMAT_IEEE_FLOAT:
-				device[i].speakerConfig = 0;
-				device[i].sampleFormat = AZA_SAMPLE_FLOAT;
-				break;
-			default:
-				AZA_LOG_ERR("Unhandled WAVEFORMATEX::wFormatTag %hu\n", waveFormatEx.Format.wFormatTag);
-				continue;
-		}
-		EDataFlow dataFlow;
-		hResult = pEndpoint->lpVtbl->GetDataFlow(pEndpoint, &dataFlow);
-		CHECK_RESULT("IMMEndpoint::GetDataFlow", goto goNext);
-		int render = 0, capture = 0;
-		switch (dataFlow) {
-			case eRender:
-				render = 1;
-				break;
-			case eCapture:
-				capture = 1;
-				break;
-			case eAll:
-				AZA_LOG_INFO("Warning: Device data flow is both capture AND render, which is supposedly impossible.\n");
-				render = capture = 1;
-				break;
-			default: break;
-		}
-		if (render) {
-			// This is apparently not necessarily accurate, so we'll see if we can match the name for headphones right below
-			PROPERTY_STORE_GET(pPropertyStore, PKEY_AudioEndpoint_FormFactor, VT_UI4,
-				// onSuccess:
-				switch (propVariant.uintVal) {
-					case RemoteNetworkDevice:
-					case Speakers:
-					case LineLevel:
-					case Microphone:
-					case Handset:
-					case UnknownDigitalPassthrough:
-					case SPDIF:
-					case DigitalAudioDisplayDevice:
-					case UnknownFormFactor:
-						device[i].formFactor = AZA_FORM_FACTOR_SPEAKERS;
-						AZA_LOG_TRACE("%s is Speakers\n", device[i].name);
-						break;
-					case Headphones:
-					case Headset:
-						device[i].formFactor = AZA_FORM_FACTOR_HEADPHONES;
-						AZA_LOG_TRACE("%s is Headphones\n", device[i].name);
-						break;
-				},
-				// onFail:
-				device[i].formFactor = AZA_FORM_FACTOR_SPEAKERS
-			);
-			// TODO: This is super fragile... probably get some other way to get the form factor (or give up and let the user configure it).
-			if (aza_str_begins_with(device[i].name, "Headphones")) {
-				device[i].formFactor = AZA_FORM_FACTOR_HEADPHONES;
-				AZA_LOG_TRACE("%s is Headphones (matched name string)\n", device[i].name);
+		azaDeviceInfo *dstDevice = &device[deviceCount];
+		if (azaDeviceInitWASAPI(dstDevice, pDevice)) {
+			deviceCount++;
+			if (dstDevice->output) {
+				deviceOutput[deviceOutputCount++] = dstDevice;
 			}
-			deviceOutput[deviceOutputCount++] = device[i];
+			if (dstDevice->input) {
+				deviceInput[deviceInputCount++] = dstDevice;
+			}
 		}
-		if (capture) {
-			deviceInput[deviceInputCount++] = device[i];
-		}
-		if (azaLogLevel >= AZA_LOG_LEVEL_TRACE) {
-			char *idCStr = wstrToCstr(idWStr);
-			AZA_LOG_TRACE("Device %u:\n\tidStr: \"%s\"\n\tname: \"%s\"\n\tchannels: %u\n\tbitDepth: %u\n\tsamplerate: %zu\n\tspeakerConfig: 0x%x\n", i, idCStr, name, device[i].channels, device[i].sampleBitDepth, device[i].samplerate, device[i].speakerConfig);
-			aza_free(idCStr);
-		}
-		continue;
-goNext:
-		SAFE_RELEASE(pPropertyStore);
-		SAFE_RELEASE(pEndpoint);
 	}
 	defaultOutputDevice = azaFindDefaultDevice(deviceOutput, deviceOutputCount, eRender, "output");
-	if (defaultOutputDevice == AZA_MAX_DEVICES) goto error;
+	if (defaultOutputDevice == NULL) goto error;
 	defaultInputDevice = azaFindDefaultDevice(deviceInput, deviceInputCount, eCapture, "input");
-	if (defaultInputDevice == AZA_MAX_DEVICES) goto error;
+	if (defaultInputDevice == NULL) goto error;
+
+	hResult = pEnumerator->lpVtbl->RegisterEndpointNotificationCallback(pEnumerator, &immNotificationClient);
+	CHECK_RESULT("RegisterEndpointNotificationCallback", goto error);
 
 	shouldQuit = 0;
 	azaMutexInit(&mutex);
@@ -800,7 +1061,7 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 	stream->deviceInterface = deviceInterface;
 	int errCode = AZA_SUCCESS;
 	azaDeviceInfo *deviceInfoDefault = NULL;
-	azaDeviceInfo *devicePool = NULL;
+	azaDeviceInfo **devicePool = NULL;
 	azaDeviceInfo *deviceInfo = NULL;
 	size_t deviceCount = 0;
 	azaStreamData *data = NULL;
@@ -819,12 +1080,12 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 	data = azaStreamDataGet();
 	switch (stream->deviceInterface) {
 		case AZA_OUTPUT:
-			deviceInfoDefault = &deviceOutput[defaultOutputDevice];
+			deviceInfoDefault = defaultOutputDevice;
 			devicePool = deviceOutput;
 			deviceCount = deviceOutputCount;
 			break;
 		case AZA_INPUT:
-			deviceInfoDefault = &deviceInput[defaultInputDevice];
+			deviceInfoDefault = defaultInputDevice;
 			devicePool = deviceInput;
 			deviceCount = deviceInputCount;
 			break;
@@ -841,8 +1102,12 @@ static int azaStreamInitWASAPI(azaStream *stream, azaStreamConfig config, azaDev
 	// Search the nodes for the device name
 	if (stream->config.deviceName) {
 		for (size_t i = 0; i < deviceCount; i++) {
-			azaDeviceInfo *check = &devicePool[i];
+			azaDeviceInfo *check = devicePool[i];
 			if (strcmp(check->name, stream->config.deviceName) == 0) {
+				if (!check->available) {
+					AZA_LOG_INFO("Found device by name, but it was unplugged: \"%s\"\n", stream->config.deviceName);
+					continue;
+				}
 				deviceInfo = check;
 				AZA_LOG_INFO("Chose device by name: \"%s\"\n", stream->config.deviceName);
 				break;
@@ -994,7 +1259,7 @@ error:
 	azaBufferDeinit(&data->nativeBuffer, false);
 	CoTaskMemFree(defaultFormat);
 	CoTaskMemFree(pClosestFormat);
-	azaStreamDataFree(data);
+	azaStreamDataDeinit(data);
 	SAFE_RELEASE(data->pAudioClient);
 	SAFE_RELEASE(data->pRenderClient);
 	azaMutexUnlock(&mutex);
@@ -1007,9 +1272,9 @@ static void azaStreamDeinitWASAPI(azaStream *stream) {
 	azaStreamData *data = stream->data;
 	HRESULT hResult = data->pAudioClient->lpVtbl->Stop(data->pAudioClient);
 	CHECK_RESULT("IAudioClient::Stop", do{}while(0));
-	SAFE_RELEASE(data->pAudioClient);
 	SAFE_RELEASE(data->pRenderClient);
-	azaStreamDataFree(data);
+	SAFE_RELEASE(data->pAudioClient);
+	azaStreamDataDeinit(data);
 	data->isInUse = false;
 	data->isActive = false;
 	azaMutexUnlock(&mutex);
@@ -1039,11 +1304,11 @@ static const char* azaGetDeviceNameWASAPI(azaDeviceInterface interface, size_t i
 	switch (interface) {
 		case AZA_OUTPUT:
 			assert(index < deviceOutputCount);
-			return deviceOutput[index].name;
+			return deviceOutput[index]->name;
 			break;
 		case AZA_INPUT:
 			assert(index < deviceInputCount);
-			return deviceInput[index].name;
+			return deviceInput[index]->name;
 			break;
 		default: return 0;
 	}
@@ -1053,11 +1318,11 @@ static size_t azaGetDeviceChannelsWASAPI(azaDeviceInterface interface, size_t in
 	switch (interface) {
 		case AZA_OUTPUT:
 			assert(index < deviceOutputCount);
-			return deviceOutput[index].channels;
+			return deviceOutput[index]->channels;
 			break;
 		case AZA_INPUT:
 			assert(index < deviceInputCount);
-			return deviceInput[index].channels;
+			return deviceInput[index]->channels;
 			break;
 		default: return 0;
 	}

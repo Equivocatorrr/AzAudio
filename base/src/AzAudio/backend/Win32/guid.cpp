@@ -12,6 +12,7 @@
 
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);
 const IID IID_IMMDeviceEnumerator = __uuidof(IMMDeviceEnumerator);
+const IID IID_IMMNotificationClient = __uuidof(IMMNotificationClient);
 const IID IID_IMMEndpoint = __uuidof(IMMEndpoint);
 const IID IID_IAudioClient = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);

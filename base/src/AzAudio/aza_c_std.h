@@ -155,6 +155,9 @@ bool aza_str_begins_with(const char *string, const char *test);
 
 void aza_str_to_lower(char *dst, const char *src, size_t dstSize);
 
+// removes whitespace from the beginning and end of src and puts the result in dst
+void aza_str_strip(char *dst, const char *src, size_t dstSize);
+
 int azaTextCountLines(const char *text);
 // snprintf's into a static thread_local buffer and returns the pointer to the beginning. This buffer is rewritten on the next call to this, so use it immediately or copy it out.
 const char* azaTextFormat(const char *fmt, ...);

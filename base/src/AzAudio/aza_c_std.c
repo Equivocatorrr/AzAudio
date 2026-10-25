@@ -57,6 +57,20 @@ void aza_str_to_lower(char *dst, const char *src, size_t dstSize) {
 	}
 }
 
+void aza_str_strip(char *dst, const char *src, size_t dstSize) {
+	// NOTE: dst and src can alias
+	size_t start = 0;
+	while (isspace(src[start])) start++;
+	size_t end = strlen(src);
+	while (end > 0 && isspace(src[end-1])) end--;
+	size_t srcSize = end - start;
+	size_t toCopy = AZA_MIN(srcSize, dstSize-1);
+	if (toCopy) {
+		memmove(dst, &src[start], toCopy);
+	}
+	memset(&dst[end], 0, dstSize-toCopy);
+}
+
 int azaTextCountLines(const char *text) {
 	if (!text) return 0;
 	int result = 1;
