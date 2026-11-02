@@ -351,13 +351,13 @@ static inline void azagDrawTextMargin(const char *text, azaVec2 position, azagTe
 static inline void azagDrawTextAligned(const char *text, azaVec2 position, azagTextScale textScale, azagColor color, azaVec2 anchor) {
 	azaVec2 textSize = azagTextSize(text, textScale);
 	azaVec2 offset = azaMulVec2(textSize, anchor);
-	azagDrawText(text, azaAddVec2(position, offset), textScale, color);
+	azagDrawText(text, azaSubVec2(position, offset), textScale, color);
 }
 // anchor of {0,0} means top left, including text margin
 static inline void azagDrawTextAlignedMargin(const char *text, azaVec2 position, azagTextScale textScale, azagColor color, azaVec2 anchor) {
 	azaVec2 textSize = azagTextSizeMargin(text, textScale);
 	azaVec2 offset = azaMulVec2(textSize, anchor);
-	azagDrawTextMargin(text, azaAddVec2(position, offset), textScale, color);
+	azagDrawTextMargin(text, azaSubVec2(position, offset), textScale, color);
 }
 
 // Rect shrinking functions that add the theme's margin internally so you don't have to write it out so much.

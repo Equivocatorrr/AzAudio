@@ -61,6 +61,7 @@ add_library(AzAudio STATIC
 	src/AzAudio/mixer.c
 	src/AzAudio/simd.h
 	src/AzAudio/timer.h
+	src/AzAudio/timer.c
 	# gui
 	src/AzAudio/gui/types.h
 	src/AzAudio/gui/types.c
@@ -95,6 +96,8 @@ add_library(AzAudio STATIC
 	src/AzAudio/dsp/azaKernel.c
 	src/AzAudio/dsp/azaMeters.h
 	src/AzAudio/dsp/azaMeters.c
+	src/AzAudio/dsp/azaResampler.h
+	src/AzAudio/dsp/azaResampler.c
 	src/AzAudio/dsp/azaSampleDelay.h
 	src/AzAudio/dsp/azaSampleDelay.c
 	# plugins

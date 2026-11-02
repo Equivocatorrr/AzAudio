@@ -426,7 +426,8 @@ noMetadatas:
 	};
 	float scrollableWidth = screenWidth - (totalWidth + azagThemeCurrent.margin.x*2);
 	azagDrawScrollbarHorizontal(scrollbarRect, &scrollTracksX, AZA_MIN(scrollableWidth, 0), 0, -azagThemeCurrent.track.size.x / 3);
-	azagTooltipAdd(azaTextFormat("CPU: %.2f%%", currentMixer->cpuPercentSlow), (azaVec2) {screenWidth, 0}, (azaVec2) { 0.0f, 0.0f });
+	// TODO: Give this a better location
+	azagTooltipAdd(azaTextFormat("CPU: %.2f%%\nMixer: %.2f%%", currentMixer->stream.cpuUsage.cpuPercentSlow, currentMixer->cpuUsage.cpuPercentSlow), (azaVec2) {screenWidth, 0}, (azaVec2) { 0.0f, 0.0f });
 	if (currentMixer->hasCircularRouting) {
 		azagTooltipAddError("Circular Routing Detected!!!", (azaVec2) {0, pluginDrawHeight}, (azaVec2) { 0.0f, 1.0f });
 	}
@@ -499,16 +500,26 @@ static void azagDrawSelectedDSP() {
 				azagRect pluginRect = bounds;
 				azagRectShrinkAllXY(&pluginRect, azaMulVec2Scalar(azagThemeCurrent.margin, 2.0f));
 				azagPushScissor(pluginRect);
+				const char *cpuUsageText = azaTextFormat("CPU\n%.1f%%", dsp->cpuUsage.cpuPercentSlow);
+				float cpuUsageTextWidth = azagTextWidthMargin(cpuUsageText, AZAG_TEXT_SCALE_TEXT);
+				azagColor headerColor = azagThemeCurrent.plugin.colorPluginName;
+				if (dsp->header.bypass) {
+					headerColor = azagThemeCurrent.fader.colorMuteButton;
+				}
+				if (dsp->processMetadata.error) {
+					headerColor = azagThemeCurrent.tooltipError.colorText;
+				}
 				char pluginNameHeader[64];
 				azagTextScale pluginHeaderTextScale = AZAG_TEXT_SCALE_HEADER;
-				if (azagTextWidthMargin(dsp->guiMetadata.name, AZAG_TEXT_SCALE_HEADER) > pluginRect.w) {
+				if (azagTextWidthMargin(dsp->guiMetadata.name, AZAG_TEXT_SCALE_HEADER) > pluginRect.w - cpuUsageTextWidth) {
 					pluginHeaderTextScale = AZAG_TEXT_SCALE_TEXT;
-					azagTextInsertNewlines(pluginNameHeader, sizeof(pluginNameHeader), dsp->guiMetadata.name, pluginHeaderTextScale, pluginRect.w - azagThemeCurrent.marginText.x*2.0f, true);
+					azagTextInsertNewlines(pluginNameHeader, sizeof(pluginNameHeader), dsp->guiMetadata.name, pluginHeaderTextScale, pluginRect.w - cpuUsageTextWidth - azagThemeCurrent.marginText.x, true);
 				} else {
 					aza_strcpy(pluginNameHeader, dsp->guiMetadata.name, sizeof(pluginNameHeader));
 				}
-				azagDrawTextMargin(pluginNameHeader, pluginRect.xy, pluginHeaderTextScale, azagThemeCurrent.plugin.colorPluginName);
-				azagRectShrinkTopMargin(&pluginRect, azagTextHeightMargin(pluginNameHeader, pluginHeaderTextScale));
+				azagDrawTextMargin(pluginNameHeader, pluginRect.xy, pluginHeaderTextScale, headerColor);
+				azagDrawTextAlignedMargin(cpuUsageText, (azaVec2){pluginRect.x+pluginRect.w, pluginRect.y}, AZAG_TEXT_SCALE_TEXT, headerColor, (azaVec2){1.0f,0.0f});
+				azagRectShrinkTopMargin(&pluginRect, AZA_MAX(azagTextHeightMargin(pluginNameHeader, pluginHeaderTextScale), azagTextHeightMargin(cpuUsageText, AZAG_TEXT_SCALE_TEXT)));
 				dsp->pFuncs->fp_draw(dsp, pluginRect);
 				azagPopScissor();
 				if (dsp->guiMetadata.drawTargetWidth == 0) {

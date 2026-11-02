@@ -25,7 +25,6 @@ int azaChannelMatrixInit(azaChannelMatrix *data, uint8_t inputs, uint8_t outputs
 void azaChannelMatrixDeinit(azaChannelMatrix *data);
 
 // Expects data to have been initted with srcLayout.count cols and dstLayout.count rows
-// Also assumes the existing values in the matrix are all zero (won't set to zero if they're not)
 void azaChannelMatrixGenerateRoutingFromLayouts(azaChannelMatrix *data, azaChannelLayout srcLayout, azaChannelLayout dstLayout);
 
 

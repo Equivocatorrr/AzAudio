@@ -38,6 +38,15 @@ size_t aza_strcpy(char *dst, const char *src, size_t dstSize) {
 	return srcSize;
 }
 
+char* aza_strdup(const char *src) {
+	size_t len = strlen(src);
+	char *result = malloc(len+1);
+	if (!result) return result;
+	memcpy(result, src, len);
+	result[len] = 0;
+	return result;
+}
+
 bool aza_str_begins_with(const char *string, const char *test) {
 	while (*string != 0) {
 		if (*test == 0) {

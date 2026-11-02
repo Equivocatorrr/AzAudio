@@ -59,24 +59,45 @@ int azaKernelMakeLanczos(azaKernel *kernel, uint32_t resolution, uint32_t radius
 	return AZA_SUCCESS;
 }
 
-void azaResample(azaKernel *kernel, float factor, float *dst, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset) {
-	const float rate = azaMinf(factor, 1.0f);
+void azaResample(azaKernel *kernel, float factor, float *dst, int dstChannels, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset) {
+	const float rate = azaMinf(0.9f / factor, 1.0f);
 	for (uint32_t i = 0; i < (uint32_t)dstFrames; i++) {
-		double pos = (double)i * (double)factor;
+		double pos = (double)i * (double)factor + (double)srcSampleOffset;
 		int32_t frame = (int32_t)trunc(pos);
-		float fraction = (float)(pos - (double)frame) + srcSampleOffset;
-		// BIG TODO: Why is this just one channel???
-		dst[i * dstStride] = azaSampleWithKernel1Ch(kernel, src, srcStride, srcFrameMin, srcFrameMax, false, frame, fraction, rate);
+		float fraction = (float)(pos - (double)frame);
+		azaSampleWithKernel(&dst[i*dstStride], dstChannels, kernel, src, srcStride, srcFrameMin, srcFrameMax, false, frame, fraction, rate);
 	}
 }
 
-void azaResampleAdd(azaKernel *kernel, float factor, float amp, float *dst, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset) {
-	const float rate = azaMinf(factor, 1.0f);
+void azaResampleAdd(azaKernel *kernel, float factor, float amp, float *dst, int dstChannels, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset) {
+	const float rate = azaMinf(0.9f / factor, 1.0f);
+	float toAdd[256];
+	assert(dstChannels < 256);
 	for (uint32_t i = 0; i < (uint32_t)dstFrames; i++) {
-		double pos = (double)i * (double)factor;
+		double pos = (double)i * (double)factor + (double)srcSampleOffset;
 		int32_t frame = (int32_t)trunc(pos);
-		float fraction = (float)(pos - (double)frame) + srcSampleOffset;
-		// BIG TODO: Why is this just one channel???
-		dst[i * dstStride] += amp * azaSampleWithKernel1Ch(kernel, src, srcStride, srcFrameMin, srcFrameMax, false, frame, fraction, rate);
+		float fraction = (float)(pos - (double)frame);
+		azaSampleWithKernel(toAdd, dstChannels, kernel, src, srcStride, srcFrameMin, srcFrameMax, false, frame, fraction, rate);
+		for (int c = 0; c < dstChannels; c++) {
+			dst[i*dstStride + c] += amp * toAdd[c];
+		}
 	}
+}
+
+uint32_t azaGetResampledDstFrameCount(uint32_t dstSamplerate, uint32_t srcSamplerate, uint32_t srcFrames) {
+	return (uint32_t)floorf((float)srcFrames * (float)dstSamplerate / (float)srcSamplerate);
+}
+
+uint32_t azaGetResampledSrcFrameCount(uint32_t dstSamplerate, uint32_t srcSamplerate, uint32_t dstFrames) {
+	return (uint32_t)ceilf((float)dstFrames * (float)srcSamplerate / (float)dstSamplerate);
+}
+
+void azaBufferResample(azaBuffer *dst, azaBuffer *src, azaKernel *kernel, float *srcFrameStart) {
+	assert(src->samplerate);
+	assert(dst->samplerate);
+	float factor = (float)src->samplerate / (float)dst->samplerate;
+	uint32_t srcFrameOffset = (uint32_t)floorf(*srcFrameStart);
+	float srcSampleOffset = *srcFrameStart - (float)srcFrameOffset;
+	azaResample(kernel, factor, dst->pSamples, dst->channelLayout.count, dst->stride, dst->frames, src->pSamples+srcFrameOffset*src->stride, src->stride, -(int)src->leadingFrames, src->frames+src->trailingFrames, srcSampleOffset);
+	*srcFrameStart += (float)dst->frames * factor;
 }

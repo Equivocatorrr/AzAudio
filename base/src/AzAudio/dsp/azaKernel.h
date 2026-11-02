@@ -115,10 +115,10 @@ int azaKernelMakeLanczos(azaKernel *kernel, uint32_t resolution, uint32_t radius
 // src should point at least `-srcFrameMin` frames into an existing source buffer with a total extent of `srcFrameMax-srcFrameMin`.
 // srcFrameMin and srcFrameMax allow the accessible extent of src to go outside of the given 0...srcFrames extent, since that's required for perfect resampling of chunks of a stream (while accepting some latency). Ideally, srcFrameMin would be `-kernel->size` and srcFrameMax would be `srcFrames+kernel->size` for a symmetric kernel. For a non-symmetric kernel, srcFrameMin can be 0, and srcFrameMax would still be srcFrames+kernel->size. For two isolated buffers, srcFrameMin should be 0 and srcFrameMax should be srcFrames. Any samples outside of this extent will be considered to be zeroes.
 // srcSampleOffset should be in the range 0 to 1
-void azaResample(azaKernel *kernel, float factor, float *dst, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset);
+void azaResample(azaKernel *kernel, float factor, float *dst, int dstChannels, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset);
 
 // Same as azaResample, except the resampled values are added to dst instead of replacing them. Every sample is multiplied by amp before being added.
-void azaResampleAdd(azaKernel *kernel, float factor, float amp, float *dst, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset);
+void azaResampleAdd(azaKernel *kernel, float factor, float amp, float *dst, int dstChannels, int dstStride, int dstFrames, float *src, int srcStride, int srcFrameMin, int srcFrameMax, float srcSampleOffset);
 
 // returns the correct dst frame count required for resampling from a src buffer with the given length
 uint32_t azaGetResampledDstFrameCount(uint32_t dstSamplerate, uint32_t srcSamplerate, uint32_t srcFrames);
@@ -128,7 +128,7 @@ uint32_t azaGetResampledSrcFrameCount(uint32_t dstSamplerate, uint32_t srcSample
 // Use kernel to resample src into dst, at their respective samplerates.
 // srcSampleOffset is persistent state required for processing streams. Initialize it to 0.0f and hold on to it between calls. This state applies to the specific buffer pair.
 //
-void azaBufferResample(azaBuffer *dst, azaBuffer *src, azaKernel *kernel, float *srcSampleOffset);
+void azaBufferResample(azaBuffer *dst, azaBuffer *src, azaKernel *kernel, float *srcFrameStart);
 
 
 

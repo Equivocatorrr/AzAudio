@@ -50,11 +50,16 @@ typedef struct channelMetadata {
 	float amp;
 	float dot;
 	float delay_ms;
+	bool isSub;
 } channelMetadata;
 
 int compareChannelMetadataAmp(const void *_lhs, const void *_rhs) {
 	const channelMetadata *lhs = _lhs;
 	const channelMetadata *rhs = _rhs;
+	// Put the sub at the end, we don't wanna use it for this step
+	if (lhs->isSub) return 1;
+	if (rhs->isSub) return -1;
+
 	if (lhs->amp == rhs->amp) return 0;
 	// We want descending order
 	if (lhs->amp < rhs->amp) return 1;
@@ -462,8 +467,17 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 		for (uint8_t i = 0; i < sideBuffer.channelLayout.count; i++) {
 			channelsStart[i].channel = i;
 			channelsEnd[i].channel = i;
-			channelsStart[i].dot = azaVec3Dot(earNormal[i], srcNormalStart);
-			channelsEnd[i].dot = azaVec3Dot(earNormal[i], srcNormalEnd);
+			if (dst->channelLayout.positions[i] != AZA_POS_SUBWOOFER) {
+				channelsStart[i].dot = azaVec3Dot(earNormal[i], srcNormalStart);
+				channelsEnd[i].dot = azaVec3Dot(earNormal[i], srcNormalEnd);
+				channelsStart[i].isSub = false;
+				channelsEnd[i].isSub = false;
+			} else {
+				channelsStart[i].dot = 1.0f;
+				channelsEnd[i].dot = 1.0f;
+				channelsStart[i].isSub = true;
+				channelsEnd[i].isSub = true;
+			}
 			channelsStart[i].amp = 0.5f * normStart + 0.5f * channelsStart[i].dot + allChannelAddAmpStart / channelCountDenominator;
 			channelsEnd[i].amp = 0.5f * normEnd + 0.5f * channelsEnd[i].dot + allChannelAddAmpEnd / channelCountDenominator;
 			totalMagnitudeStart += channelsStart[i].amp;
@@ -471,9 +485,9 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 		}
 
 		// Use minimum number of channels needed for surround sound by remapping channel amps
-		if (sideBuffer.channelLayout.count > 2) {
+		if (nonSubChannels > 2) {
 			int minChannels = 2;
-			if (sideBuffer.channelLayout.count > 3 && hasAerials) {
+			if (nonSubChannels > 3 && hasAerials) {
 				// TODO: This probably isn't a reliable way to use aerials. Probably do something smarter.
 				minChannels = 3;
 			}
@@ -483,8 +497,8 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 
 			float ampMaxRangeStart = channelsStart[0].amp;
 			float ampMaxRangeEnd = channelsEnd[0].amp;
-			float ampMinRangeStart = channelsStart[minChannels-1].amp;
-			float ampMinRangeEnd = channelsEnd[minChannels-1].amp;
+			float ampMinRangeStart = channelsStart[minChannels].amp;
+			float ampMinRangeEnd = channelsEnd[minChannels].amp;
 			totalMagnitudeStart = 0.0f;
 			totalMagnitudeEnd = 0.0f;
 			for (uint8_t i = 0; i < sideBuffer.channelLayout.count; i++) {
@@ -508,7 +522,7 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 		for (uint8_t c = 0; c < sideBuffer.channelLayout.count; c++) {
 			float ampStart = srcAmpStart;
 			float ampEnd = srcAmpEnd;
-			if (sideBuffer.channelLayout.positions[c] != AZA_POS_SUBWOOFER) {
+			if (dst->channelLayout.positions[c] != AZA_POS_SUBWOOFER) {
 				ampStart *= (channelsStart[c].amp / totalMagnitudeStart) * (1.0f - minAmp) + minAmp / channelCountDenominator;
 				ampEnd *= (channelsEnd[c].amp / totalMagnitudeEnd) * (1.0f - minAmp) + minAmp / channelCountDenominator;
 			}
@@ -545,7 +559,12 @@ int azaSpatializeProcess(void *dsp, azaBuffer *dst, azaBuffer *src, uint32_t fla
 			float endDelay_ms[AZA_MAX_CHANNEL_POSITIONS];
 			if (data->config.usePerChannelDelay) {
 				for (uint8_t c = 0; c < sideBuffer.channelLayout.count; c++) {
-					azaVec3 earPos = azaMulVec3Scalar(earNormal[c], earDistance);
+					azaVec3 earPos;
+					if (dst->channelLayout.positions[c] != AZA_POS_SUBWOOFER) {
+						earPos = azaMulVec3Scalar(earNormal[c], earDistance);
+					} else {
+						earPos = (azaVec3) { 0.0f, 0.0f, 0.0f };
+					}
 					startDelay_ms[c] = minDelay_ms + azaVec3Norm(azaSubVec3(srcPosStart, earPos)) / world->speedOfSound * 1000.0f;
 					endDelay_ms[c] = minDelay_ms + azaVec3Norm(azaSubVec3(srcPosEnd, earPos)) / world->speedOfSound * 1000.0f;
 				}

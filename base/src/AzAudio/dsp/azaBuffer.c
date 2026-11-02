@@ -484,12 +484,14 @@ azaBuffer azaPushSideBufferZero(uint32_t frames, uint32_t leadingFrames, uint32_
 
 azaBuffer azaPushSideBufferCopy(azaBuffer *src) {
 	azaBuffer result = azaPushSideBuffer(src->frames, src->leadingFrames, src->trailingFrames, src->channelLayout.count, src->samplerate);
+	result.channelLayout = src->channelLayout;
 	azaBufferCopy(&result, src);
 	return result;
 }
 
 azaBuffer azaPushSideBufferCopyZero(azaBuffer *src) {
 	azaBuffer result = azaPushSideBufferZero(src->frames, src->leadingFrames, src->trailingFrames, src->channelLayout.count, src->samplerate);
+	result.channelLayout = src->channelLayout;
 	return result;
 }
 

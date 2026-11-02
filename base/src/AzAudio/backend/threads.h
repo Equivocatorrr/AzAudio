@@ -9,16 +9,16 @@
 #include "../aza_c_std.h"
 
 // This feels super lame but until I can think of a reasonable alternative that doesn't require heap allocations this is what we got.
-#ifdef __unix
-// Use this to define a variable or argument with a function pointer type for use with azaThreadLaunch
-#define AZA_THREAD_PROC_TYPE(name) void* (*name)(void*)
-// Use this to define a procedure for use with an azaThread
-#define AZA_THREAD_PROC_DEF(name, userdata) void* name(void *userdata)
-#elif defined(WIN32)
+#ifdef WIN32
 // Use this to define a variable or argument with a function pointer type for use with azaThreadLaunch
 #define AZA_THREAD_PROC_TYPE(name) unsigned (__stdcall *name)(void*)
 // Use this to define a procedure for use with an azaThread
 #define AZA_THREAD_PROC_DEF(name, userdata) unsigned __stdcall name(void *userdata)
+#else
+// Use this to define a variable or argument with a function pointer type for use with azaThreadLaunch
+#define AZA_THREAD_PROC_TYPE(name) void* (*name)(void*)
+// Use this to define a procedure for use with an azaThread
+#define AZA_THREAD_PROC_DEF(name, userdata) void* name(void *userdata)
 #endif
 
 #ifdef __cplusplus

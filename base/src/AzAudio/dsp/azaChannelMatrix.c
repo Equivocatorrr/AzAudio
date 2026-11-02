@@ -54,6 +54,7 @@ void azaChannelMatrixGenerateRoutingFromLayouts(azaChannelMatrix *data, azaChann
 	assert(data->outputs == dstLayout.count);
 	assert(srcLayout.count > 0);
 	assert(dstLayout.count > 0);
+	memset(data->matrix, 0, sizeof(float) * data->inputs * data->outputs);
 	if (dstLayout.count == 1) {
 		// Just make them all connect to the one singular output channel
 		for (int16_t srcC = 0; srcC < srcLayout.count; srcC++) {

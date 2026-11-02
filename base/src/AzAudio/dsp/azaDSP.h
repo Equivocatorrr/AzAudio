@@ -10,6 +10,7 @@
 #include "azaBuffer.h"
 
 #include "../gui/types.h"
+#include "../timer.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -102,8 +103,9 @@ typedef struct azaDSP {
 	azaDSPProcessMetadata processMetadata;
 	azaDSPGUIMetadata guiMetadata;
 	const azaDSPFuncs *pFuncs;
+	azaCPUUsage cpuUsage;
 } azaDSP;
-static_assert(sizeof(azaDSP) == (sizeof(azaDSPHeader) + sizeof(azaDSPProcessMetadata) + sizeof(azaDSPGUIMetadata) + sizeof(void*)), "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
+static_assert(sizeof(azaDSP) == 88+48, "Please update the expected size of azaDSP and remember to reserve padding explicitly.");
 
 // Handles bypass and calls dsp->fp_getSpecs if applicable.
 azaDSPSpecs azaDSPGetSpecs(azaDSP *dsp, uint32_t samplerate);

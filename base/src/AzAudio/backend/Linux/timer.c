@@ -1,3 +1,9 @@
+/*
+	File: timer.c
+	Author: Philip Haynes
+	The platform-dependent timer implementations.
+*/
+
 #include "../../timer.h"
 
 #include <time.h>

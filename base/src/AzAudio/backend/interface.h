@@ -8,6 +8,7 @@
 #define AZAUDIO_INTERFACE_H
 
 #include "../dsp/azaDSP.h"
+#include "../timer.h"
 
 #include <stdbool.h>
 
@@ -27,7 +28,7 @@ typedef enum azaDeviceInterface {
 typedef struct azaStreamConfig {
 	// A device's name as returned from azaGetDeviceName. Must be an exact match, else falls back to the default.
 	// leave as NULL for default device
-	// NOTE: The user is responsible for this string's lifetime (we don't make an internal copy).
+	// NOTE: The pointer passed in by the user can be transient. We make a copy and the stream then owns it.
 	const char *deviceName;
 	// Leave at 0 for device default
 	uint32_t samplerate;
@@ -38,6 +39,8 @@ typedef struct azaStreamConfig {
 
 typedef struct azaStream {
 	azaStreamConfig config;
+	int error;
+	azaCPUUsage cpuUsage;
 	// Are we an AZA_INPUT or AZA_OUTPUT device? A zero value indicates AZA_OUTPUT.
 	azaDeviceInterface deviceInterface;
 	// This will be called whenever new samples are needed or produced by the backend.
@@ -108,6 +111,9 @@ extern fp_azaGetDeviceName azaGetDeviceName;
 
 typedef size_t (*fp_azaGetDeviceChannels)(azaDeviceInterface interface, size_t index);
 extern fp_azaGetDeviceChannels azaGetDeviceChannels;
+
+typedef bool (*fp_azaGetDeviceIsAvailable)(azaDeviceInterface interface, size_t index);
+extern fp_azaGetDeviceIsAvailable azaGetDeviceIsAvailable;
 
 #ifdef __cplusplus
 }

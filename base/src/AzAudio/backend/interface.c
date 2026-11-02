@@ -91,3 +91,4 @@ fp_azaStreamGetBufferFrameCount azaStreamGetBufferFrameCount;
 fp_azaGetDeviceCount azaGetDeviceCount;
 fp_azaGetDeviceName azaGetDeviceName;
 fp_azaGetDeviceChannels azaGetDeviceChannels;
+fp_azaGetDeviceIsAvailable azaGetDeviceIsAvailable;

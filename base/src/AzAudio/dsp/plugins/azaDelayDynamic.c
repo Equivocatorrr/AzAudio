@@ -312,8 +312,8 @@ azaDSPSpecs azaDelayDynamicGetSpecs(azaDSP *dsp, uint32_t samplerate) {
 	azaDSPSpecs specs = {0};
 	azaKernel *kernel = azaDelayDynamicGetKernel(data, 1.0f);
 	specs.latencyFrames = 0;
-	specs.leadingFrames = kernel->sampleZero-1;
-	specs.trailingFrames = kernel->length - kernel->sampleZero;
+	specs.leadingFrames = kernel->sampleZero;
+	specs.trailingFrames = kernel->length - kernel->sampleZero - 1;
 	return specs;
 }
 

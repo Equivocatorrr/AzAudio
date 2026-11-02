@@ -44,7 +44,9 @@ azaDSPSpecs azaDSPGetSpecs(azaDSP *dsp, uint32_t samplerate) {
 
 int azaDSPProcess(azaDSP *dsp, azaBuffer *dst, azaBuffer *src, uint32_t flags) {
 	if (!dsp->header.bypass && dsp->pFuncs->fp_process && dsp->processMetadata.error == AZA_SUCCESS) {
+		azaCPUUsageTimingStart(&dsp->cpuUsage);
 		int result = dsp->pFuncs->fp_process(dsp, dst, src, flags);
+		azaCPUUsageTimingEnd(&dsp->cpuUsage);
 		if (result != AZA_SUCCESS) {
 			return result;
 		}

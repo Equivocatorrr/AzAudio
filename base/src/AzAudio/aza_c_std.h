@@ -150,6 +150,9 @@ static inline void aza_free(void *block) {
 // Guarantees dst is null-terminated, and that no more than dstSize-1 bytes are copied. Returns src size.
 size_t aza_strcpy(char *dst, const char *src, size_t dstSize);
 
+// Allocates a copy of src
+char* aza_strdup(const char *src);
+
 // test can be shorter than string, and as long as the first strlen(test) characters match, this will return true.
 bool aza_str_begins_with(const char *string, const char *test);
 

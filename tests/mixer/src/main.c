@@ -371,7 +371,9 @@ int main(int argumentCount, char** argumentValues) {
 #endif
 
 	azaStreamConfig streamConfig = {
-		0 // .samplerate = 44100
+		// 0
+		// .samplerate = 44100,
+		// .channelLayout = azaChannelLayout_5_1(),
 	};
 	if ((err = azaMixerStreamOpen(&mixer, (azaMixerConfig) {0} , streamConfig, false))) {
 		fprintf(stderr, "Failed to azaMixerStreamOpen (%s)\n", azaErrorString(err));
@@ -430,6 +432,7 @@ int main(int argumentCount, char** argumentValues) {
 	// spatializeCat->config.usePerChannelDelay = false;
 	// spatializeCat->config.doFilter = false;
 	spatializeCat->config.numSrcChannelsActive = bufferCat.channelLayout.count;
+	spatializeCat->dsp.header.bypass = true;
 
 	updateObjects(bufferCat.channelLayout.count, 0.0f);
 

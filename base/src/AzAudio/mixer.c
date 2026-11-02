@@ -205,8 +205,7 @@ int azaMixerInit(azaMixer *data, azaMixerConfig config, azaChannelLayout masterC
 	if (err) return err;
 	azaTrackSetName(&data->master, "Master");
 	azaMutexInit(&data->mutex);
-	data->tsOfflineStart = azaGetTimestamp();
-	data->cpuPercent = 0.0f;
+	data->cpuUsage = (azaCPUUsage){0};
 	return AZA_SUCCESS;
 }
 
@@ -304,21 +303,12 @@ static int azaMixerCheckRouting(azaMixer *data) {
 
 int azaMixerProcess(uint32_t frames, uint32_t samplerate, azaMixer *data) {
 	azaMutexLock(&data->mutex);
-	int64_t tsStart = azaGetTimestamp();
-	int64_t timeOffline = tsStart - data->tsOfflineStart;
+	azaCPUUsageTimingStart(&data->cpuUsage);
 	int err;
 	if ((err = azaMixerCheckRouting(data))) goto error;
 	if ((err = azaTrackProcess(frames, samplerate, &data->master))) goto error;
 error:
-	int64_t tsEnd = azaGetTimestamp();
-	int64_t timeOnline = tsEnd - tsStart;
-	float cpuPercent = (float)(100.0 * (double)timeOnline / (double)(timeOffline + timeOnline));
-	data->cpuPercent = azaLerpf(data->cpuPercent, cpuPercent, 1.0f / (float)(1 + data->times % 20));
-	data->times++;
-	if ((data->times % 20) == 0) {
-		data->cpuPercentSlow = data->cpuPercent;
-	}
-	data->tsOfflineStart = tsEnd;
+	azaCPUUsageTimingEnd(&data->cpuUsage);
 	azaMutexUnlock(&data->mutex);
 	return err;
 }
