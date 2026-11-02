@@ -10,6 +10,15 @@ As a bonus, we may try to document porting steps for users of this library that 
 
 ## [Unreleased]
 
+### Refactor of WASAPI backend to effectively quarantine that API to a single thread
+- Now supports Device Notifications, which solidifies AzAudio's behavior to a reasonable baseline
+- If an end-user changes their default output device, AzAudio reassigns azaStreams on the default device to the new one
+- If a device changes stream format, AzAudio just handles it gracefully
+- Factor out resampling code
+- Use azaChannelMatrix to handle channel mapping instead of a bespoke hacky solution
+	- This one may need some more consideration as I'm unsure if this is what users would want the behavior to be. Some configuration options could solve this, but currently there are none. Doing this would require adding to the platform-agnostic API, which has implications for the other backends too.
+	- This also has implications for the pipewire backend, since behavior parity is a goal. Currently pipewire handles channel layout and samplerate differences for us.
+
 ### Implemented Latency Compensation in the Mixer
 - Measure latency
 - Use latency measurements to delay tracks with lower latency to keep time parity
@@ -64,13 +73,19 @@ typedef void (*fp_azagDrawDSP)(void *dsp, azagRect bounds);
 ### Splitting of dsp.h Into Many Files in dsp Folder (and dsp/plugins)
 - Moved utility.h to dsp/utility.h
 
-### Moved Several Common C-Standard-Adjacent Utilities Into aza_c_sth.h
+### Moved Several Common C-Standard-Adjacent Utilities Into aza_c_std.h
 - Deleted helpers.h (moving some part to math.h and some to aza_c_std.h)
 - Deleted header_utils.h (moving everything into aza_c_std.h)
 
 ### Added
 - azaVersionNote as an additional indicator as to what kind of patch is in use (can be "rel", "rc", and "dev")
 - azaVersionString for the full version string in one piece
+- azaResampler as a convenient tool for resampling streams. This piece is particularly fiddly, so having it in a nice box should help simplify things a lot going forward.
+- azaGetDeviceIsAvailable platform interface function
+- azaCPUUsage utility for CPU usage metrics
+	- Replaces the bespoke solution in azaMixer
+	- Added to azaDSP for per-plugin CPU metrics
+	- Added to azaStream for measuring the entire processing time including in the backend
 
 ### Changed
 - `azaErrorString` no longer takes in a pointer to a buffer for unknown error codes, instead putting it into a thread_local buffer and returning that.
