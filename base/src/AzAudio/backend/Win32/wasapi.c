@@ -585,9 +585,9 @@ static int azaDeviceUpdateDeviceFormat(void *parameter) {
 		// onFail:
 		return AZA_ERROR_BACKEND_ERROR
 	);
-	dstDevice->channels = (unsigned)waveFormatEx.Format.nChannels;
-	dstDevice->sampleBitDepth = (unsigned)waveFormatEx.Format.wBitsPerSample;
-	dstDevice->samplerate = (size_t)waveFormatEx.Format.nSamplesPerSec;
+	dstDevice->channels = (uint32_t)waveFormatEx.Format.nChannels;
+	dstDevice->sampleBitDepth = (uint32_t)waveFormatEx.Format.wBitsPerSample;
+	dstDevice->samplerate = (uint32_t)waveFormatEx.Format.nSamplesPerSec;
 	return AZA_SUCCESS;
 }
 
@@ -681,7 +681,7 @@ static int azaDeviceInitWASAPIAction(void *parameter) {
 	azaDeviceUpdateFormFactor(dstDevice);
 	if (azaLogLevel >= AZA_LOG_LEVEL_TRACE) {
 		char *idCStr = wstrToCstr(idWStr);
-		AZA_LOG_TRACE("Device idStr: \"%s\"\n\tname: \"%s\"\n\tchannels: %u\n\tbitDepth: %u\n\tsamplerate: %zu\n", idCStr, dstDevice->name, dstDevice->channels, dstDevice->sampleBitDepth, dstDevice->samplerate);
+		AZA_LOG_TRACE("Device idStr: \"%s\"\n\tname: \"%s\"\n\tchannels: %u\n\tbitDepth: %u\n\tsamplerate: %u\n", idCStr, dstDevice->name, dstDevice->channels, dstDevice->sampleBitDepth, dstDevice->samplerate);
 		aza_free(idCStr);
 	}
 	dstDevice->available = true;
